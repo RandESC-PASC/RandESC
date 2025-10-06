@@ -30,7 +30,7 @@ Returns
               where `relres` is an `it×k` matrix of per-vector relative residuals.
 """
 function lobpcg(A, n::Integer, k::Integer;
-                M=nothing, X0=nothing, tol::Real=1e-6, maxit::Integer=200,
+                M=nothing, X0=nothing, tol::Real=1e-8, maxit::Integer=200,
                 verbosity::Integer=1, ritz_order::AbstractString="smallest",
                 proj_method::AbstractString="CGS2")
 
