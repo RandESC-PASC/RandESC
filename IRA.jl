@@ -86,9 +86,9 @@ function ira(A, k::Integer, m::Integer;
 
     V = Vk
     D = Diagonal(theta[1:k])
-    # ritz = (theta = theta, res = res)
+    ritz = (theta = theta, res = res)
     info = (it = iters, mvps = mvps, res = res)
-    return V, D, info
+    return V, D, ritz, info
 end
 
 # --------------------- Arnoldi building blocks -----------------------------
