@@ -5,10 +5,13 @@ include("RIRA.jl")
 include("LOBPCG.jl")
 
 using DelimitedFiles
+using Random
+# Random.seed!(312634)
+Random.seed!(98423598)
 
 n = 50
 
-k = 16
+k = 7
 m = max(2k, k + 20) # restarted Arnoldi subspace dimension
 
 # example spd matrix
@@ -31,11 +34,22 @@ A = readdlm(filename)
 V, D, ritz, info = rand_ira(A, k, m; verbose=true)
 println("number of matrix-vector products: ", info.mvps)
 
-# matrix is stored in text in filename
-A = readdlm(filename)
+# normalize eigenvectors
+for i in 1:k
+    V[:, i] /= norm(V[:, i])
+end
 
-n = size(A, 1)
-println("size of A: ", n)
-# and now for lobpcg
-X, Lambda, info = lobpcg(A, n, k; verbosity=1)
-println("number of matrix-vector products: ", info.mvps)    
+println("Gram matrix of evecs rand_ira:")
+gram_rand_ira = round.(real(V' * V); digits=2)
+for i in 1:k
+    println(gram_rand_ira[i, :])
+end
+
+# # matrix is stored in text in filename
+# A = readdlm(filename)
+
+# n = size(A, 1)
+# println("size of A: ", n)
+# # and now for lobpcg
+# X, Lambda, info = lobpcg(A, n, k; verbosity=1)
+# println("number of matrix-vector products: ", info.mvps)    
