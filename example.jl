@@ -14,19 +14,19 @@ n = 50
 k = 7
 m = max(2k, k + 20) # restarted Arnoldi subspace dimension
 
-# example spd matrix
-A = randn(n,n)
-A = A' + A
-# example hermitian matrix
-B = randn(n,n) + im*randn(n,n)
-B = (B + B') / 2
+# # example spd matrix
+# A = randn(n,n)
+# A = A' + A
+# # example hermitian matrix
+# B = randn(n,n) + im*randn(n,n)
+# B = (B + B') / 2
 
 # V, D, ritz, info = rand_ira(A, k, m; verbose=false)
 # println("number of matrix-vector products: ", info.mvps)
 
 # script should be run with julia script.jl filename
 filename = ARGS[1]
-println("filename: ", filename)
+# println("filename: ", filename)
 
 # matrix is stored in text in filename
 A = readdlm(filename)
