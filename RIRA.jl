@@ -18,7 +18,7 @@ Returns `(V, D, ritz, info)`:
 - `ritz :: NamedTuple`  — `(theta, res)` final length-m Ritz values & sketched residuals
 - `info :: NamedTuple`  — `(iters, mvps, converged)`
 """
-function rand_ira(A, k::Integer, m::Integer;
+function rand_ira(A, k::Integer; m::Integer = max(2*k,k+20),
                   which::AbstractString="SR", maxit::Integer=100, tol::Real=1e-8,
                   v0::Union{Nothing,AbstractVector}=nothing,
                   orth_method::AbstractString="rgs", verbose::Bool=true,
@@ -30,7 +30,7 @@ function rand_ira(A, k::Integer, m::Integer;
     (m > k) || error("Require m > k (got m=$m, k=$k).")
     (1 ≤ k ≤ n-1) || error("k must be in [1, n-1] (got k=$k, n=$n).")
 
-    s = isnothing(sketch_s) ? min(n, max(2*m, 6*k)) : sketch_s
+    s = isnothing(sketch_s) ? min(n, max(4*m, 6*k)) : sketch_s
     SS = sketch(n, s, sketch_type; seed=sketch_seed)
 
     mvps = 0; iters = 0
@@ -93,7 +93,8 @@ function rand_ira(A, k::Integer, m::Integer;
     Yk = Y[:, 1:k]
     Vk = V_m * Yk
 
-    V = Vk
+    V = Vk./norm.(eachcol(Vk))'
+
     D = Diagonal(theta[1:k])
     ritz = (theta = theta, res = res)
     info = (it = iters, mvps = mvps, res = res)

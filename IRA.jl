@@ -14,7 +14,7 @@ Returns `(V, D, ritz, info)` where:
 - `ritz :: NamedTuple` — `(theta, res)` final length-m Ritz values & residual estimates
 - `info :: NamedTuple` — `(iters, mvps, converged)`
 """
-function ira(A, k::Integer, m::Integer;
+function ira(A, k::Integer; m::Integer = max(2*k,k+20),
              which::AbstractString="SR", maxit::Integer=100, tol::Real=1e-8,
              v0::Union{Nothing,AbstractVector}=nothing,
              orth_method::AbstractString="cgs2", verbose::Bool=true)
