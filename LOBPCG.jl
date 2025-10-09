@@ -1,5 +1,6 @@
 # lobpcg.jl
 using LinearAlgebra, Random
+include("sketch.jl")
 
 """
     lobpcg(A, n, k; M=nothing, X0=nothing, tol=1e-6, maxit=200,
@@ -32,7 +33,7 @@ Returns
 function lobpcg(A, n::Integer, k::Integer;
                 M=nothing, X0=nothing, tol::Real=1e-8, maxit::Integer=200,
                 verbosity::Integer=1, ritz_order::AbstractString="smallest",
-                proj_method::AbstractString="CGS2")
+                proj_method::AbstractString="CGS2", normA = nothing)
 
     # ---- operator & preconditioner wrappers (block versions) ----
     Afun = (A isa AbstractMatrix)  ? (X -> A*X) :
@@ -49,9 +50,14 @@ function lobpcg(A, n::Integer, k::Integer;
     X = qr_orthonormalize(X)
 
     # ---- rough norm(A) estimate (Frobenius) for relres scaling ----
-    tempX = randn(n, 5)
-    nA = norm(Afun(tempX)) / norm(tempX)   # Frobenius/Frobenius
-    mvps = 5
+    if isnothing(normA)
+        tempX = complex(randn(n, 5)) 
+        nA = norm(Afun(tempX)) / norm(tempX)   # Frobenius/Frobenius
+        mvps = 5
+    else
+        nA = normA
+        mvps = 0
+    end
 
     # ---- initial Rayleigh–Ritz in span(X) ----
     AX = Afun(X);  mvps += size(X, 2)
