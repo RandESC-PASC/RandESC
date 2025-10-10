@@ -26,7 +26,7 @@ function rand_ira(A, n::Integer, k::Integer; m::Integer = max(2*k,k+20),
                   sketch_s::Union{Nothing,Int}=nothing,
                   sketch_seed::Union{Nothing,Int}=nothing)
 
-    n, v0 = infer_n_and_v0(A, v0)
+    v0 = infer_v0(v0)
     (m > k) || error("Require m > k (got m=$m, k=$k).")
     (1 ≤ k ≤ n-1) || error("k must be in [1, n-1] (got k=$k, n=$n).")
 

@@ -27,7 +27,7 @@ for test in 1:ntests
 
     V_ira, D_ira, ritz_ira, info_ira = ira(A, n, k; verbose=false, tol=iter_tol)
     lambda_ira = diag(D_ira)
-    V_rira, D_rira, ritz_rira, info_rira = rand_ira(A, k; verbose=false, tol=iter_tol)
+    V_rira, D_rira, ritz_rira, info_rira = rand_ira(A, n, k; verbose=false, tol=iter_tol)
     lambda_rira = diag(D_rira)
     V_lobpcg, Lambda_lobpcg, info_lobpcg = lobpcg(A, n, k; verbosity=0, tol=iter_tol)
     lambda_lobpcg = Lambda_lobpcg
