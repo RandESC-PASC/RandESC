@@ -23,6 +23,9 @@ Keywords (all optional)
 - `verbosity`   :: 1=per-iter summary (default), 0=silent
 - `ritz_order`  :: `"smallest"` (default) or `"largest"`
 - `proj_method` :: `"CGS" | "CGS2"` (default) | `"MGS" | "MGS2"`
+- `normA`      :: estimate of ||A||_2 (for relative residuals; default `nothing` ⇒ computed internally)
+- `precond_preparation` :: optional function that has to be called everytime before the preconditioner M is applied (e.g. to update internal data structures).
+                             it takes the preconditioner M and the current Ritz vectors X as arguments.
 
 Returns
 - `X`       :: `n×k` matrix of orthonormal Ritz vectors
@@ -33,17 +36,11 @@ Returns
 function lobpcg(A, n::Integer, k::Integer;
                 M=nothing, X0=nothing, tol::Real=1e-8, maxit::Integer=200,
                 verbosity::Integer=1, ritz_order::AbstractString="smallest",
-                proj_method::AbstractString="CGS2", normA = nothing)
+                proj_method::AbstractString="CGS2", normA = nothing, precond_preparation = nothing)
 
-    # ---- operator & preconditioner wrappers (block versions) ----
-    Afun = (A isa AbstractMatrix)  ? (X -> A*X) :
-           (A isa Function)        ? (X -> A(X)) :
-           error("A must be a matrix or a function X->A*X")
-
-    Mfun = M === nothing           ? (R -> R) :
-           (M isa AbstractMatrix)  ? (R -> M \ R) :
-           (M isa Function)        ? (R -> M(R)) :
-           error("M must be nothing, a matrix, or a function R->M(R)")
+    if isnothing(M)
+        M = I
+    end
 
     # ---- initial guess X (n×k) and orthonormalize ----
     X = X0 === nothing ? randn(n, k) : copy(X0)
@@ -51,16 +48,18 @@ function lobpcg(A, n::Integer, k::Integer;
 
     # ---- rough norm(A) estimate (Frobenius) for relres scaling ----
     if isnothing(normA)
-        tempX = complex(randn(n, 5)) 
-        nA = norm(Afun(tempX)) / norm(tempX)   # Frobenius/Frobenius
+        tempX = randn(n, 5) 
+        nA = norm(A * tempX)   # Frobenius/Frobenius
+        nA = nA / norm(tempX)  # estimate of ||A||_2
         mvps = 5
     else
         nA = normA
         mvps = 0
     end
 
+    AX = similar(X)
     # ---- initial Rayleigh–Ritz in span(X) ----
-    AX = Afun(X);  mvps += size(X, 2)
+    mul!(AX, A, X); mvps += size(X, 2)
     C, Lambda = rayleigh_ritz_standard(X, AX; pickSmallest = lowercase(ritz_order) == "smallest")
     X  = X * C[:, 1:k]
     AX = AX * C[:, 1:k]
@@ -76,23 +75,29 @@ function lobpcg(A, n::Integer, k::Integer;
     P  = Array{T}(undef, size(X,1), 0)
     AP = Array{T}(undef, size(X,1), 0)
 
+    AW = similar(X)
+    W = similar(X)
+
     it = 0
     while it < maxit
         it += 1
 
         # ---- precondition & project out (in the full space) ----
-        W  = Mfun(R)
+        mul!(W, M, R)
         W  = gs_project_out(W, hcat(X, P), proj_method)   # returns orthonormalized W
 
         # ---- trial subspace and its image under A ----
         S  = hcat(X, P, W)
-        AW = Afun(W); mvps += size(W, 2)
+        # AW = Afun(W); mvps += size(W, 2)
+        mul!(AW, A, W); mvps += size(W, 2)
         AS = hcat(AX, AP, AW)
 
         # ---- Rayleigh–Ritz on S ----
         C, Λ = rayleigh_ritz_standard(S, AS; pickSmallest = lowercase(ritz_order) == "smallest")
-        X   = S  * C[:, 1:k]
-        AX  = AS * C[:, 1:k]
+        # X   = S  * C[:, 1:k]
+        mul!(X, S, C[:, 1:k])
+        # AX  = AS * C[:, 1:k]
+        mul!(AX, AS, C[:, 1:k])
         Lambda = Λ[1:k]
 
         # ---- residuals R = AX - X*Λ, and relative residuals per vector ----
@@ -144,7 +149,8 @@ function gs_project_out(Z::AbstractMatrix, U::AbstractMatrix, method::AbstractSt
     end
     meth = uppercase(method)
     if meth == "CGS"
-        H = U' * Z;  Z = Z - U * H
+        # H = U' * Z;  Z = Z - U * H
+        mul!(H, U', Z);  mul!(Z, U, H, -1, 1)
     elseif meth == "CGS2"
         H = U' * Z;  Z = Z - U * H
         H = U' * Z;  Z = Z - U * H
