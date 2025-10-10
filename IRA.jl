@@ -105,8 +105,7 @@ function arnoldi(A, v1::AbstractVector, m::Integer, orth_method::AbstractString)
     w = similar(V[:, 1])
 
     for j in 1:m-1
-        # w = applyA(A, V[:, j]); mvps += 1
-        mul!(w, A, V[:, j])  # in-place to save memory
+        mul!(w, A, V[:, j])
         mvps += 1
         w, hcol = orth_step(view(V, :, 1:j), w, orth_method)
         H[1:j, j] .= hcol
@@ -118,8 +117,7 @@ function arnoldi(A, v1::AbstractVector, m::Integer, orth_method::AbstractString)
         V[:, j+1] .= w / H[j+1, j]
     end
 
-    # w = applyA(A, V[:, m]); mvps += 1
-    mul!(w, A, V[:, m])  # in-place to save memory
+    mul!(w, A, V[:, m])
     mvps += 1
     w, hcol = orth_step(view(V, :, 1:m), w, orth_method)
     H[1:m, m] .= hcol
@@ -141,8 +139,7 @@ function arnoldi_expand_from_block(A, V0::AbstractMatrix, H_k::AbstractMatrix, m
     w = similar(V[:, 1])
 
     for j in k:(m-1)
-        # w = applyA(A, V[:, j]); mvps += 1
-        mul!(w, A, V[:, j])  # in-place to save memory
+        mul!(w, A, V[:, j])
         mvps += 1
         w, hcol = orth_step(view(V, :, 1:j), w, orth_method)
         H[1:j, j] .= hcol
@@ -154,8 +151,7 @@ function arnoldi_expand_from_block(A, V0::AbstractMatrix, H_k::AbstractMatrix, m
         V[:, j+1] .= w / H[j+1, j]
     end
 
-    # w = applyA(A, V[:, m]); mvps += 1
-    mul!(w, A, V[:, m])  # in-place to save memory
+    mul!(w, A, V[:, m])
     mvps += 1
     w, hcol = orth_step(view(V, :, 1:m), w, orth_method)
     H[1:m, m] .= hcol
