@@ -4,7 +4,7 @@ using LinearAlgebra, Random
 include("sketch.jl")
 
 """
-    rand_ira(A, k, m; which="SR", maxit=100, tol=1e-8, v0=nothing,
+    rand_ira(A, n, k, m; which="SR", maxit=100, tol=1e-8, v0=nothing,
                       orth_method="rgs", verbose=true,
                       sketch_type="gaussian", sketch_s=nothing, sketch_seed=nothing)
 
@@ -18,7 +18,7 @@ Returns `(V, D, ritz, info)`:
 - `ritz :: NamedTuple`  — `(theta, res)` final length-m Ritz values & sketched residuals
 - `info :: NamedTuple`  — `(iters, mvps, converged)`
 """
-function rand_ira(A, k::Integer; m::Integer = max(2*k,k+20),
+function rand_ira(A, n::Integer, k::Integer; m::Integer = max(2*k,k+20),
                   which::AbstractString="SR", maxit::Integer=100, tol::Real=1e-8,
                   v0::Union{Nothing,AbstractVector}=nothing,
                   orth_method::AbstractString="rgs", verbose::Bool=true,
@@ -26,7 +26,7 @@ function rand_ira(A, k::Integer; m::Integer = max(2*k,k+20),
                   sketch_s::Union{Nothing,Int}=nothing,
                   sketch_seed::Union{Nothing,Int}=nothing)
 
-    n, v0 = infer_n_and_v0(A, v0)
+    v0 = infer_v0(v0)
     (m > k) || error("Require m > k (got m=$m, k=$k).")
     (1 ≤ k ≤ n-1) || error("k must be in [1, n-1] (got k=$k, n=$n).")
 
@@ -117,9 +117,10 @@ function arnoldi_sketch(A, v1::AbstractVector, m::Integer, SS, s::Integer, orth_
     ns1 = norm(SV[:, 1])
     SV[:, 1] ./= ns1
     V[:, 1]  ./= ns1
+    w = similar(V[:, 1])
 
     for j in 1:m-1
-        w  = applyA(A, V[:, j]); mvps += 1
+        mul!(w, A, V[:, j]); mvps += 1
         sw = SS(w)
 
         sw, h = orth_coeffs_sketch(view(SV, :, 1:j), sw, orth_method)
@@ -135,7 +136,7 @@ function arnoldi_sketch(A, v1::AbstractVector, m::Integer, SS, s::Integer, orth_
         SV[:, j+1] .= sw / H[j+1, j]
     end
 
-    w  = applyA(A, V[:, m]); mvps += 1
+    mul!(w, A, V[:, m]); mvps += 1
     sw = SS(w)
     sw, h = orth_coeffs_sketch(view(SV, :, 1:m), sw, orth_method)
     H[1:m, m] .= h
@@ -158,9 +159,10 @@ function arnoldi_expand_from_block_sketch(A, V::AbstractMatrix, SV::AbstractMatr
     SVexp = zeros(T, s, m);   SVexp[:, 1:k] .= SV
     H     = zeros(T, m, m);   H[1:k, 1:k]   .= H_k
     mvps = 0
+    w = similar(V[:, 1])
 
     for j in k:(m-1)
-        w  = applyA(A, Vexp[:, j]); mvps += 1
+        mul!(w, A, Vexp[:, j]); mvps += 1
         sw = SS(w)
 
         sw, h = orth_coeffs_sketch(view(SVexp, :, 1:j), sw, orth_method)
@@ -176,7 +178,7 @@ function arnoldi_expand_from_block_sketch(A, V::AbstractMatrix, SV::AbstractMatr
         SVexp[:, j+1] .= sw / H[j+1, j]
     end
 
-    w  = applyA(A, Vexp[:, m]); mvps += 1
+    mul!(w, A, Vexp[:, m]); mvps += 1
     sw = SS(w)
     sw, h = orth_coeffs_sketch(view(SVexp, :, 1:m), sw, orth_method)
     H[1:m, m] .= h
@@ -223,22 +225,14 @@ end
 
 # ----------------------------- Utilities -----------------------------------
 
-applyA(A::AbstractMatrix, x::AbstractVector) = A * x
-applyA(A::Function,      x::AbstractVector) = A(x)
-
-function infer_n_and_v0(A, v0)
+function infer_v0(v0)
     if v0 !== nothing
-        v = vec(v0); n = length(v)
+        v = vec(v0);
     else
-        if A isa AbstractMatrix
-            n = size(A, 1)
-            v = randn(n)
-        else
-            error("For function-handle A, please pass v0 to infer n.")
-        end
+        v = randn(n)
     end
     v ./= max(norm(v), eps(real(eltype(v))))
-    return n, v
+    return v
 end
 
 function sort_which(theta::AbstractVector, which::AbstractString)

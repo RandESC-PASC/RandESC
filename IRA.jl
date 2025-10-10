@@ -2,7 +2,7 @@
 using LinearAlgebra, Random
 
 """
-    ira(A, k, m; which="SR", maxit=100, tol=1e-8, v0=nothing,
+    ira(A, n, k, m; which="SR", maxit=100, tol=1e-8, v0=nothing,
                  orth_method="cgs2", verbose=true)
 
 Implicitly Restarted Arnoldi for k Ritz pairs from an n×n operator `A`
@@ -14,12 +14,12 @@ Returns `(V, D, ritz, info)` where:
 - `ritz :: NamedTuple` — `(theta, res)` final length-m Ritz values & residual estimates
 - `info :: NamedTuple` — `(iters, mvps, converged)`
 """
-function ira(A, k::Integer; m::Integer = max(2*k,k+20),
+function ira(A, n::Integer, k::Integer; m::Integer = max(2*k,k+20),
              which::AbstractString="SR", maxit::Integer=100, tol::Real=1e-8,
              v0::Union{Nothing,AbstractVector}=nothing,
              orth_method::AbstractString="cgs2", verbose::Bool=true)
 
-    n, v0 = infer_n_and_v0(A, v0)
+    v0 = infer_v0(v0)
     if m <= k
         error("Require m > k (got m=$m, k=$k).")
     end
@@ -102,9 +102,11 @@ function arnoldi(A, v1::AbstractVector, m::Integer, orth_method::AbstractString)
     mvps = 0
 
     V[:, 1] = v1 / norm(v1)
+    w = similar(V[:, 1])
 
     for j in 1:m-1
-        w = applyA(A, V[:, j]); mvps += 1
+        mul!(w, A, V[:, j])
+        mvps += 1
         w, hcol = orth_step(view(V, :, 1:j), w, orth_method)
         H[1:j, j] .= hcol
         H[j+1, j] = norm(w)
@@ -115,7 +117,8 @@ function arnoldi(A, v1::AbstractVector, m::Integer, orth_method::AbstractString)
         V[:, j+1] .= w / H[j+1, j]
     end
 
-    w = applyA(A, V[:, m]); mvps += 1
+    mul!(w, A, V[:, m])
+    mvps += 1
     w, hcol = orth_step(view(V, :, 1:m), w, orth_method)
     H[1:m, m] .= hcol
     beta = norm(w)
@@ -133,9 +136,11 @@ function arnoldi_expand_from_block(A, V0::AbstractMatrix, H_k::AbstractMatrix, m
     V[:, 1:k] .= V0
     H[1:k, 1:k] .= H_k
     mvps = 0
+    w = similar(V[:, 1])
 
     for j in k:(m-1)
-        w = applyA(A, V[:, j]); mvps += 1
+        mul!(w, A, V[:, j])
+        mvps += 1
         w, hcol = orth_step(view(V, :, 1:j), w, orth_method)
         H[1:j, j] .= hcol
         H[j+1, j] = norm(w)
@@ -146,7 +151,8 @@ function arnoldi_expand_from_block(A, V0::AbstractMatrix, H_k::AbstractMatrix, m
         V[:, j+1] .= w / H[j+1, j]
     end
 
-    w = applyA(A, V[:, m]); mvps += 1
+    mul!(w, A, V[:, m])
+    mvps += 1
     w, hcol = orth_step(view(V, :, 1:m), w, orth_method)
     H[1:m, m] .= hcol
     beta = norm(w)
@@ -209,23 +215,14 @@ end
 
 # --------------------------- Utilities -------------------------------------
 
-applyA(A::AbstractMatrix, x::AbstractVector) = A * x
-applyA(A::Function,      x::AbstractVector) = A(x)
-
-function infer_n_and_v0(A, v0)
+function infer_v0(v0)
     if v0 !== nothing
         v = vec(v0)
-        n = length(v)
     else
-        if A isa AbstractMatrix
-            n = size(A, 1)
-            v = randn(n)
-        else
-            error("For function A, please pass v0 to infer n.")
-        end
+        v = randn(n)
     end
     v = v ./ norm(v)
-    return n, v
+    return v
 end
 
 # Return permutation that orders `theta` according to `which`
