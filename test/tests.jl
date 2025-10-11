@@ -1,8 +1,4 @@
-include("sketch.jl")
-include("IRA.jl")
-include("RIRA.jl")
-include("LOBPCG.jl")
-
+using RandESC
 using Random
 Random.seed!(98423598)
 
