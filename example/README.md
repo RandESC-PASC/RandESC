@@ -1,0 +1,1 @@
+Run with `julia --project=.. example.jl filename` where filename is a txt file containing a matrix
