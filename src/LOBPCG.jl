@@ -1,6 +1,5 @@
 # lobpcg.jl
 using LinearAlgebra, Random
-include("sketch.jl")
 
 """
     lobpcg(A, n, k; M=nothing, X0=nothing, tol=1e-6, maxit=200,

@@ -1,0 +1,41 @@
+module RandESC
+
+    export rand_ira, ira, lobpcg, sketched_to_fully
+    include("sketch.jl")
+    include("sketched_to_fully.jl")
+    include("IRA.jl")
+    include("RIRA.jl")
+    include("LOBPCG.jl")
+
+    # ----------------------------- Utilities -----------------------------------
+
+    function infer_v0(v0, n)
+        if v0 !== nothing
+            v = vec(v0);
+        else
+            v = randn(n)
+        end
+        v ./= max(norm(v), eps(real(eltype(v))))
+        return v
+    end
+
+    function sort_which(theta::AbstractVector, which::AbstractString)
+        W = uppercase(which)
+        if W == "LM"
+            return sortperm(abs.(theta), rev=true)
+        elseif W == "SM"
+            return sortperm(abs.(theta), rev=false)
+        elseif W == "LR"
+            return sortperm(real.(theta), rev=true)
+        elseif W == "SR"
+            return sortperm(real.(theta), rev=false)
+        elseif W == "LI"
+            return sortperm(abs.(imag.(theta)), rev=true)
+        elseif W == "SI"
+            return sortperm(abs.(imag.(theta)), rev=false)
+        else
+            error("Unknown which = $which")
+        end
+    end
+
+end

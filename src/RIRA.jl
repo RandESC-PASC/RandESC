@@ -1,8 +1,6 @@
 # rand_ira.jl
 using LinearAlgebra, Random
 
-include("sketch.jl")
-
 """
     rand_ira(A, n, k, m; which="SR", maxit=100, tol=1e-8, v0=nothing,
                       orth_method="rgs", verbose=true,
@@ -26,7 +24,7 @@ function rand_ira(A, n::Integer, k::Integer; m::Integer = max(2*k,k+20),
                   sketch_s::Union{Nothing,Int}=nothing,
                   sketch_seed::Union{Nothing,Int}=nothing)
 
-    v0 = infer_v0(v0)
+    v0 = infer_v0(v0, n)
     (m > k) || error("Require m > k (got m=$m, k=$k).")
     (1 ≤ k ≤ n-1) || error("k must be in [1, n-1] (got k=$k, n=$n).")
 
@@ -222,34 +220,3 @@ function orth_coeffs_sketch(SV::AbstractMatrix, sw::AbstractVector, orth_method:
     end
 end
 
-
-# ----------------------------- Utilities -----------------------------------
-
-function infer_v0(v0)
-    if v0 !== nothing
-        v = vec(v0);
-    else
-        v = randn(n)
-    end
-    v ./= max(norm(v), eps(real(eltype(v))))
-    return v
-end
-
-function sort_which(theta::AbstractVector, which::AbstractString)
-    W = uppercase(which)
-    if W == "LM"
-        return sortperm(abs.(theta), rev=true)
-    elseif W == "SM"
-        return sortperm(abs.(theta), rev=false)
-    elseif W == "LR"
-        return sortperm(real.(theta), rev=true)
-    elseif W == "SR"
-        return sortperm(real.(theta), rev=false)
-    elseif W == "LI"
-        return sortperm(abs.(imag.(theta)), rev=true)
-    elseif W == "SI"
-        return sortperm(abs.(imag.(theta)), rev=false)
-    else
-        error("Unknown which = $which")
-    end
-end

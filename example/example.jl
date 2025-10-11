@@ -1,11 +1,7 @@
-
-include("sketch.jl")
-include("IRA.jl")
-include("RIRA.jl")
-include("LOBPCG.jl")
-
+using RandESC
 using DelimitedFiles
 using Random
+using LinearAlgebra
 # Random.seed!(312634)
 Random.seed!(98423598)
 
@@ -30,8 +26,9 @@ filename = ARGS[1]
 
 # matrix is stored in text in filename
 A = readdlm(filename)
+n = size(A, 1)
 
-V, D, ritz, info = rand_ira(A, k, m; verbose=true)
+V, D, ritz, info = rand_ira(A, n, k ; verbose=true)
 println("number of matrix-vector products: ", info.mvps)
 
 # normalize eigenvectors
