@@ -61,7 +61,7 @@ Solves the eigenvalue problem for the matrix `A`, computing `k` eigenvalues and 
 - `tol`: Tolerance for convergence.
 - `useRandomization`: Boolean flag to enable or disable randomization in the solver.
 - `method`: The eigensolver method to use (e.g., "arnoldi", "lanczos").
-- `orth_method`: Orthogonalization method to use (default: `"cgs2"`).
+- `orth_method`: Orthogonalization method to use (default: `"depends on solver"`).
 - `cleanEigenvectors`: Whether to clean the eigenvectors (make them more orthogonal) after computation (default: `false`). Useful for randomized methods.
 - `normA`: An estimate of the norm of `A`, used for scaling residuals (optional).
 - `verbose`: Whether to print verbose output during the computation (default: `false`).
@@ -75,7 +75,7 @@ A named tuple with the following fields:
 - `converged`: Boolean indicating whether the solver converged.
 - `n_matvec`: Number of matrix-vector products performed.
 """
-function randESCSolver(A, n::Integer, k::Integer; X0=nothing, preconditioner=nothing, precond_preparator=nothing, maxiter=100, tol=1e-6, useRandomization=false, method="", orth_method="cgs2", cleanEigenvectors=false, normA=nothing, verbose=false)
+function randESCSolver(A, n::Integer, k::Integer; X0=nothing, preconditioner=nothing, precond_preparator=nothing, maxiter=100, tol=1e-6, useRandomization=false, method="", orth_method=nothing, cleanEigenvectors=false, normA=nothing, verbose=false)
     # if !(A isa AbstractMatrix) && !(A isa LinearMap)
     #     error("A must be an AbstractMatrix or LinearMap")
     # end
