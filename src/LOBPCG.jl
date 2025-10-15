@@ -37,13 +37,6 @@ function lobpcg(A, n::Integer, k::Integer;
                 verbosity::Integer=1, ritz_order::AbstractString="smallest",
                 proj_method::AbstractString="CGS2", normA = nothing, precond_preparation = nothing)
 
-    if isnothing(M)
-        M = I
-        println("No preconditioner provided; using identity.")
-    else
-        println("Using preconditioner.")
-    end
-
     # ---- initial guess X (n×k) and orthonormalize ----
     X = X0 === nothing ? randn(n, k) : copy(X0)
     X = qr_orthonormalize(X)
@@ -85,10 +78,14 @@ function lobpcg(A, n::Integer, k::Integer;
         it += 1
 
         # ---- precondition & project out (in the full space) ----
-        if !isnothing(precond_preparation)
-            precond_preparation(M, X)
+        if !isnothing(M)
+            if !isnothing(precond_preparation)
+                precond_preparation(M, X)
+            end
+            ldiv!(W, M, R)
+        else
+            copy!(W, R)   # identity preconditioner
         end
-        ldiv!(W, M, R)
         W  = gs_project_out(W, hcat(X, P), proj_method)   # returns orthonormalized W
 
         # ---- trial subspace and its image under A ----
@@ -112,7 +109,7 @@ function lobpcg(A, n::Integer, k::Integer;
         rel = rnorm ./ axnorm
         # relres = vcat(relres, permutedims(rel))  # append row
 
-        if maximum(rel) <= tol
+        if maximum(rnorm) <= tol
             break
         end
 
@@ -154,10 +151,12 @@ function gs_project_out(Z::AbstractMatrix, U::AbstractMatrix, method::AbstractSt
     end
     meth = uppercase(method)
     if meth == "CGS"
+        # original code but slower:
         # H = U' * Z;  Z = Z - U * H
         H = U' * Z
         mul!(Z, U, H, -1, 1)
     elseif meth == "CGS2"
+        # original code but slower:
         # H = U' * Z;  Z = Z - U * H
         # H = U' * Z;  Z = Z - U * H
         H = U' * Z

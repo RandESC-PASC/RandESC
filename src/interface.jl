@@ -151,7 +151,7 @@ function randESCSolver(A, n::Integer, k::Integer; X0=nothing, preconditioner=not
         else
             println("Using LOBPCG")
             println("n, k: ", n, ", ", k)
-            V, lambda, info = lobpcg(A, n, k; X0=X0, maxit=maxiter, tol=tol*.1, verbosity=verbose ? 1 : 0, M=preconditioner, normA=normA, precond_preparation=precond_preparator)
+            V, lambda, info = lobpcg(A, n, k; X0=X0, maxit=maxiter, tol=tol, verbosity=verbose ? 1 : 0, M=preconditioner, normA=normA, precond_preparation=precond_preparator)
 
             n_iter = info.it
             converged = n_iter < maxiter
