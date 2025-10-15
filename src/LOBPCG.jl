@@ -1,6 +1,5 @@
 # lobpcg.jl
 using LinearAlgebra, Random
-include("sketch.jl")
 
 """
     lobpcg(A, n, k; M=nothing, X0=nothing, tol=1e-6, maxit=200,
@@ -38,17 +37,13 @@ function lobpcg(A, n::Integer, k::Integer;
                 verbosity::Integer=1, ritz_order::AbstractString="smallest",
                 proj_method::AbstractString="CGS2", normA = nothing, precond_preparation = nothing)
 
-    if isnothing(M)
-        M = I
-    end
-
     # ---- initial guess X (n×k) and orthonormalize ----
     X = X0 === nothing ? randn(n, k) : copy(X0)
     X = qr_orthonormalize(X)
 
     # ---- rough norm(A) estimate (Frobenius) for relres scaling ----
     if isnothing(normA)
-        tempX = randn(n, 5) 
+        tempX = complex(randn(n, 5) )
         nA = norm(A * tempX)   # Frobenius/Frobenius
         nA = nA / norm(tempX)  # estimate of ||A||_2
         mvps = 5
@@ -83,7 +78,14 @@ function lobpcg(A, n::Integer, k::Integer;
         it += 1
 
         # ---- precondition & project out (in the full space) ----
-        mul!(W, M, R)
+        if !isnothing(M)
+            if !isnothing(precond_preparation)
+                precond_preparation(M, X)
+            end
+            ldiv!(W, M, R)
+        else
+            copy!(W, R)   # identity preconditioner
+        end
         W  = gs_project_out(W, hcat(X, P), proj_method)   # returns orthonormalized W
 
         # ---- trial subspace and its image under A ----
@@ -107,7 +109,7 @@ function lobpcg(A, n::Integer, k::Integer;
         rel = rnorm ./ axnorm
         # relres = vcat(relres, permutedims(rel))  # append row
 
-        if maximum(rel) <= tol
+        if maximum(rnorm) <= tol
             break
         end
 
@@ -149,11 +151,18 @@ function gs_project_out(Z::AbstractMatrix, U::AbstractMatrix, method::AbstractSt
     end
     meth = uppercase(method)
     if meth == "CGS"
+        # original code but slower:
         # H = U' * Z;  Z = Z - U * H
-        mul!(H, U', Z);  mul!(Z, U, H, -1, 1)
+        H = U' * Z
+        mul!(Z, U, H, -1, 1)
     elseif meth == "CGS2"
-        H = U' * Z;  Z = Z - U * H
-        H = U' * Z;  Z = Z - U * H
+        # original code but slower:
+        # H = U' * Z;  Z = Z - U * H
+        # H = U' * Z;  Z = Z - U * H
+        H = U' * Z
+        mul!(Z, U, H, -1, 1)
+        mul!(H, U', Z)
+        mul!(Z, U, H, -1, 1)
     elseif meth == "MGS"
         for j in 1:size(U,2)
             h = U[:, j]' * Z

@@ -19,7 +19,7 @@ function ira(A, n::Integer, k::Integer; m::Integer = max(2*k,k+20),
              v0::Union{Nothing,AbstractVector}=nothing,
              orth_method::AbstractString="cgs2", verbose::Bool=true)
 
-    v0 = infer_v0(v0)
+    v0 = infer_v0(v0, n)
     if m <= k
         error("Require m > k (got m=$m, k=$k).")
     end
@@ -210,37 +210,5 @@ function orth_step(V::AbstractMatrix, w::AbstractVector, orth_method::AbstractSt
 
     else
         error("Unknown orth_method \"$orth_method\".")
-    end
-end
-
-# --------------------------- Utilities -------------------------------------
-
-function infer_v0(v0)
-    if v0 !== nothing
-        v = vec(v0)
-    else
-        v = randn(n)
-    end
-    v = v ./ norm(v)
-    return v
-end
-
-# Return permutation that orders `theta` according to `which`
-function sort_which(theta::AbstractVector, which::AbstractString)
-    W = uppercase(which)
-    if W == "LM"
-        return sortperm(abs.(theta), rev=true)
-    elseif W == "SM"
-        return sortperm(abs.(theta), rev=false)
-    elseif W == "LR"
-        return sortperm(real.(theta), rev=true)
-    elseif W == "SR"
-        return sortperm(real.(theta), rev=false)
-    elseif W == "LI"
-        return sortperm(abs.(imag.(theta)), rev=true)
-    elseif W == "SI"
-        return sortperm(abs.(imag.(theta)), rev=false)
-    else
-        error("Unknown which = $which")
     end
 end

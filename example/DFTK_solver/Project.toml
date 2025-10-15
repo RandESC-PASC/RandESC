@@ -1,0 +1,7 @@
+[deps]
+Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
+DFTK = "acf6eb54-70d9-11e9-0013-234b7a5f5337"
+KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
+LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
+PseudoPotentialData = "5751a51d-ac76-4487-a056-413ecf6fbe19"
+RandESC = "f5033a08-872c-425c-a91d-46d0365e7598"

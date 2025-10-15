@@ -27,7 +27,7 @@ function sketched_to_fully(A, V)
     # Compute A * Vn:
     # - If A is a matrix, do it in one shot.
     # - Otherwise, apply columnwise via applyA without a helper function.
-    AV = applyA(A,Vn)
+    AV = A * Vn
 
     # Form the small projected matrix and eigendecompose
     F = Vn' * AV

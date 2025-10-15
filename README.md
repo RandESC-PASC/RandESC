@@ -1,20 +1,18 @@
-# Randomized Embeddings & Eigensolvers (Julia)
+# RandESC
+## Solve eigenvalue problems using randomized algorithms
 
-Simple Julia code for sketching (randomized embeddings) and eigensolvers.
+Install the package (creating a Julia environment in a different folder with RandESC in it):
+```
+# enter Julia REPL console:
+julia
+julia> import Pkg
+julia> Pkg.develop(path="/path/to/RandESC/)
+```
 
-- `sketch.jl` — randomized embedding that returns a callable action `X ↦ S*X`
-- `IRA.jl` — Implicitly Restarted Arnoldi (deterministic)
-- `RIRA.jl` — Implicitly Restarted Arnoldi with **sketched** orthogonalization
-- `LOBPCG.jl` — Block PCG for symmetric/Hermitian eigenproblems (no locking/deflation)
-
----
-
-## Quick start
-
-Place the files in your project and `include` what you need:
-
-```julia
-include("sketch.jl")
-include("IRA.jl")
-include("RIRA.jl")
-include("LOBPCG.jl")
+Run tests:
+```
+julia --project=. -e 'using Pkg; Pkg.test()'
+# or
+julia --project=. test/runtests.jl
+```
+This has to be done from inside the source directory of this repository, otherwise the the path must be specified in the option `--project=`
