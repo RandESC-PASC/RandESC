@@ -39,6 +39,9 @@ function lobpcg(A, n::Integer, k::Integer;
 
     if isnothing(M)
         M = I
+        println("No preconditioner provided; using identity.")
+    else
+        println("Using preconditioner.")
     end
 
     # ---- initial guess X (n×k) and orthonormalize ----
@@ -47,7 +50,7 @@ function lobpcg(A, n::Integer, k::Integer;
 
     # ---- rough norm(A) estimate (Frobenius) for relres scaling ----
     if isnothing(normA)
-        tempX = randn(n, 5) 
+        tempX = complex(randn(n, 5) )
         nA = norm(A * tempX)   # Frobenius/Frobenius
         nA = nA / norm(tempX)  # estimate of ||A||_2
         mvps = 5
@@ -82,7 +85,10 @@ function lobpcg(A, n::Integer, k::Integer;
         it += 1
 
         # ---- precondition & project out (in the full space) ----
-        mul!(W, M, R)
+        if !isnothing(precond_preparation)
+            precond_preparation(M, X)
+        end
+        ldiv!(W, M, R)
         W  = gs_project_out(W, hcat(X, P), proj_method)   # returns orthonormalized W
 
         # ---- trial subspace and its image under A ----
@@ -149,10 +155,15 @@ function gs_project_out(Z::AbstractMatrix, U::AbstractMatrix, method::AbstractSt
     meth = uppercase(method)
     if meth == "CGS"
         # H = U' * Z;  Z = Z - U * H
-        mul!(H, U', Z);  mul!(Z, U, H, -1, 1)
+        H = U' * Z
+        mul!(Z, U, H, -1, 1)
     elseif meth == "CGS2"
-        H = U' * Z;  Z = Z - U * H
-        H = U' * Z;  Z = Z - U * H
+        # H = U' * Z;  Z = Z - U * H
+        # H = U' * Z;  Z = Z - U * H
+        H = U' * Z
+        mul!(Z, U, H, -1, 1)
+        mul!(H, U', Z)
+        mul!(Z, U, H, -1, 1)
     elseif meth == "MGS"
         for j in 1:size(U,2)
             h = U[:, j]' * Z

@@ -29,6 +29,9 @@ A = readdlm(filename)
 n = size(A, 1)
 
 V, D, ritz, info = rand_ira(A, n, k ; verbose=true)
+V, D = sketched_to_fully(A, V)
+
+v_lobpcg, lambda, info = lobpcg(A, n, k; verbosity=1)
 println("number of matrix-vector products: ", info.mvps)
 
 # normalize eigenvectors
@@ -45,8 +48,23 @@ end
 # # matrix is stored in text in filename
 # A = readdlm(filename)
 
-# n = size(A, 1)
-# println("size of A: ", n)
-# # and now for lobpcg
-# X, Lambda, info = lobpcg(A, n, k; verbosity=1)
-# println("number of matrix-vector products: ", info.mvps)    
+Random.seed!(98423598)
+n = size(A, 1)
+println("size of A: ", n)
+# and now for lobpcg
+X, Lambda, info = lobpcg(A, n, k; verbosity=1, normA=15)
+println("number of matrix-vector products: ", info.mvps)
+
+# and now the interface with
+
+Random.seed!(98423598)
+lambda_inter, X_inter, residual_norms_inter, n_iter_inter, converged_inter, n_matvecs_inter  = randESCSolver(A, n, k; method="LOBPCG", useRandomization=false, cleanEigenvectors=false, maxiter=300, tol=1e-8, verbose=true)
+
+# print comparison of eigenvalues from rand_ira, and randESCSolver with method="lobpcg"
+println("Eigenvalues from rand_ira:")
+println(diag(D))
+println("Eigenvalues from lobpcg:")
+println(lambda)
+
+println("Eigenvalues from randESCSolver with method=\"LOBPCG\":")
+println(lambda_inter)
