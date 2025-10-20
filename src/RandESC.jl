@@ -1,7 +1,7 @@
 module RandESC
 
     # list all functions that should be accessible from outside
-    export rand_ira, ira, lobpcg, sketched_to_fully, randESCSolver
+    export rand_ira, ira, lobpcg, sketched_to_fully, randESCSolver, lobpcg_softlock
 
     # include all source files from this module
     include("sketch.jl")
