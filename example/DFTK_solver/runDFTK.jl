@@ -14,7 +14,7 @@ function my_eig_solver(A, X0; prec = nothing, maxiter, tol, kwargs...)
         # DFTK.Eigen.Preconditioners.precondprep(M, X)
     end
 
-    return randESCSolver(A, size(X0, 1), size(X0, 2); X0=X0, preconditioner=prec, maxiter=maxiter*10, tol=tol, useRandomization=true, method="IRA", cleanEigenvectors=true, verbose=true, precond_preparator=precond_preparation, normA=ecut)
+    return randESCSolver(A, size(X0, 1), size(X0, 2); X0=X0, preconditioner=prec, maxiter=maxiter, tol=tol, useRandomization=false, method="LOBPCG", cleanEigenvectors=false, verbose=true, precond_preparator=precond_preparation, normA=ecut)
 end
 
 
@@ -50,6 +50,6 @@ tlattive = transpose(latticevecs)
 model = model_DFT(lattice', atom_psps, positionvecs; functionals=PBE(), temperature=0.01)
 basis = PlaneWaveBasis(model; Ecut=ecut, kgrid=[1, 1, 1], kshift=[0, 0, 0])
 DFTK.reset_timer!(DFTK.timer)
-scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
-# scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
+# scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
+scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
 println(DFTK.timer)
