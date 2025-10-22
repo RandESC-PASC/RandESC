@@ -14,6 +14,27 @@ function my_eig_solver(A, X0; prec = nothing, maxiter, tol, kwargs...)
         # DFTK.Eigen.Preconditioners.precondprep(M, X)
     end
 
+    writeOperator = false
+    if writeOperator
+        println("computing matrix")
+        H = Array(A)
+        println("writing matrix to disk ")
+        open("hamiltonian.bin", "w") do io
+            write(io, size(H, 1))
+            write(io, size(H, 2))
+            write(io, H)
+        end
+        println("done")
+
+        println("writing preconditioner")
+        precond_vec = (prec.kin .+ prec.default_shift)
+        println("size of preconditioner ", size(precond_vec, 1))
+        open("preconditioner.bin", "w") do io
+            write(io, size(precond_vec, 1))
+            write(io, precond_vec)
+        end
+    end
+
     return randESCSolver(A, size(X0, 1), size(X0, 2); X0=X0, preconditioner=prec, maxiter=maxiter, tol=tol, useRandomization=false, method="LOBPCG", cleanEigenvectors=false, verbose=true, precond_preparator=precond_preparation, normA=ecut)
 end
 
