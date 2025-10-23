@@ -339,9 +339,9 @@ function lobpcg_softlock(A, n::Integer, k::Integer;
         println("LOBPCG finished in $it iterations, locked = ", count(locked), "/$k, total mvps = $mvps")
         # println("Maximum final relres: ", maximum(rel), " tolerance was $tol")
     end
-        if tol < maximum(rel)
-            @warn "Warning: Not all requested eigenpairs converged to the desired tolerance $tol, maximum relres: $(maximum(rel)). tolerance was $tol"
-        end
+    if tol < maximum(rel)
+        @warn "Warning: Not all requested eigenpairs converged to the desired tolerance $tol, maximum relres: $(maximum(rel)). tolerance was $tol"
+    end
 
     info = (it = it, mvps = mvps, res = rel, locked = locked) 
     return X, Lambda, info
