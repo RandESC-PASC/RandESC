@@ -233,8 +233,8 @@ function lobpcg_softlock(A, n::Integer, k::Integer;
 
     # soft-lock bookkeeping
     locked = falses(k)                
-    rel    = fill(Inf, k)             
-    rnorm  = zeros(eltype(X), k) 
+    rel   = zeros(Float64, k)    
+    rnorm = zeros(Float64, k)     
 
     # search directions (active-only)
     T  = eltype(X)
@@ -253,15 +253,10 @@ function lobpcg_softlock(A, n::Integer, k::Integer;
             rnorm[j] = norm(R[:, j])
         end
         axnorm = nA .+ abs.(Lambda)                 # small alloc; could be reused if wanted
-        rel .= rnorm ./ axnorm
+        rel .= rnorm #./ axnorm
 
-        # locked ones
-        @inbounds for j in 1:k                      
-            if rel[j] <= lock_tol
-                locked[j] = true
-            end
-        end
-        # check if all of them is locked
+        locked .= rnorm .<= lock_tol
+
         if all(locked)                              
             if verbosity > 0
                 println("LOBPCG iter $it: all $k columns locked; mvps = $mvps")
@@ -332,7 +327,7 @@ function lobpcg_softlock(A, n::Integer, k::Integer;
         end
 
         if verbosity > 0
-            maxrel_active = isempty(act) ? 0.0 : maximum(rel[act])   # [NEW]
+            maxrel_active = isempty(act) ? 0.0 : maximum(rel[act]) 
             println("LOBPCG (soft) iter ", it,
                     ": max relres(active) = ", maxrel_active,
                     ", locked = ", count(locked), "/", k,
@@ -340,7 +335,15 @@ function lobpcg_softlock(A, n::Integer, k::Integer;
         end
     end
 
-    info = (it = it, mvps = mvps, res = rel, locked = locked)   # [NEW]
+    if verbosity > 0
+        println("LOBPCG finished in $it iterations, locked = ", count(locked), "/$k, total mvps = $mvps")
+        # println("Maximum final relres: ", maximum(rel), " tolerance was $tol")
+    end
+        if tol < maximum(rel)
+            @warn "Warning: Not all requested eigenpairs converged to the desired tolerance $tol, maximum relres: $(maximum(rel)). tolerance was $tol"
+        end
+
+    info = (it = it, mvps = mvps, res = rel, locked = locked) 
     return X, Lambda, info
 end
 
@@ -399,3 +402,146 @@ end
 # non-mutating wrapper
 gs_project_out_multi(Z::AbstractMatrix, Us::AbstractMatrix...; method::AbstractString="CGS2") =
     gs_project_out_multi!(copy(Z), Us...; method)
+
+
+function lobpcg_lock(A, n::Integer, k::Integer;
+                     M=nothing, X0=nothing, tol::Real=1e-8, maxit::Integer=200,
+                     verbosity::Integer=1, ritz_order::AbstractString="smallest",
+                     proj_method::AbstractString="CGS2", normA = nothing,
+                     precond_preparation = nothing)
+
+    # --- initial guess & orthonormalize ---
+    X = X0 === nothing ? randn(n, k) : copy(X0)
+    X = qr_orthonormalize!(X)
+
+    # --- ||A|| estimate for (optional) diagnostics, matvec counter ---
+    if isnothing(normA)
+        tmp = complex(randn(n, 5))
+        nA  = norm(A * tmp) / norm(tmp)
+        mvps = 5
+    else
+        nA  = normA
+        mvps = 0
+    end
+
+    # --- initial RR in span(X) ---
+    AX = similar(X)
+    mul!(AX, A, X); mvps += size(X,2)
+    C, Λ = rayleigh_ritz_standard(X, AX; pickSmallest = lowercase(ritz_order) == "smallest")
+    X  = X * C[:, 1:k]
+    AX = AX * C[:, 1:k]
+    Lambda = Λ[1:k]
+    R = AX - X * Diagonal(Lambda)
+
+    # --- workspaces & search dirs ---
+    T = eltype(X)
+    rnorm = zeros(Float64, k)             # absolute residuals per column
+    P  = Array{T}(undef, n, 0)
+    AP = Array{T}(undef, n, 0)
+    AWbuf = Array{T}(undef, n, k)         # reuse for A*W
+
+    # --- ordered locking frontier ---
+    lock_smallest = lowercase(ritz_order) == "smallest"
+    lock_front = lock_smallest ? 0      : k + 1   # if "largest", move lock_front downward
+
+    it = 0
+    while it < maxit
+        it += 1
+
+        # ---- residuals (absolute) ----
+        @inbounds @views for j in 1:k
+            rnorm[j] = norm(R[:, j])
+        end
+
+        # ---- advance frontier in-order (monotone) ----
+        if lock_smallest
+            while lock_front < k && rnorm[lock_front + 1] <= tol
+                lock_front += 1
+            end
+            act = (lock_front + 1):k                # active tail
+            done = (lock_front == k)
+        else
+            while lock_front > 1 && rnorm[lock_front - 1] <= tol
+                lock_front -= 1
+            end
+            act = 1:(lock_front - 1)                # active head (largest-first)
+            done = (lock_front == 1)
+        end
+
+        if done
+            verbosity > 0 && println("LOBPCG (lock) iter $it: all $k columns ≤ tol; mvps = $mvps")
+            break
+        end
+
+        # ---- precondition residuals of active block only ----
+        @views Ract = R[:, act]                     # n × ka (ka may be 0)
+        W = similar(Ract)
+        if !isnothing(M)
+            if !isnothing(precond_preparation)
+                precond_preparation(M, X)
+            end
+            ldiv!(W, M, Ract)
+        else
+            copy!(W, Ract)
+        end
+
+        # ---- project W against span(X,P) (single QR at end) ----
+        W = gs_project_out_multi(W, X, P; method = proj_method)
+
+        # ---- trial subspace S = [X, P, W] and AS = [AX, AP, AW] ----
+        S  = hcat(X, P, W)
+        @views AW = AWbuf[:, 1:size(W,2)]
+        mul!(AW, A, W); mvps += size(W,2)
+        AS = hcat(AX, AP, AW)
+
+        # ---- Rayleigh–Ritz on S ----
+        C, Λ = rayleigh_ritz_standard(S, AS; pickSmallest = lock_smallest)
+
+        # update k Ritz pairs
+        mul!(X,  S,  C[:, 1:k])
+        mul!(AX, AS, C[:, 1:k])
+        Lambda = Λ[1:k]
+
+        # new residuals for next cycle
+        R = AX - X * Diagonal(Lambda)
+
+        # ---- update search directions P/AP only for ACTIVE rows of X-block ----
+        sX = k
+        sP = size(P,2)
+        sW = size(W,2)
+        if sP + sW == 0
+            P  = Array{T}(undef, n, 0)
+            AP = Array{T}(undef, n, 0)
+        else
+            if isempty(act)
+                P  = Array{T}(undef, n, 0)
+                AP = Array{T}(undef, n, 0)
+            else
+                @views AblkT = transpose(C[act, sX+1:sX+sP+sW])   # ((sP+sW) × |act|)
+                qrf = qr(AblkT)
+                t   = min(size(AblkT)...)
+                QQ  = Matrix(qrf.Q)[:, 1:t]
+                @views CQ = C[:, sX+1:sX+sP+sW] * QQ
+                P  = S  * CQ
+                AP = AS * CQ
+            end
+        end
+
+        if verbosity > 0
+            max_active = isempty(act) ? 0.0 : maximum(@view rnorm[act])
+            println("LOBPCG (lock) iter $it: max absres(active) = $max_active, ",
+                    lock_smallest ? "front=" : "back=", lock_front, ", mvps = $mvps")
+        end
+    end
+
+    if verbosity > 0
+        if lock_smallest
+            println("LOBPCG (lock) finished in $it iters; locked smallest: $lock_front/$k; mvps=$mvps")
+        else
+            println("LOBPCG (lock) finished in $it iters; locked largest: $(k-lock_front+1)/$k; mvps=$mvps")
+        end
+    end
+
+    info = (it = it, mvps = mvps, absres = rnorm, frontier = lock_front)
+    return X, Lambda, info
+end
