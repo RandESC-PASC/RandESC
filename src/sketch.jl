@@ -6,7 +6,10 @@ using Random, LinearAlgebra, SparseArrays, FFTW
 
 Return a callable `SS` that maps `X` (size n×p) to an s×p sketch, following MATLAB's `all_sketch`.
 
-`type` ∈ {"real_gaussian","complex_gaussian","complex_srtt","real_srtt","sparse"}.
+`type` ∈ {"real_gaussian","complex_gaussian","complex_srtt","real_srtt","sparse_sign","sparse_stack"}.
+
+- "sparse" uses the original `sparsesign` (ζ distinct rows per column, iid ±1/√ζ).
+- "sparse_stack" uses `sparsestack` (blocked one-per-block construction matching the MEX).
 
 If `seed` is provided, a fresh RNG is created with that seed (like MATLAB's `rng(seed)`).
 """
@@ -21,24 +24,30 @@ function sketch(n::Integer, s::Integer, type::AbstractString; seed::Union{Nothin
         SS = (X -> S * X)
 
     elseif t == "complex_gaussian"
-        # S entries have E|S_ij|^2 = 1/s (split real/imag equally)
+        # E|S_ij|^2 = 1/s (split real/imag equally)
         S = randn(rng, s, n) / sqrt(2s) .+ im * randn(rng, s, n) / sqrt(2s)
         SS = (X -> S * X)
 
     elseif t == "complex_srtt"
-        IX = randperm(rng, n)[1:s]               # randsample(n,s)
-        diag_sign = exp.(im .* (2π) .* rand(rng, n))          # length-n complex phases
-        SS = (X -> sqrt(1/s) * SRTT(diag_sign, IX, X, :complex)) # should be sqrt(n/s)?
+        # Subsampled randomized trig transform with complex phases + FFT
+        IX = randperm(rng, n)[1:s]                      # choose s rows
+        diag_sign = exp.(im .* (2π) .* rand(rng, n))    # unit-modulus phases
+        SS = (X -> sqrt(n/s) * SRTT(diag_sign, IX, X, :complex))
 
     elseif t == "real_srtt"
         IX = randperm(rng, n)[1:s]
-        # simpler equivalent (vectorized):
-        diag_sign = rand(rng, (-1.0, 1.0), n)
+        diag_sign = rand(rng, (-1.0, 1.0), n)           # Rademacher signs
         SS = (X -> sqrt(n/s) * SRTT(diag_sign, IX, X, :real))
 
-    elseif t == "sparse"
-        # Your earlier sparsesign: s×n with zeta=8 (as in MATLAB)
-        S = sparsesign(s, n, 8; rng)
+    elseif t == "sparsesign"
+        ζ = 8
+        S = sparsesign(s, n, ζ; rng)
+        SS = (X -> S * X)
+
+    elseif t == "sparsestack"
+        # Blocked one-per-block construction (MEX translation)
+        ζ = 4
+        S = sparsestack(s, n, ζ; rng)
         SS = (X -> S * X)
 
     else
@@ -49,45 +58,50 @@ function sketch(n::Integer, s::Integer, type::AbstractString; seed::Union{Nothin
 end
 
 # Subsampled Random Trig Transform (SRFT/SRDT variants)
-# Matches MATLAB:
-#   if complex: Y = fft(diag_sign .* X);
-#   else      : Y = dct(diag_sign .* X);
-#   Y = Y(IX, :);
+#   complex: Y = fft(diag_sign .* X, dims=1);
+#   real   : Y = dct(diag_sign .* X, 2; dims=1);
+# and then subsample rows: Y = Y[IX, :].
 function SRTT(diag_sign::AbstractVector, IX::AbstractVector{<:Integer},
               X::AbstractMatrix, field::Symbol)
     @assert length(diag_sign) == size(X,1) "diag_sign length must match size(X,1)"
-    # Multiply by diagonal: row-wise scaling
     Xscaled = diag_sign .* X
 
     if field === :complex
-        # FFT
-        Y = fft(Xscaled,1)
+        Y = fft(Xscaled, 1)
     elseif field === :real
-        # MATLAB dct is DCT-II by default
-        Y = FFTW.dct(Xscaled, 2)
+        Y = FFTW.dct(Xscaled, 2; dims=1)  # DCT-II along rows
     else
         throw(ArgumentError("field must be :complex or :real"))
     end
     return @view Y[IX, :]
 end
 
-# Builds a d×m sparse ±1/√zeta matrix with zeta distinct nonzeros per column.
-# adapted from MEX code by Ethan Epperly
-function sparsesign(d::Integer, m::Integer, zeta::Integer; rng=Random.default_rng())
-    d = Int(d); m = Int(m); zeta = Int(min(zeta, d))
-    @assert d ≥ 1 && m ≥ 1 && zeta ≥ 1 "d, m, zeta must be positive; zeta ≤ d"
+# -------------------------------------------------------------------------
+# Original "sparsesign" (distinct rows per column, iid ±1/√ζ)
+# -------------------------------------------------------------------------
+"""
+    sparsesign(d::Integer, m::Integer, ζ::Integer; rng=Random.default_rng())
 
-    nnz = m * zeta
+Build a `d × m` sparse matrix with exactly `ζ` nonzeros per column:
+- For each column, choose `ζ` distinct row indices uniformly at random from `1:d`.
+- Nonzeros are iid ±1/√ζ (Rademacher).
+
+"""
+function sparsesign(d::Integer, m::Integer, ζ::Integer; rng=Random.default_rng())
+    d = Int(d); m = Int(m); ζ = Int(min(ζ, d))
+    @assert d ≥ 1 && m ≥ 1 && ζ ≥ 1 "d, m, ζ must be positive and ζ ≤ d"
+
+    nnz = m * ζ
     I = Vector{Int}(undef, nnz)
     J = Vector{Int}(undef, nnz)
     V = Vector{Float64}(undef, nnz)
-    v = 1.0 / sqrt(zeta)
+    v = 1.0 / sqrt(ζ)
 
     idx = 1
-    for j in 1:m
-        rows = randperm(rng, d)[1:zeta]   # distinct rows per column
-        signs = rand(rng, (-1.0, 1.0), zeta)          # ±1
-        @inbounds for t in 1:zeta
+    @inbounds for j in 1:m
+        rows = randperm(rng, d)[1:ζ]                 # distinct rows
+        signs = rand(rng, (-1.0, 1.0), ζ)            # ±1
+        for t in 1:ζ
             I[idx] = rows[t]
             J[idx] = j
             V[idx] = signs[t] * v
@@ -95,4 +109,83 @@ function sparsesign(d::Integer, m::Integer, zeta::Integer; rng=Random.default_rn
         end
     end
     return sparse(I, J, V, d, m)
+end
+
+"""
+    sparsestack(d::Integer, m::Integer, ζ::Integer; rng=Random.default_rng())
+
+Build a `d × m` sparse matrix `S` with exactly `ζ` nonzeros **per column**
+using the blocked one-per-block scheme (MEX `sparseStackl.c`):
+
+- Partition rows `1:d` into `ζ` contiguous blocks as evenly as possible:
+    `d = q*ζ + r`. First `r` blocks have size `q+1`, remaining have size `q`.
+- In each column, pick ONE row uniformly from EACH block (independent across blocks/columns).
+- Nonzeros are ±1/√ζ. Signs are drawn by reusing bits from random words for speed.
+
+This mirrors the MEX behavior closely and constructs CSC arrays directly.
+"""
+function sparsestack(d::Integer, m::Integer, ζ::Integer; rng=Random.default_rng())
+    dI = Int(d); mI = Int(m); ζI = Int(ζ)
+    if dI == 0 || mI == 0 || ζI == 0
+        return spzeros(dI, mI)
+    end
+    ζI = min(ζI, dI)
+
+    # guard overflow in nnz = m*ζ
+    if mI > typemax(Int) ÷ ζI
+        throw(OverflowError("m*ζ overflows Int"))
+    end
+    nnz = mI * ζI
+
+    # Partition rows: d = q*ζ + r, first r blocks of size q+1, rest q
+    q, r = divrem(dI, ζI)
+    sizes  = Vector{Int}(undef, ζI)
+    starts = Vector{Int}(undef, ζI)
+    @inbounds for j in 0:ζI-1
+        if j < r
+            sizes[j+1]  = q + 1
+            starts[j+1] = j * (q + 1)
+        else
+            sizes[j+1]  = q
+            starts[j+1] = r * (q + 1) + (j - r) * q
+        end
+    end
+
+    # Preallocate CSC arrays
+    colptr = Vector{Int}(undef, mI + 1)
+    rowval = Vector{Int}(undef, nnz)
+    nzval  = Vector{Float64}(undef, nnz)
+
+    # Column pointers (1-based)
+    colptr[1] = 1
+    @inbounds for col in 1:mI
+        colptr[col + 1] = col * ζI + 1
+    end
+
+    a = 1 / sqrt(Float64(ζI))     # magnitude
+    sign_buf::UInt64 = 0x00
+    bits_left::Int   = 0
+
+    # Fill columns: each column occupies rowval/nzval indices p0+1 : p0+ζI
+    @inbounds for col in 1:mI
+        p0 = (col - 1) * ζI
+        for j in 1:ζI
+            # unbiased offset in [0, sizes[j)-1]
+            off = rand(rng, 0:(sizes[j] - 1))
+            rowval[p0 + j] = starts[j] + off + 1   # to 1-based
+
+            # reuse bits from a 64-bit random word for ± sign
+            if bits_left == 0
+                sign_buf = rand(rng, UInt64)
+                bits_left = 64
+            end
+            s = if (sign_buf & 0x1) == 0x1 1.0 else -1.0 end
+            sign_buf >>= 1
+            bits_left -= 1
+
+            nzval[p0 + j] = s * a
+        end
+    end
+
+    return SparseMatrixCSC(dI, mI, colptr, rowval, nzval)
 end
