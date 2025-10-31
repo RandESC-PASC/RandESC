@@ -49,7 +49,8 @@ structure = read_frame(filename)
 
 ang2bohr = 1.8897261249935897
 positions = structure["arrays"]["pos"] * ang2bohr
-lattice = structure["cell"] * ang2bohr
+latticeP = structure["cell"] * ang2bohr
+lattice = latticeP'
 nat = structure["N_atoms"]
 species = structure["arrays"]["species"]
 
@@ -61,14 +62,12 @@ for i in 1:nat
     push!(atom_psps, pp)
 end
 
-latticevecs = [lattice[1, :]; lattice[2, :]; lattice[3, :]]
 
-invlat = inv(lattice')
+invlat = inv(lattice)
 positionvecs = [ invlat * positions[:, i] for i in 1:nat]
 
-tlattive = transpose(latticevecs)
 
-model = model_DFT(lattice', atom_psps, positionvecs; functionals=PBE(), temperature=0.01)
+model = model_DFT(lattice, atom_psps, positionvecs; functionals=PBE(), temperature=0.01)
 basis = PlaneWaveBasis(model; Ecut=ecut, kgrid=[1, 1, 1], kshift=[0, 0, 0])
 DFTK.reset_timer!(DFTK.timer)
 # scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
