@@ -35,7 +35,7 @@ function my_eig_solver(A, X0; prec = nothing, maxiter, tol, kwargs...)
         end
     end
 
-    return randESCSolver(A, size(X0, 1), size(X0, 2); X0=X0, preconditioner=prec, maxiter=maxiter, tol=tol, useRandomization=false, method="LOBPCG", cleanEigenvectors=false, verbose=true, precond_preparator=precond_preparation, normA=ecut)
+    return randESCSolver(A, size(X0, 1), size(X0, 2); X0=X0, preconditioner=prec, maxiter=maxiter, tol=tol, useRandomization=true, method="LOBPCG", cleanEigenvectors=false, verbose=false, precond_preparator=precond_preparation, normA=ecut)
 end
 
 
@@ -58,7 +58,8 @@ print("Read structure with $nat atoms from $filename\n")
 
 atom_psps = ElementPsp[]
 for i in 1:nat
-    pp = ElementPsp(Symbol(species[i]), PseudoFamily("dojo.nc.sr.pbe.v0_4_1.standard.upf"))
+    # pp = ElementPsp(Symbol(species[i]), PseudoFamily("dojo.nc.sr.pbe.v0_4_1.standard.upf"))
+    pp = ElementPsp(Symbol(species[i]), PseudoFamily("cp2k.nc.sr.pbe.v0_1.semicore.gth"))
     push!(atom_psps, pp)
 end
 
@@ -67,9 +68,35 @@ invlat = inv(lattice)
 positionvecs = [ invlat * positions[:, i] for i in 1:nat]
 
 
-model = model_DFT(lattice, atom_psps, positionvecs; functionals=PBE(), temperature=0.01)
+model = model_DFT(lattice, atom_psps, positionvecs; spin_polarization=:none, functionals=PBE(), temperature=0.01)
+badbasis = PlaneWaveBasis(model, Ecut=4,  kgrid=[1, 1, 1])
+println("starting bad basis")
+compres = self_consistent_field(badbasis)
+compres = self_consistent_field(badbasis, eigensolver = my_eig_solver);
+println("starting good basis")
 basis = PlaneWaveBasis(model; Ecut=ecut, kgrid=[1, 1, 1], kshift=[0, 0, 0])
+DFTK.reset_timer!(DFTK.timer)
+println("why am i so slow?")
+scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
+# scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
+println(DFTK.timer)
+
+
+# # Print occupations
+# println("Occupations of Kohn-Sham states:")
+# for (i, occ) in enumerate(scfres.occupation)
+#     println("State $i: occupation = $occ")
+# end
+
+
 DFTK.reset_timer!(DFTK.timer)
 # scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
 scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
 println(DFTK.timer)
+
+
+# # Print occupations
+# println("Occupations of Kohn-Sham states:")
+# for (i, occ) in enumerate(scfres.occupation)
+#     println("State $i: occupation = $occ")
+# end
