@@ -147,10 +147,20 @@ function randESCSolver(A, n::Integer, k::Integer; X0=nothing, preconditioner=not
         end
     elseif method == "LOBPCG"
         if useRandomization
-            error("Randomized version is not implemented for LOBPCG.")
+            # println("using sketched_LOBPCG")
+            # println("n, k: ", n, ", ", k)
+            V, lambda, info = lobpcg_sketch_lock(A, n, k; X0=X0, maxit=maxiter, tol=tol, verbosity=verbose ? 1 : 0, M=preconditioner, normA=normA, precond_preparation=precond_preparator)
+            n_iter = info.it
+            converged = n_iter < maxiter
+            n_matvec = info.mvps
+            if !converged
+                @warn "sketch_lobpcg did not converge within $maxiter iterations. Max residual norm: $(maximum(info.res))"
+            end
+            residual_norms = info.absres
+            return (λ=lambda, X=V, residual_norms=residual_norms, n_iter=n_iter, converged=converged, n_matvec=n_matvec)
         else
-            println("Using LOBPCG")
-            println("n, k: ", n, ", ", k)
+            # println("Using LOBPCG")
+            # println("n, k: ", n, ", ", k)
             V, lambda, info = lobpcg_lock(A, n, k; X0=X0, maxit=maxiter, tol=tol, verbosity=verbose ? 1 : 0, M=preconditioner, normA=normA, precond_preparation=precond_preparator)
 
             n_iter = info.it
