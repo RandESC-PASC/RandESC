@@ -88,7 +88,7 @@ while nconv < k && nit < opts.maxit
         
         % Deflate
         if j == 1
-            V = init_space(A, n, [], opts.jmin);
+            V = init_space(n, []);
             j = size(V, 2);
             W = matvec(A, V);
             M = V' * W;
