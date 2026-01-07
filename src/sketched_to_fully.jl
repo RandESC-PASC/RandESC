@@ -21,7 +21,7 @@ taking a vector/matrix and returning `A*x`.
 function sketched_to_fully(A, V)
     # Cholesky-based orthonormalization: V ← V / chol(V'V)
     K = V' * V
-    R = cholesky(K).U
+    R = cholesky(Hermitian(K)).U
     Vn = V / R
 
     # Compute A * Vn:
@@ -30,12 +30,12 @@ function sketched_to_fully(A, V)
     AV = A * Vn
 
     # Form the small projected matrix and eigendecompose
-    F = Vn' * AV
+    F = Hermitian(Vn' * AV)
     eigres = eigen(F)
 
     # Assemble outputs (match MATLAB-style: eigenvalues in a diagonal matrix)
     W = Vn * eigres.vectors
-    D = Diagonal(eigres.values)
-    return W, D
+    # D = Diagonal(eigres.values)
+    return W, eigres.values
 end
 

@@ -60,7 +60,7 @@ Solves the eigenvalue problem for the matrix `A`, computing `k` eigenvalues and 
 - `maxiter`: Maximum number of iterations allowed.
 - `tol`: Tolerance for convergence.
 - `useRandomization`: Boolean flag to enable or disable randomization in the solver.
-- `method`: The eigensolver method to use (e.g., "arnoldi", "lanczos").
+- `method`: The eigensolver method to use (e.g., "IRA", "LOBPCG", "JD").
 - `orth_method`: Orthogonalization method to use (default: `"depends on solver"`).
 - `cleanEigenvectors`: Whether to clean the eigenvectors (make them more orthogonal) after computation (default: `false`). Useful for randomized methods.
 - `normA`: An estimate of the norm of `A`, used for scaling residuals (optional).
@@ -80,7 +80,13 @@ function randESCSolver(A, n::Integer, k::Integer; X0=nothing, preconditioner=not
     #     error("A must be an AbstractMatrix or LinearMap")
     # end
     if isnothing(X0)
-        X0 = randn(n, k)
+        # Infer element type from A
+        T = eltype(A)
+        if T <: Complex
+            X0 = randn(ComplexF64, n, k)
+        else
+            X0 = randn(n, k)
+        end
     end
     if !(X0 isa AbstractMatrix)
         error("X0 must be an AbstractMatrix")
@@ -172,7 +178,41 @@ function randESCSolver(A, n::Integer, k::Integer; X0=nothing, preconditioner=not
             residual_norms = info.absres
             return (λ=lambda, X=V, residual_norms=residual_norms, n_iter=n_iter, converged=converged, n_matvec=n_matvec)
         end
+    elseif method == "JD"
+        # if size(X0, 2) > 1
+        #     @warn "Blocked initial guesses are provided for JD, but JD does not support blocked initial guesses. Using only the first column of X0."
+        #     X0 = X0[:, 1]
+        # end
+        maxiter = maxiter * k
+        if useRandomization
+            # Call randomized Jacobi-Davidson
+            V, lambda, history = jdsym_rand(A; k=k, v0=X0, maxit=maxiter, tol=tol, M=preconditioner, disp=verbose,
+                                           orth_method=isnothing(orth_method) ? :rgs : orth_method)
+            if cleanEigenvectors
+                # Clean eigenvectors to make them fully orthogonal
+                V, lambda = sketched_to_fully(A, V)
+            end
+            n_iter = size(history, 1)
+            converged = n_iter < maxiter
+            n_matvec = Int(history[end, 3])
+            if !converged
+                @warn "jdsym_rand did not converge within $maxiter iterations. Final residual norm: $(history[end, 1])"
+            end
+            residual_norms = history[:, 1]
+            return (λ=lambda, X=V, residual_norms=residual_norms, n_iter=n_iter, converged=converged, n_matvec=n_matvec)
+        else
+            # Call standard Jacobi-Davidson
+            V, lambda, history = jdsym(A; k=k, v0=X0, maxit=maxiter, tol=tol, M=preconditioner, disp=verbose)
+            n_iter = size(history, 1)
+            converged = n_iter < maxiter
+            n_matvec = Int(history[end, 3])
+            if !converged
+                @warn "jdsym did not converge within $maxiter iterations. Final residual norm: $(history[end, 1])"
+            end
+            residual_norms = history[:, 1]
+            return (λ=lambda, X=V, residual_norms=residual_norms, n_iter=n_iter, converged=converged, n_matvec=n_matvec)
+        end
     else
-        error("Unknown method: $method. Supported methods are: IRA, LOBPCG.")
+        error("Unknown method: $method. Supported methods are: IRA, LOBPCG, JD.")
     end
 end

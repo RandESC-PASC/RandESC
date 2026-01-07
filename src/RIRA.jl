@@ -20,7 +20,7 @@ function rand_ira(A, n::Integer, k::Integer; m::Integer = max(2*k,k+20),
                   which::AbstractString="SR", maxit::Integer=100, tol::Real=1e-8,
                   v0::Union{Nothing,AbstractVector}=nothing,
                   orth_method::AbstractString="rgs", verbose::Bool=true,
-                  sketch_type::AbstractString="sparse",
+                  sketch_type::AbstractString="sparsestack",
                   sketch_s::Union{Nothing,Int}=nothing,
                   sketch_seed::Union{Nothing,Int}=nothing)
 

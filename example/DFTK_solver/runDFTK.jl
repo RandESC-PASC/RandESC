@@ -71,7 +71,7 @@ function my_eig_solver(A, X0; prec = nothing, maxiter, tol, kwargs...)
         println("done writing")
     end
 
-    return randESCSolver(A, size(X0, 1), size(X0, 2); X0=X0, preconditioner=prec, maxiter=maxiter, tol=tol, useRandomization=false, method="LOBPCG", cleanEigenvectors=false, verbose=false, precond_preparator=precond_preparation, normA=ecut)
+    return randESCSolver(A, size(X0, 1), size(X0, 2); X0=X0, preconditioner=prec, maxiter=maxiter, tol=tol, useRandomization=false, method="JD", cleanEigenvectors=false, verbose=false, precond_preparator=precond_preparation, normA=ecut)
 end
 
 
@@ -115,8 +115,8 @@ println("starting good basis")
 basis = PlaneWaveBasis(model; Ecut=ecut, kgrid=[2, 2, 1])
 DFTK.reset_timer!(DFTK.timer)
 println("why am i so slow?")
-scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
-# scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
+# scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
+scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
 println(DFTK.timer)
 
 

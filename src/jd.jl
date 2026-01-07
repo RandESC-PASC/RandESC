@@ -187,7 +187,8 @@ function init_space(n::Int, v0, X_converged, T::Type)
     if isnothing(v0)
         V = ones(T, n, 1) .+ T(0.1) .* rand(T, n, 1)
     else
-        V = T.(reshape(v0[:, 1], n, 1))
+        # V = T.(reshape(v0[:, 1], n, 1))
+        V = v0
     end
     
     V = orth_against(V, X_converged)

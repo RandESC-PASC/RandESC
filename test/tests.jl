@@ -64,6 +64,41 @@ function testMatrix(A, n, k, testName; test_tol=1e-5, iter_tol=1e-8, verbose=fal
         end
         @test lobpcg_orth_passed
     end
+
+    # testing JD
+    @testset "$testName: testing JD" begin
+        V_jd, lambda_jd, history_jd = jdsym(A; k=k, tol=iter_tol, maxit=maxiter, disp=verbose)
+        jd_passed = maximum(abs.(evals .- lambda_jd)) < test_tol
+        if !jd_passed
+            @warn "$testName: JD eigenvalues did not match! Max abs error: $(maximum(abs.(evals .- lambda_jd)))"
+        end
+        @test jd_passed
+        gram_jd = V_jd' * V_jd
+        jd_orth_passed = maximum(abs.(gram_jd - I)) < test_tol
+        if !jd_orth_passed
+            @warn "$testName: JD eigenvectors are not orthogonal! Max abs error: $(maximum(abs.(gram_jd - I)))"
+        end
+        @test jd_orth_passed
+    end
+
+    # testing randomized JD
+    @testset "$testName: testing randJD" begin
+        V_rjd, lambda_rjd, history_rjd = jdsym_rand(A; k=k, tol=iter_tol, maxit=maxiter, disp=verbose)
+        V_rjd, lambda_rjd = sketched_to_fully(A, V_rjd)
+
+
+        rjd_passed = maximum(abs.(evals .- lambda_rjd)) < test_tol
+        if !rjd_passed
+            @warn "$testName: randJD eigenvalues did not match! Max abs error: $(maximum(abs.(evals .- lambda_rjd)))"
+        end
+        @test rjd_passed
+        gram_rjd = V_rjd' * V_rjd
+        rjd_orth_passed = maximum(abs.(gram_rjd - I)) < test_tol
+        if !rjd_orth_passed
+            @warn "$testName: randJD eigenvectors are not orthogonal! Max abs error: $(maximum(abs.(gram_rjd - I)))"
+        end
+        @test rjd_orth_passed
+    end
 end
 
 @testset "RandESC Eigenvalue Solver Tests" begin
