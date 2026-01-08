@@ -19,7 +19,7 @@ meaning SV = Θ*V has ℓ₂-orthonormal columns.
 - `maxit=200`: Maximum iterations  
 - `jmin=-1`: Min subspace dimension (default: k+5)
 - `jmax=-1`: Max subspace dimension (default: jmin+5)
-- `v0=nothing`: Initial vector
+- `v0=nothing`: Initial vector or matrix of vectors (columns are initial vectors)
 - `sigma=:SR`: Target: `:SR` (smallest real), `:LR` (largest real),
                `:SM` (smallest magnitude), `:LM` (largest magnitude)
 - `M=nothing`: Preconditioner
@@ -80,8 +80,8 @@ function jdsym_rand(A; k::Int=5,
     nit = 0
     history = zeros(Float64, 0, 3)
 
-    # Initialize search space (single vector, Θ-orthonormal)
-    V, SV = init_space_sketched(n, v0, Theta, X_converged, SX_converged, T, orth_method)
+    # Initialize search space (can be multiple vectors, Θ-orthonormal)
+    V, SV = init_space_sketched(n, v0, Theta, X_converged, SX_converged, T, orth_method, jmax)
     j = size(V, 2)
     W = A * V
     nmv += size(V, 2)
@@ -182,7 +182,7 @@ function jdsym_rand(A; k::Int=5,
                 M_proj = Q' * M_proj * Q
             else
                 # Cold restart
-                V, SV = init_space_sketched(n, nothing, Theta, X_converged, SX_converged, T, orth_method)
+                V, SV = init_space_sketched(n, nothing, Theta, X_converged, SX_converged, T, orth_method, jmax)
                 j = size(V, 2)
                 W = A * V
                 nmv += size(V, 2)
@@ -253,34 +253,163 @@ end
 
 # === Helper Functions for Sketched JD ===
 
-function init_space_sketched(n::Int, v0, Theta, X_converged, SX_converged, T::Type, orth_method::Symbol)
-    """Initialize search space with single Θ-orthonormal vector"""
+function init_space_sketched(n::Int, v0, Theta, X_converged, SX_converged, T::Type, orth_method::Symbol, jmax::Int=100)
+    """Initialize search space with Θ-orthonormal vectors.
+    
+    If v0 is a matrix, uses all columns (up to jmax) as initial vectors.
+    If v0 is a vector or nothing, uses a single random vector.
+    """
+    
+    # Determine number of initial vectors
     if isnothing(v0)
-        v = randn(T, n)
+        V0 = randn(T, n, 1)
+    elseif ndims(v0) == 1
+        # Single vector input
+        V0 = reshape(T.(v0), n, 1)
     else
-        v = T.(v0[:, 1])
+        # Matrix input - use all columns up to jmax
+        p = min(size(v0, 2), jmax)
+        V0 = T.(v0[:, 1:p])
     end
     
-    # Θ-orthogonalize against converged space
+    # Θ-orthogonalize against converged space first
     if !isempty(X_converged)
-        v = theta_orth_against(v, X_converged, SX_converged, Theta, orth_method)
+        V0 = theta_orth_block_against(V0, X_converged, SX_converged, Theta, orth_method)
     end
     
-    # Normalize to unit Θ-norm
-    sv = Theta(v)
-    nv = norm(sv)
-    if nv < 1e-14
-        v = randn(T, n)
+    # Θ-orthonormalize the block internally
+    V, SV = theta_orth_block(V0, Theta, orth_method)
+    
+    # Check if we got any valid vectors; if not, generate random ones
+    if size(V, 2) == 0
+        V0 = randn(T, n, 1)
         if !isempty(X_converged)
-            v = theta_orth_against(v, X_converged, SX_converged, Theta, orth_method)
+            V0 = theta_orth_block_against(V0, X_converged, SX_converged, Theta, orth_method)
         end
-        sv = Theta(v)
-        nv = norm(sv)
+        V, SV = theta_orth_block(V0, Theta, orth_method)
     end
-    v = v / nv
-    sv = sv / nv
     
-    return reshape(v, n, 1), reshape(sv, length(sv), 1)
+    return V, SV
+end
+
+
+function theta_orth_block(V0, Theta, method::Symbol; tol::Float64=1e-14)
+    """Θ-orthonormalize a block of vectors.
+    
+    Returns V, SV where SV = Θ*V has ℓ₂-orthonormal columns.
+    Vectors with Θ-norm below tol are discarded.
+    
+    Methods:
+      :rcgs  - Randomized CGS (single pass)
+      :rcgs2 - Randomized CGS with reorthogonalization (two passes) 
+      :rgs   - Randomized GS via least squares (default)
+    """
+    n, p = size(V0)
+    T = eltype(V0)
+    
+    if p == 0
+        s = size(Theta(zeros(T, n)), 1)
+        return zeros(T, n, 0), zeros(T, s, 0)
+    end
+    
+    SV0 = Theta(V0)
+    s = size(SV0, 1)
+    
+    if method == :rcgs || method == :rcgs2
+        # Modified Gram-Schmidt in Θ-inner product
+        npass = (method == :rcgs2) ? 2 : 1
+        
+        V = zeros(T, n, 0)
+        SV = zeros(T, s, 0)
+        
+        for i in 1:p
+            v = V0[:, i]
+            sv = Theta(v)
+            
+            for _ in 1:npass
+                if size(SV, 2) > 0
+                    h = SV' * sv
+                    v = v - V * h
+                    sv = sv - SV * h
+                end
+            end
+            
+            nv = norm(sv)
+            
+            if nv > tol
+                v = v / nv
+                sv = sv / nv
+                V = hcat(V, v)
+                SV = hcat(SV, sv)
+            end
+        end
+        
+        return V, SV
+        
+    else  # :rgs (default) - Randomized GS via least squares
+        V = zeros(T, n, 0)
+        SV = zeros(T, s, 0)
+        
+        for i in 1:p
+            v = V0[:, i]
+            sv = Theta(v)
+            
+            if size(SV, 2) > 0
+                h = SV \ sv
+                v = v - V * h
+                sv = sv - SV * h
+            end
+            
+            nv = norm(sv)
+            
+            if nv > tol
+                v = v / nv
+                sv = sv / nv
+                V = hcat(V, v)
+                SV = hcat(SV, sv)
+            end
+        end
+        
+        return V, SV
+    end
+end
+
+
+function theta_orth_block_against(V0, Q, SQ, Theta, method::Symbol)
+    """Θ-orthogonalize block V0 against existing Θ-orthonormal block Q.
+    
+    Methods:
+      :rcgs  - Randomized CGS (single pass)
+      :rcgs2 - Randomized CGS with reorthogonalization (two passes)
+      :rgs   - Randomized GS via least squares (default)
+    """
+    if isempty(Q)
+        return V0
+    end
+    
+    V = copy(V0)
+    SV = Theta(V)
+    
+    if method == :rcgs
+        # Randomized block CGS (single pass)
+        H = SQ' * SV
+        V = V - Q * H
+        
+    elseif method == :rcgs2
+        # Randomized block CGS with reorthogonalization (two passes)
+        for _ in 1:2
+            SV = Theta(V)
+            H = SQ' * SV
+            V = V - Q * H
+        end
+        
+    else  # :rgs (default)
+        # Randomized block GS via least squares
+        H = SQ \ SV
+        V = V - Q * H
+    end
+    
+    return V
 end
 
 
