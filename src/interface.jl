@@ -107,6 +107,8 @@ function randESCSolver(A, n::Integer, k::Integer; X0=nothing, preconditioner=not
         end
     end
 
+    println("n, k ", n, " ", k )
+
 
     if method == "IRA"
         if preconditioner != nothing 
@@ -186,7 +188,7 @@ function randESCSolver(A, n::Integer, k::Integer; X0=nothing, preconditioner=not
         maxiter = maxiter * k
         if useRandomization
             # Call randomized Jacobi-Davidson
-            V, lambda, history = jdsym_rand(A; k=k, v0=X0, maxit=maxiter, tol=tol, M=preconditioner, disp=verbose,
+            V, lambda, history = jdsym_rand(A; k=k, v0=X0, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose,
                                            orth_method=isnothing(orth_method) ? :rgs : orth_method)
             if cleanEigenvectors
                 # Clean eigenvectors to make them fully orthogonal
@@ -202,7 +204,7 @@ function randESCSolver(A, n::Integer, k::Integer; X0=nothing, preconditioner=not
             return (λ=lambda, X=V, residual_norms=residual_norms, n_iter=n_iter, converged=converged, n_matvec=n_matvec)
         else
             # Call standard Jacobi-Davidson
-            V, lambda, history = jdsym(A; k=k, v0=X0, maxit=maxiter, tol=tol, M=preconditioner, disp=verbose)
+            V, lambda, history = jdsym(A; k=k, v0=X0, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose)
             n_iter = size(history, 1)
             converged = n_iter < maxiter
             n_matvec = Int(history[end, 3])

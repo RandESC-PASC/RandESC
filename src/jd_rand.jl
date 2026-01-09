@@ -39,6 +39,7 @@ function jdsym_rand(A; k::Int=5,
                     v0=nothing,
                     sigma::Symbol=:SR,
                     M=nothing,
+                    precond_preparator=nothing,
                     disp::Bool=false,
                     sketch_type::String="sparsestack",
                     sketch_size::Int=-1,
@@ -215,8 +216,8 @@ function jdsym_rand(A; k::Int=5,
         
         Q_proj = hcat(X_converged, u_proj)
         SQ_proj = hcat(SX_converged, su_proj)
-        
-        t = solve_correction_sketched(Q_proj, SQ_proj, Theta, r, M, orth_method)
+
+        t = solve_correction_sketched(Q_proj, SQ_proj, Theta, r, M, orth_method, precond_preparator, u)
         nlit += 1
         nit += 1
         
@@ -451,10 +452,14 @@ function theta_orth_against(v, V, SV, Theta, method::Symbol)
 end
 
 
-function solve_correction_sketched(Q, SQ, Theta, r, M, orth_method::Symbol)
+function solve_correction_sketched(Q, SQ, Theta, r, M, orth_method::Symbol, precond_preparator, u)
     """Olsen-style correction with Θ inner product"""
     t = copy(r)
     if !isnothing(M)
+        # Prepare preconditioner if needed
+        if !isnothing(precond_preparator)
+            precond_preparator(M, u)
+        end
         t = M \ t
     end
     # Project out Q using Θ inner product

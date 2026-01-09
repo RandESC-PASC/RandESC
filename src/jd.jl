@@ -33,6 +33,7 @@ function jdsym(A; k::Int=5,
                     v0=nothing,
                     sigma::Symbol=:SR,
                     M=nothing,
+                    precond_preparator=nothing,
                     disp::Bool=false)
 
     n = size(A, 1)
@@ -158,7 +159,7 @@ function jdsym(A; k::Int=5,
         
         # Solve correction equation
         Q_proj = hcat(X_converged, u)
-        t = solve_correction(Q_proj, r, M)
+        t = solve_correction(Q_proj, r, M, precond_preparator, u)
         nlit += 1
         nit += 1
         
@@ -211,9 +212,13 @@ function orth_against(v, Q)
 end
 
 
-function solve_correction(Q, r, M)
+function solve_correction(Q, r, M, precond_preparator, u)
     t = copy(r)
     if !isnothing(M)
+        # Prepare preconditioner if needed
+        if !isnothing(precond_preparator)
+            precond_preparator(M, u)
+        end
         t = M \ t
     end
     t = t - Q * (Q' * t)
