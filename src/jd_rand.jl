@@ -71,9 +71,10 @@ function jdsym_rand(A; k::Int=5,
     Theta = sketch(n, s, sketch_type)
 
     # Initialize storage for converged eigenpairs (Θ-orthonormal)
-    X_converged = zeros(T, n, 0)
-    SX_converged = zeros(T, s, 0)  # Sketched converged vectors
-    Lambda_converged = Float64[]
+    X_converged = zeros(T, n, k)
+    SX_converged = zeros(T, s, k)  # Sketched converged vectors
+    AX_converged = zeros(T, n, k)  # A * X_converged for refinement
+    Lambda_converged = zeros(Float64, k)
     
     # Counters
     nmv = 0
@@ -82,7 +83,7 @@ function jdsym_rand(A; k::Int=5,
     history = zeros(Float64, 0, 3)
 
     # Initialize search space (can be multiple vectors, Θ-orthonormal)
-    V, SV = init_space_sketched(n, v0, Theta, X_converged, SX_converged, T, orth_method, jmax)
+    V, SV = init_space_sketched(n, v0, Theta, X_converged[:, 1:nconv], SX_converged[:, 1:nconv], T, orth_method, jmax)
     j = size(V, 2)
     W = A * V
     nmv += size(V, 2)
@@ -132,10 +133,10 @@ function jdsym_rand(A; k::Int=5,
         sr = Theta(r)
         
         # Θ-orthogonalize residual against converged space (RGS)
-        if !isempty(X_converged)
-            coeffs = SX_converged \ sr
-            r = r - X_converged * coeffs
-            sr = sr - SX_converged * coeffs
+        if nconv > 0
+            coeffs = SX_converged[:, 1:nconv] \ sr
+            r = r - X_converged[:, 1:nconv] * coeffs
+            sr = sr - SX_converged[:, 1:nconv] * coeffs
         end
         
         # Convergence uses Θ-norm
@@ -149,10 +150,11 @@ function jdsym_rand(A; k::Int=5,
         
         # Check convergence
         if nr < tol
-            X_converged = hcat(X_converged, u)
-            SX_converged = hcat(SX_converged, su)
-            push!(Lambda_converged, theta)
             nconv += 1
+            X_converged[:, nconv] = u
+            SX_converged[:, nconv] = su
+            AX_converged[:, nconv] = w
+            Lambda_converged[nconv] = theta
             
             if disp
                 @printf("  >>> Eigenvalue %d converged: %.10e\n", nconv, theta)
@@ -183,7 +185,7 @@ function jdsym_rand(A; k::Int=5,
                 M_proj = Q' * M_proj * Q
             else
                 # Cold restart
-                V, SV = init_space_sketched(n, nothing, Theta, X_converged, SX_converged, T, orth_method, jmax)
+                V, SV = init_space_sketched(n, nothing, Theta, X_converged[:, 1:nconv], SX_converged[:, 1:nconv], T, orth_method, jmax)
                 j = size(V, 2)
                 W = A * V
                 nmv += size(V, 2)
@@ -213,17 +215,17 @@ function jdsym_rand(A; k::Int=5,
         nu = norm(su)
         u_proj = u / nu
         su_proj = su / nu
-        
-        Q_proj = hcat(X_converged, u_proj)
-        SQ_proj = hcat(SX_converged, su_proj)
+
+        Q_proj = hcat(X_converged[:, 1:nconv], u_proj)
+        SQ_proj = hcat(SX_converged[:, 1:nconv], su_proj)
 
         t = solve_correction_sketched(Q_proj, SQ_proj, Theta, r, M, orth_method, precond_preparator, u)
         nlit += 1
         nit += 1
         
         # Expand subspace (Θ-orthogonalize)
-        if !isempty(X_converged)
-            t = theta_orth_against(t, X_converged, SX_converged, Theta, orth_method)
+        if nconv > 0
+            t = theta_orth_against(t, X_converged[:, 1:nconv], SX_converged[:, 1:nconv], Theta, orth_method)
         end
         t = theta_orth_against(t, V, SV, Theta, orth_method)
         
@@ -248,7 +250,10 @@ function jdsym_rand(A; k::Int=5,
         end
     end
 
-    return X_converged, Lambda_converged, history
+    # Refine eigenpairs using sketched_to_fully
+    X_refined, Lambda_refined = sketched_to_fully(A, X_converged[:, 1:nconv], AV=AX_converged[:, 1:nconv])
+
+    return X_refined, Lambda_refined, history
 end
 
 

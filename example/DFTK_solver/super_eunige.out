@@ -1,0 +1,362 @@
+gamma point ecut 90 Ry
+
+
+moritz@devbox:~/Documents/RandESC/example/DFTK_solver$ julia --project=. runDFTK.jl eunige3_supercell.extxyz 
+Read structure with 40 atoms from eunige3_supercell.extxyz
+starting bad basis
+starting good basis
+why am i so slow?
+n, k (72605, 226)
+Number of matvecs for kpoint 1 3043
+n     Energy            log10(ΔE)   log10(Δρ)   Diag   Δtime
+---   ---------------   ---------   ---------   ----   ------
+  1   -1677.701458522                    1.43   15.0     100s
+n, k (72605, 229)
+Number of matvecs for kpoint 1 2346
+  2   -1842.005926602        2.22        1.17   29.0    77.9s
+n, k (72605, 232)
+Number of matvecs for kpoint 1 3182
+  3   -1901.568051609        1.77        1.07   19.0     100s
+n, k (72605, 232)
+Number of matvecs for kpoint 1 2882
+┌ Warning: Detected large minimal occupation 0.09219692476929654. SCF could be unstable. Try switching to adaptive band selection (`nbandsalg=AdaptiveBands(model)`) or request more converged bands than 214 (e.g. `nbandsalg=AdaptiveBands(model; n_bands_converge=217`)
+└ @ DFTK ~/Documents/DFTK_RandLAB/src/scf/self_consistent_field.jl:87
+  4   -2091.736897364        2.28        0.62   29.0    90.4s
+n, k (72605, 235)
+Number of matvecs for kpoint 1 2134
+  5   -1978.366368047   +    2.05        0.94   44.0    68.9s
+n, k (72605, 237)
+Number of matvecs for kpoint 1 2774
+┌ Warning: Eigensolver not converged
+│   n_iter =
+│    1-element Vector{Int64}:
+│     100
+└ @ DFTK ~/Documents/DFTK_RandLAB/src/scf/self_consistent_field.jl:76
+  6   -2070.914716572        1.97        0.70   100.0    87.5s
+n, k (72605, 240)
+Number of matvecs for kpoint 1 2519
+  7   -2068.677462405   +    0.35        0.69   37.0    79.0s
+n, k (72605, 243)
+Number of matvecs for kpoint 1 2518
+  8   -2106.321358266        1.58        0.54   42.0    78.7s
+n, k (72605, 246)
+Number of matvecs for kpoint 1 1995
+  9   -2115.342118778        0.96        0.51   16.0    64.3s
+n, k (72605, 249)
+Number of matvecs for kpoint 1 1582
+ 10   -2118.654798194        0.52        0.49   23.0    51.7s
+n, k (72605, 252)
+Number of matvecs for kpoint 1 731
+ 11   -2113.792373384   +    0.69        0.52   37.0    26.5s
+n, k (72605, 255)
+Number of matvecs for kpoint 1 1321
+ 12   -2101.787694285   +    1.08        0.58   38.0    44.4s
+n, k (72605, 258)
+Number of matvecs for kpoint 1 1667
+ 13   -2083.512815576   +    1.26        0.63   25.0    55.6s
+n, k (72605, 261)
+Number of matvecs for kpoint 1 1317
+ 14   -2134.149980234        1.70        0.29   23.0    45.1s
+n, k (72605, 264)
+Number of matvecs for kpoint 1 1508
+ 15   -2103.706966670   +    1.48        0.57   38.0    51.6s
+n, k (72605, 267)
+Number of matvecs for kpoint 1 1242
+ 16   -2097.267034319   +    0.81        0.59   17.0    42.8s
+n, k (72605, 270)
+Number of matvecs for kpoint 1 1291
+ 17   -2070.000879906   +    1.44        0.69   15.0    43.8s
+n, k (72605, 273)
+Number of matvecs for kpoint 1 1264
+ 18   -2058.049230527   +    1.08        0.71   15.0    42.8s
+n, k (72605, 276)
+Number of matvecs for kpoint 1 1391
+ 19   -2092.399934015        1.54        0.61   13.0    46.5s
+n, k (72605, 279)
+Number of matvecs for kpoint 1 1356
+ 20   -2103.991760908        1.06        0.56   19.0    46.2s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1106
+ 21   -2126.410638914        1.35        0.41    5.0    38.5s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 687
+ 22   -2124.150960307   +    0.35        0.44    2.0    23.5s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 767
+ 23   -2121.197689982   +    0.47        0.46    3.0    25.4s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 977
+ 24   -2088.651030127   +    1.51        0.64    4.0    32.7s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1170
+ 25   -2057.176597276   +    1.50        0.71    5.0    38.3s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1096
+ 26   -2099.931293299        1.63        0.58    5.0    36.0s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1129
+ 27   -2112.447176206        1.10        0.51    5.0    37.9s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1032
+ 28   -2112.300339145   +   -0.83        0.52    5.0    33.9s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 900
+ 29   -2083.070718983   +    1.47        0.65    5.0    30.4s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1280
+ 30   -2095.256804811        1.09        0.59    6.0    41.7s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1489
+ 31   -2054.278007502   +    1.61        0.72    9.0    49.3s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1344
+ 32   -2116.288531394        1.79        0.50    7.0    43.7s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 693
+ 33   -2121.142060561        0.69        0.46    2.0    23.3s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 727
+ 34   -2121.202611852       -1.22        0.46    3.0    24.6s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1047
+ 35   -2112.283896791   +    0.95        0.52    5.0    33.7s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 819
+ 36   -2101.995455020   +    1.01        0.57    3.0    27.5s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 810
+ 37   -2110.418210688        0.93        0.53    4.0    26.7s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 833
+ 38   -2108.510476712   +    0.28        0.54    4.0    27.5s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 866
+ 39   -2112.255949562        0.57        0.51    5.0    28.0s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 782
+ 40   -2119.568240175        0.86        0.46    4.0    25.8s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1068
+ 41   -2099.336747002   +    1.31        0.58    4.0    35.0s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1373
+ 42   -2068.574180087   +    1.49        0.70   10.0    50.2s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1474
+ 43   -2063.953203932   +    0.66        0.70    7.0    50.0s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1334
+ 44   -2097.978654440        1.53        0.59    7.0    43.6s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1348
+ 45   -2111.284415210        1.12        0.53    7.0    43.8s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1030
+ 46   -2133.554764267        1.35        0.32    5.0    33.4s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 831
+ 47   -2121.088817967   +    1.10        0.45    4.0    27.9s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 862
+ 48   -2129.334246921        0.92        0.37    5.0    28.9s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 679
+ 49   -2126.863980807   +    0.39        0.40    2.0    22.7s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1051
+ 50   -2103.094649527   +    1.38        0.58    4.0    34.0s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 962
+ 51   -2127.731682293        1.39        0.40    5.0    31.6s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1030
+ 52   -2110.232004000   +    1.24        0.52    5.0    33.4s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 898
+ 53   -2138.717934491        1.45        0.23    5.0    29.8s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1188
+ 54   -2082.555218362   +    1.75        0.66    5.0    38.8s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1367
+ 55   -2067.905624480   +    1.17        0.69    6.0    45.4s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1397
+ 56   -2107.037720045        1.59        0.54    7.0    44.8s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1308
+ 57   -2105.261085727   +    0.25        0.55    6.0    43.0s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1168
+ 58   -2134.724731145        1.47        0.31    6.0    38.4s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1024
+ 59   -2090.820785653   +    1.64        0.62    4.0    33.6s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 936
+ 60   -2125.246134129        1.54        0.44    6.0    30.8s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1329
+ 61   -2054.647305343   +    1.85        0.72    7.0    43.8s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1376
+ 62   -2129.602883366        1.87        0.39    8.0    45.2s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 692
+ 63   -2128.849348144   +   -0.12        0.40    2.0    23.5s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1085
+ 64   -2101.197165550   +    1.44        0.57    4.0    35.9s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 855
+ 65   -2114.434498656        1.12        0.51    4.0    28.2s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 619
+ 66   -2114.523038266       -1.05        0.51    2.0    21.2s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 897
+ 67   -2094.042821041   +    1.31        0.61    5.0    29.4s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1286
+ 68   -2083.947776701   +    1.00        0.65    6.0    41.6s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1500
+ 69   -2030.723233061   +    1.73        0.78   25.0    49.4s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1589
+ 70   -2128.452204023        1.99        0.39   10.0    51.5s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1065
+ 71   -2098.329528431   +    1.48        0.59    4.0    35.2s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 975
+ 72   -2125.507920079        1.43        0.42    5.0    31.6s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1226
+ 73   -2079.206295964   +    1.67        0.65    9.0    40.1s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1315
+ 74   -2118.507101664        1.59        0.48    7.0    42.8s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 819
+ 75   -2132.079565572        1.13        0.35    4.0    26.9s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 830
+ 76   -2123.272239502   +    0.94        0.45    5.0    27.3s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 876
+ 77   -2111.194516039   +    1.08        0.53    4.0    29.2s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 814
+ 78   -2122.963641026        1.07        0.45    4.0    27.2s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 845
+ 79   -2110.451049395   +    1.10        0.53    4.0    27.9s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 853
+ 80   -2128.712240631        1.26        0.40    4.0    28.7s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1319
+ 81   -2060.496906682   +    1.83        0.72   16.0    46.0s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1401
+ 82   -2091.426818859        1.49        0.62    7.0    46.0s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1105
+ 83   -2121.509994900        1.48        0.46    7.0    36.6s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 577
+ 84   -2124.385933842        0.46        0.43    2.0    20.1s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1226
+ 85   -2092.625455480   +    1.50        0.61   23.0    40.9s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1215
+ 86   -2108.427321525        1.20        0.54    8.0    39.5s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1174
+ 87   -2106.085364282   +    0.37        0.55    7.0    38.0s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1206
+ 88   -2125.481598391        1.29        0.41    7.0    38.9s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1203
+ 89   -2083.589669238   +    1.62        0.65    5.0    39.7s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1123
+ 90   -2134.245416126        1.70        0.31    6.0    37.4s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 876
+ 91   -2110.668451649   +    1.37        0.53    5.0    29.0s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1082
+ 92   -2126.436008252        1.20        0.40    6.0    35.1s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1157
+ 93   -2073.057532762   +    1.73        0.68   10.0    38.1s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1358
+ 94   -2091.733416847        1.27        0.63    7.0    45.2s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 1152
+ 95   -2121.427791420        1.47        0.46    8.0    38.4s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 839
+ 96   -2130.848322439        0.97        0.37    4.0    27.4s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 922
+ 97   -2117.152935755   +    1.14        0.48    4.0    30.5s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 677
+ 98   -2128.561677725        1.06        0.39    2.0    22.6s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 827
+ 99   -2142.752981152        1.15        0.13    4.0    27.7s
+n, k (72605, 282)
+Number of matvecs for kpoint 1 985
+ 100   -2123.860056679   +    1.28        0.43    6.0    31.9s
+┌ Warning: SCF not converged.
+└ @ DFTK ~/Documents/DFTK_RandLAB/src/scf/scf_callbacks.jl:60
+────────────────────────────────────────────────────────────────────────────────────────────────
+                                                       Time                    Allocations      
+                                              ───────────────────────   ────────────────────────
+              Tot / % measured:                    1.12h / 100.0%           1.25TiB /  99.9%    
+
+Section                               ncalls     time    %tot     avg     alloc    %tot      avg
+────────────────────────────────────────────────────────────────────────────────────────────────
+self_consistent_field                      1    1.12h  100.0%   1.12h   1.25TiB  100.0%  1.25TiB
+  eigensolver                            100    3363s   83.4%   33.6s    844GiB   65.9%  8.44GiB
+    LOBPCG                               100    3363s   83.4%   33.6s    844GiB   65.9%  8.44GiB
+      DftHamiltonian multiplication    1.16k    2140s   53.1%   1.84s   16.2GiB    1.3%  14.2MiB
+        local                           122k    1857s   46.1%  15.2ms   26.0MiB    0.0%     223B
+        nonlocal                       1.16k     271s    6.7%   233ms   3.83GiB    0.3%  3.37MiB
+      ortho! X vs Y                    2.03k     525s   13.0%   259ms    154GiB   12.1%  78.0MiB
+        ortho!                         4.53k     208s    5.1%  45.8ms   7.01GiB    0.5%  1.58MiB
+      rayleigh_ritz                    1.06k     214s    5.3%   202ms   7.99GiB    0.6%  7.71MiB
+      Update residuals                 1.16k    53.4s    1.3%  45.9ms    132GiB   10.3%   117MiB
+      preconditioning                  1.16k    24.7s    0.6%  21.2ms   3.00MiB    0.0%  2.64KiB
+      ortho!                             100    16.0s    0.4%   160ms    584MiB    0.0%  5.84MiB
+  χ0Mixing                               100     258s    6.4%   2.58s    146GiB   11.4%  1.46GiB
+    compute_density                      100     225s    5.6%   2.25s   14.6GiB    1.1%   150MiB
+      symmetrize_ρ                       100    3.06s    0.1%  30.6ms   11.5GiB    0.9%   117MiB
+    apply_kernel                         885    24.2s    0.6%  27.4ms    102GiB    7.9%   117MiB
+  compute_density                        100     226s    5.6%   2.26s   14.6GiB    1.1%   150MiB
+    symmetrize_ρ                         100    3.90s    0.1%  39.0ms   11.5GiB    0.9%   117MiB
+  energy_hamiltonian                     101    73.4s    1.8%   726ms    114GiB    8.9%  1.13GiB
+    ene_ops                              101    72.1s    1.8%   714ms    110GiB    8.6%  1.09GiB
+      ene_ops: xc                        101    38.1s    0.9%   377ms   96.1GiB    7.5%  0.95GiB
+      ene_ops: nonlocal                  101    28.7s    0.7%   284ms   0.99GiB    0.1%  10.0MiB
+      ene_ops: hartree                   101    3.19s    0.1%  31.6ms   10.5GiB    0.8%   107MiB
+      ene_ops: kinetic                   101    1.86s    0.0%  18.4ms   1.22MiB    0.0%  12.4KiB
+      ene_ops: local                     101    271ms    0.0%  2.69ms   2.11GiB    0.2%  21.4MiB
+  energy                                 100    71.8s    1.8%   718ms    108GiB    8.5%  1.08GiB
+    ene_ops: xc                          100    35.8s    0.9%   358ms   94.9GiB    7.4%  0.95GiB
+    ene_ops: nonlocal                    100    29.8s    0.7%   298ms   1.01GiB    0.1%  10.3MiB
+    ene_ops: hartree                     100    4.44s    0.1%  44.4ms   10.4GiB    0.8%   107MiB
+    ene_ops: kinetic                     100    1.52s    0.0%  15.2ms   1.26MiB    0.0%  12.9KiB
+    ene_ops: local                       100    228ms    0.0%  2.28ms   2.09GiB    0.2%  21.4MiB
+  ortho_qr                                20    18.1s    0.4%   906ms   11.0GiB    0.9%   563MiB
+  Anderson acceleration                  100    16.5s    0.4%   165ms   31.7GiB    2.5%   325MiB
+enforce_real!                              1   5.59ms    0.0%  5.59ms      384B    0.0%     384B
+────────────────────────────────────────────────────────────────────────────────────────────────
+
