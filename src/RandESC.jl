@@ -11,6 +11,7 @@ module RandESC
     include("LOBPCG.jl")
     include("LOBPCG_sketch.jl")
     include("jd.jl")
+    include("randomization_utils.jl")
     include("jd_rand.jl")
 
     include("interface.jl")
