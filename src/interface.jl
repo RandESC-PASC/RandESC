@@ -214,7 +214,23 @@ function randESCSolver(A, n::Integer, k::Integer; X0=nothing, preconditioner=not
             residual_norms = history[:, 1]
             return (λ=lambda, X=V, residual_norms=residual_norms, n_iter=n_iter, converged=converged, n_matvec=n_matvec)
         end
+    elseif method == "JD_BLOCK"
+        maxiter = maxiter * k
+        # Block randomized Jacobi-Davidson (always sketched)
+        V, lambda, history = jdsym_rand_block(A; k=k, v0=X0, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose,
+                                              orth_method=isnothing(orth_method) ? :rgs : orth_method)
+        if cleanEigenvectors
+            V, lambda = sketched_to_fully(A, V)
+        end
+        n_iter = size(history, 1)
+        converged = n_iter < maxiter
+        n_matvec = isempty(history) ? 0 : Int(history[end, 3])
+        if !converged
+            @warn "jdsym_rand_block did not converge within $maxiter iterations."
+        end
+        residual_norms = isempty(history) ? Float64[] : history[:, 1]
+        return (λ=lambda, X=V, residual_norms=residual_norms, n_iter=n_iter, converged=converged, n_matvec=n_matvec)
     else
-        error("Unknown method: $method. Supported methods are: IRA, LOBPCG, JD.")
+        error("Unknown method: $method. Supported methods are: IRA, LOBPCG, JD, JD_BLOCK.")
     end
 end
