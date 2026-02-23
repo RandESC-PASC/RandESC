@@ -1,7 +1,34 @@
 module RandESC
 
+    using TimerOutputs
+
+    """TimerOutput object storing RandESC internal timings."""
+    const timer = TimerOutput()
+
+    """
+    Shortened version of `@timeit` writing to the RandESC timer.
+    Mirrors the DFTK `@timing` convention.
+    """
+    macro timing(args...)
+        blocks = TimerOutputs.timer_expr(__source__, __module__, false,
+                                        :(RandESC.timer), args...)
+        if blocks isa Expr
+            blocks  # function definition: timer_expr_func returns a single Expr
+        else
+            # block/expression: timer_expr returns (before, after); reassemble with try/finally
+            Expr(:block,
+                blocks[1],
+                Expr(:tryfinally,
+                    :($(esc(args[end]))),
+                    :($(blocks[2]))
+                )
+            )
+        end
+    end
+
     # list all functions that should be accessible from outside
     export rand_ira, ira, lobpcg, sketched_to_fully, randESCSolver, lobpcg_softlock, lobpcg_lock, lobpcg_sketch_lock, jdsym, jdsym_rand, jdsym_rand_block, jdsym_block
+    export timer, reset_timer!
 
     # include all source files from this module
     include("sketch.jl")

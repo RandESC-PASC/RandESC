@@ -114,10 +114,12 @@ compres = self_consistent_field(badbasis, eigensolver = my_eig_solver);
 println("starting good basis")
 basis = PlaneWaveBasis(model; Ecut=ecut, kgrid=[2, 2, 2])
 DFTK.reset_timer!(DFTK.timer)
+RandESC.reset_timer!(RandESC.timer)
 println("why am i so slow?")
 scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
 # scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
 println(DFTK.timer)
+println(RandESC.timer)
 
 
 # # Print occupations
@@ -128,9 +130,11 @@ println(DFTK.timer)
 
 
 DFTK.reset_timer!(DFTK.timer)
+RandESC.reset_timer!(RandESC.timer)
 # scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
 scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
 println(DFTK.timer)
+println(RandESC.timer)
 
 
 # # Print occupations

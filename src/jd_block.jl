@@ -38,7 +38,7 @@ Algorithm outline per iteration:
 - `lambda` (k,): eigenvalues in ascending order
 - `history` (nit × 3): columns are [max_rnorm, iter, nmv]
 """
-function jdsym_block(A; k::Int=5,
+@timing "jdsym_block" function jdsym_block(A; k::Int=5,
                      tol::Float64=1e-8,
                      maxit::Int=100,
                      nblock::Int=-1,
@@ -94,13 +94,15 @@ function jdsym_block(A; k::Int=5,
         @views V[:, 1:j] .= randn(T, n, j)
     end
 
-    _jdb_mgs2!(V, j)
+    @timing "jdsym_block: ortho" _jdb_mgs2!(V, j)
 
-    @views mul!(W[:, 1:j], A, V[:, 1:j])
+    @timing "jdsym_block: matvec" @views mul!(W[:, 1:j], A, V[:, 1:j])
     nmv += j
 
-    @views mul!(Hc[1:j, 1:j], V[:, 1:j]', W[:, 1:j])
-    _jdb_symmetrize!(Hc, j)
+    @timing "jdsym_block: overlap" begin
+        @views mul!(Hc[1:j, 1:j], V[:, 1:j]', W[:, 1:j])
+        _jdb_symmetrize!(Hc, j)
+    end
 
     # ── Main loop ──────────────────────────────────────────────────────────
     jd_iter = 0
@@ -108,28 +110,32 @@ function jdsym_block(A; k::Int=5,
         jd_iter = iter
 
         # Diagonalize projected EVP
-        @views F = eigen(Hermitian(Hc[1:j, 1:j]))
-        ew[1:j]      .= F.values
-        Vc[1:j, 1:j] .= F.vectors
+        @timing "jdsym_block: diag" begin
+            @views F = eigen(Hermitian(Hc[1:j, 1:j]))
+            ew[1:j]      .= F.values
+            Vc[1:j, 1:j] .= F.vectors
+        end
 
         nb = max(min(nblock, k - nconv, j), 1)
 
         # Restart if not enough room for nb new vectors
         if j + nb > kmax
-            jnew = min(k - nconv, j)
-            @views mul!(Vtmp[:, 1:jnew], V[:, 1:j], Vc[1:j, 1:jnew])
-            @views mul!(Wtmp[:, 1:jnew], W[:, 1:j], Vc[1:j, 1:jnew])
-            @views V[:, 1:jnew] .= Vtmp[:, 1:jnew]
-            @views W[:, 1:jnew] .= Wtmp[:, 1:jnew]
-            Hc[1:kmax, 1:kmax] .= zero(T)
-            for i in 1:jnew; Hc[i, i] = ew[i]; end
-            j = jnew
-            nb = max(min(nblock, k - nconv, j, kmax - j), 1)
-            # Re-diagonalize after restart
-            @views F = eigen(Hermitian(Hc[1:j, 1:j]))
-            ew[1:j]      .= F.values
-            Vc[1:j, 1:j] .= F.vectors
-            disp && @printf("cjdsym: RESTART j -> %d\n", j)
+            @timing "jdsym_block: restart" begin
+                jnew = min(k - nconv, j)
+                @views mul!(Vtmp[:, 1:jnew], V[:, 1:j], Vc[1:j, 1:jnew])
+                @views mul!(Wtmp[:, 1:jnew], W[:, 1:j], Vc[1:j, 1:jnew])
+                @views V[:, 1:jnew] .= Vtmp[:, 1:jnew]
+                @views W[:, 1:jnew] .= Wtmp[:, 1:jnew]
+                Hc[1:kmax, 1:kmax] .= zero(T)
+                for i in 1:jnew; Hc[i, i] = ew[i]; end
+                j = jnew
+                nb = max(min(nblock, k - nconv, j, kmax - j), 1)
+                # Re-diagonalize after restart
+                @views F = eigen(Hermitian(Hc[1:j, 1:j]))
+                ew[1:j]      .= F.values
+                Vc[1:j, 1:j] .= F.vectors
+                disp && @printf("cjdsym: RESTART j -> %d\n", j)
+            end
         end
 
         # Ritz vectors: ub[:,1:nb] = V[:,1:j] * Vc[1:j,1:nb]
@@ -223,19 +229,19 @@ function jdsym_block(A; k::Int=5,
             end
         end
 
-        # Apply preconditioner to correction vectors (in-place)
-        if !isnothing(M)
-            !isnothing(precond_preparator) && precond_preparator(M, view(ub, :, 1:nb))
-            for ib in 1:nb
-                @views rb[:, ib] .= M \ rb[:, ib]
+        # Apply preconditioner and project out converged vectors (correction step)
+        @timing "jdsym_block: correction" begin
+            if !isnothing(M)
+                !isnothing(precond_preparator) && precond_preparator(M, view(ub, :, 1:nb))
+                for ib in 1:nb
+                    @views rb[:, ib] .= M \ rb[:, ib]
+                end
             end
-        end
-
-        # Project out converged eigenvectors from corrections (double pass)
-        if nconv > 0
-            for _ in 1:2
-                @views c = X_conv[:, 1:nconv]' * rb[:, 1:nb]
-                @views rb[:, 1:nb] .-= X_conv[:, 1:nconv] * c
+            if nconv > 0
+                for _ in 1:2
+                    @views c = X_conv[:, 1:nconv]' * rb[:, 1:nb]
+                    @views rb[:, 1:nb] .-= X_conv[:, 1:nconv] * c
+                end
             end
         end
 
@@ -306,46 +312,47 @@ function _jdb_expand!(V::AbstractMatrix{T}, W::AbstractMatrix{T},
                       j::Int, nb::Int, kmax::Int, A) where T
     nact = 0
 
-    # Phase 1: orthogonalize all nb corrections against existing V[:,1:j]
-    for _ in 1:2
-        @views c = V[:, 1:j]' * rb[:, 1:nb]
-        @views rb[:, 1:nb] .-= V[:, 1:j] * c
-    end
-
-    # Phase 2: sequential orthogonalization among the nb new vectors
-    for ib in 1:nb
-        j + nact >= kmax && break   # subspace full
-
-        if nact > 0
-            for _ in 1:2
-                @views c = V[:, j+1:j+nact]' * rb[:, ib]
-                @views rb[:, ib] .-= V[:, j+1:j+nact] * c
-            end
+    @timing "jdsym_block: ortho" begin
+        # Phase 1: orthogonalize all nb corrections against existing V[:,1:j]
+        for _ in 1:2
+            @views c = V[:, 1:j]' * rb[:, 1:nb]
+            @views rb[:, 1:nb] .-= V[:, 1:j] * c
         end
 
-        nv = norm(view(rb, :, ib))
-        nv < 1e-14 && continue      # numerically zero, skip
+        # Phase 2: sequential orthogonalization among the nb new vectors
+        for ib in 1:nb
+            j + nact >= kmax && break   # subspace full
 
-        @views rb[:, ib] ./= nv
-        nact += 1
-        @views V[:, j + nact] .= rb[:, ib]
+            if nact > 0
+                for _ in 1:2
+                    @views c = V[:, j+1:j+nact]' * rb[:, ib]
+                    @views rb[:, ib] .-= V[:, j+1:j+nact] * c
+                end
+            end
+
+            nv = norm(view(rb, :, ib))
+            nv < 1e-14 && continue      # numerically zero, skip
+
+            @views rb[:, ib] ./= nv
+            nact += 1
+            @views V[:, j + nact] .= rb[:, ib]
+        end
     end
 
     nact == 0 && return 0
 
     # Compute A * new basis vectors
-    @views mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
+    @timing "jdsym_block: matvec" @views mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
 
     # Update projected Hamiltonian (full column block, BLAS-3)
-    # Hc[1:j+nact, j+1:j+nact] = V[:,1:j+nact]' * W[:,j+1:j+nact]
-    @views mul!(Hc[1:j+nact, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])
-
-    # Symmetrize new columns
-    for ib in 1:nact
-        jj = j + ib
-        Hc[jj, jj] = real(Hc[jj, jj])
-        for ii in 1:jj-1
-            Hc[jj, ii] = conj(Hc[ii, jj])
+    @timing "jdsym_block: overlap" begin
+        @views mul!(Hc[1:j+nact, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])
+        for ib in 1:nact
+            jj = j + ib
+            Hc[jj, jj] = real(Hc[jj, jj])
+            for ii in 1:jj-1
+                Hc[jj, ii] = conj(Hc[ii, jj])
+            end
         end
     end
 
