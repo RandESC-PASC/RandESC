@@ -71,7 +71,7 @@ function my_eig_solver(A, X0; prec = nothing, maxiter, tol, kwargs...)
         println("done writing")
     end
 
-    return randESCSolver(A, size(X0, 1), size(X0, 2); X0=X0, preconditioner=prec, maxiter=maxiter, tol=tol, useRandomization=true, method="JD_BLOCK", cleanEigenvectors=false, verbose=false, precond_preparator=precond_preparation, normA=ecut)
+    return randESCSolver(A, size(X0, 1), size(X0, 2); X0=X0, preconditioner=prec, maxiter=maxiter, tol=tol, useRandomization=false, method="JD_BLOCK", cleanEigenvectors=false, verbose=false, precond_preparator=precond_preparation, normA=ecut)
 end
 
 
@@ -109,14 +109,14 @@ positionvecs = [ invlat * positions[:, i] for i in 1:nat]
 model = model_DFT(lattice, atom_psps, positionvecs; spin_polarization=:none, functionals=PBE(), temperature=0.01)
 badbasis = PlaneWaveBasis(model, Ecut=4,  kgrid=[1, 1, 1])
 println("starting bad basis")
-# compres = self_consistent_field(badbasis)
-# compres = self_consistent_field(badbasis, eigensolver = my_eig_solver);
+compres = self_consistent_field(badbasis)
+compres = self_consistent_field(badbasis, eigensolver = my_eig_solver);
 println("starting good basis")
 basis = PlaneWaveBasis(model; Ecut=ecut, kgrid=[2, 2, 2])
 DFTK.reset_timer!(DFTK.timer)
 println("why am i so slow?")
-# scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
-scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
+scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
+# scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
 println(DFTK.timer)
 
 
@@ -129,7 +129,7 @@ println(DFTK.timer)
 
 DFTK.reset_timer!(DFTK.timer)
 # scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
-# scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
+scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
 println(DFTK.timer)
 
 

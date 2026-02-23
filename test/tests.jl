@@ -116,6 +116,23 @@ function testMatrix(A, n, k, testName; test_tol=1e-5, iter_tol=1e-8, verbose=fal
         end
         @test rjdb_orth_passed
     end
+
+    # testing standard block JD (translation of QE cjdsym)
+    @testset "$testName: testing jdsym_block" begin
+        V_jdb, lambda_jdb, _ = jdsym_block(A; k=k, tol=iter_tol, maxit=maxiter, disp=verbose)
+
+        jdb_passed = maximum(abs.(evals .- lambda_jdb)) < test_tol
+        if !jdb_passed
+            @warn "$testName: jdsym_block eigenvalues did not match! Max abs error: $(maximum(abs.(evals .- lambda_jdb)))"
+        end
+        @test jdb_passed
+        gram_jdb = V_jdb' * V_jdb
+        jdb_orth_passed = maximum(abs.(gram_jdb - I)) < test_tol
+        if !jdb_orth_passed
+            @warn "$testName: jdsym_block eigenvectors are not orthogonal! Max abs error: $(maximum(abs.(gram_jdb - I)))"
+        end
+        @test jdb_orth_passed
+    end
 end
 
 @testset "RandESC Eigenvalue Solver Tests" begin

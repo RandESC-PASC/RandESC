@@ -1,7 +1,7 @@
 module RandESC
 
     # list all functions that should be accessible from outside
-    export rand_ira, ira, lobpcg, sketched_to_fully, randESCSolver, lobpcg_softlock, lobpcg_lock, lobpcg_sketch_lock, jdsym, jdsym_rand, jdsym_rand_block
+    export rand_ira, ira, lobpcg, sketched_to_fully, randESCSolver, lobpcg_softlock, lobpcg_lock, lobpcg_sketch_lock, jdsym, jdsym_rand, jdsym_rand_block, jdsym_block
 
     # include all source files from this module
     include("sketch.jl")
@@ -14,6 +14,7 @@ module RandESC
     include("randomization_utils.jl")
     include("jd_rand.jl")
     include("jd_rand_block.jl")
+    include("jd_block.jl")
 
     include("interface.jl")
 
