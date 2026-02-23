@@ -159,11 +159,13 @@ function jdsym_block(A; k::Int=5,
 
         # Convergence check: consecutive from pair 1
         nconv_new = 0
-        for ib in 1:nb
-            if rnorms[ib] < tol
-                nconv_new += 1
-            else
-                break
+        if iter > 1
+            for ib in 1:nb
+                if rnorms[ib] < tol
+                    nconv_new += 1
+                else
+                    break
+                end
             end
         end
 
