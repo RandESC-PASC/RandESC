@@ -138,20 +138,21 @@ Algorithm outline per iteration:
             end
         end
 
-        # Ritz vectors: ub[:,1:nb] = V[:,1:j] * Vc[1:j,1:nb]
-        @views mul!(ub[:, 1:nb], V[:, 1:j], Vc[1:j, 1:nb])
-        # H * Ritz: rb = W * Vc[:,1:nb]
-        @views mul!(rb[:, 1:nb], W[:, 1:j], Vc[1:j, 1:nb])
-        # Residuals: rb -= ew[ib] * ub  (rb = (A - theta*I) * u)
-        for ib in 1:nb
-            @views rb[:, ib] .-= ew[ib] .* ub[:, ib]
-        end
-
-        # Project out converged eigenvectors from residuals (double pass)
-        if nconv > 0
-            for _ in 1:2
-                @views c = X_conv[:, 1:nconv]' * rb[:, 1:nb]
-                @views rb[:, 1:nb] .-= X_conv[:, 1:nconv] * c
+        @timing "jdsym_block: residual" begin
+            # Ritz vectors: ub[:,1:nb] = V[:,1:j] * Vc[1:j,1:nb]
+            @views mul!(ub[:, 1:nb], V[:, 1:j], Vc[1:j, 1:nb])
+            # H * Ritz: rb = W * Vc[:,1:nb]
+            @views mul!(rb[:, 1:nb], W[:, 1:j], Vc[1:j, 1:nb])
+            # Residuals: rb -= ew[ib] * ub  (rb = (A - theta*I) * u)
+            for ib in 1:nb
+                @views rb[:, ib] .-= ew[ib] .* ub[:, ib]
+            end
+            # Project out converged eigenvectors from residuals (double pass)
+            if nconv > 0
+                for _ in 1:2
+                    @views c = X_conv[:, 1:nconv]' * rb[:, 1:nb]
+                    @views rb[:, 1:nb] .-= X_conv[:, 1:nconv] * c
+                end
             end
         end
 
@@ -307,9 +308,9 @@ Then compute A * new columns and update the projected Hamiltonian Hc.
 
 Returns the number of accepted vectors `nact`.
 """
-function _jdb_expand!(V::AbstractMatrix{T}, W::AbstractMatrix{T},
-                      Hc::AbstractMatrix{T}, rb::AbstractMatrix{T},
-                      j::Int, nb::Int, kmax::Int, A) where T
+function _jdb_expand!(V::AbstractMatrix, W::AbstractMatrix,
+                      Hc::AbstractMatrix, rb::AbstractMatrix,
+                      j::Int, nb::Int, kmax::Int, A)
     nact = 0
 
     @timing "jdsym_block: ortho" begin
