@@ -112,7 +112,7 @@ function jdsym_block(A; k::Int=5,
         ew[1:j]      .= F.values
         Vc[1:j, 1:j] .= F.vectors
 
-        nb = clamp(min(nblock, k - nconv, j), 1, nblock)
+        nb = max(min(nblock, k - nconv, j), 1)
 
         # Restart if not enough room for nb new vectors
         if j + nb > kmax
@@ -124,7 +124,7 @@ function jdsym_block(A; k::Int=5,
             Hc[1:kmax, 1:kmax] .= zero(T)
             for i in 1:jnew; Hc[i, i] = ew[i]; end
             j = jnew
-            nb = clamp(min(nblock, k - nconv, j, kmax - j), 1, nblock)
+            nb = max(min(nblock, k - nconv, j, kmax - j), 1)
             # Re-diagonalize after restart
             @views F = eigen(Hermitian(Hc[1:j, 1:j]))
             ew[1:j]      .= F.values
