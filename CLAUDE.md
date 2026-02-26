@@ -25,6 +25,7 @@ Tests generate random symmetric matrices (n=50, k=7) and verify all solvers agai
 - `src/jd_block.jl` - blocked jacobi davidson implementation with soft locking that works very well.
 - `src/sketched_to_fully.jl` — post-processing to recover clean eigenvectors from sketched results
 - `src/randomization_utils.jl` utils for randomization, most useful for jacobi davidson flavours
+- `latex/presentation.tex` a tex file containing theory for eigensolvers and randomization.
 - `test/tests.jl` — test suite using `@testset`
 
 ## Code Conventions
