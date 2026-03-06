@@ -1,6 +1,7 @@
 using LinearAlgebra
 using Printf
 
+
 """
     jdsym_rand_block(A; k=5, kwargs...)
 
@@ -84,29 +85,48 @@ Algorithm outline per iteration:
 
     Theta = sketch(n, s, sketch_type)
 
-    # Converged eigenpairs (kept Θ-orthonormal: SQschur'*SQschur = I)
-    Qschur  = zeros(T, n, 0)
-    SQschur = zeros(T, s, 0)
-    lambda_conv = Float64[]
+    # Pre-allocate converged eigenpair storage (no hcat growth)
+    Qschur  = zeros(T, n, k)
+    SQschur = zeros(T, s, k)
+    nconv = 0
 
     nmv   = 0
-    nconv = 0
     nit   = 0
-    history = zeros(Float64, 0, 3)
+    # Pre-allocate history (no vcat growth); truncated to nit rows at return
+    history = zeros(Float64, maxit, 3)
+
+    # ── Pre-allocate double buffers for V/SV/W/SW (zero-allocation rotations/expansions) ──
+    # Active subspace lives in columns 1:j of the _a buffers.
+    # Rotations use mul! into _b then swap; expansions write directly into _a[:, j+1:j+nb].
+    V_a  = zeros(T, n, jmax);  V_b  = zeros(T, n, jmax)
+    SV_a = zeros(T, s, jmax);  SV_b = zeros(T, s, jmax)
+    W_a  = zeros(T, n, jmax);  W_b  = zeros(T, n, jmax)
+    SW_a = zeros(T, s, jmax);  SW_b = zeros(T, s, jmax)
 
     # ── Initialize subspace ───────────────────────────────────────────────
-    v0_init = isnothing(v0) ? randn(T, n, blk) : v0
-    if size(v0_init, 2) < blk
-        v0_init = hcat(v0_init, randn(T, n, blk - size(v0_init, 2)))
+    @timing "jdsym_rand_block: init" begin
+        v0_init = isnothing(v0) ? randn(T, n, blk) : v0
+        if size(v0_init, 2) < blk
+            v0_init = hcat(v0_init, randn(T, n, blk - size(v0_init, 2)))
+        end
+        V_init, SV_init = init_space_sketched(n, v0_init, Theta,
+                                              view(Qschur, :, 1:0), view(SQschur, :, 1:0),
+                                              T, orth_method, jmax)
+        j = size(V_init, 2)
+        V_a[:, 1:j]  .= V_init
+        SV_a[:, 1:j] .= SV_init
     end
-    V, SV = init_space_sketched(n, v0_init, Theta, Qschur, SQschur, T, orth_method, jmax)
-    j = size(V, 2)
 
     @timing "jdsym_rand_block: matvec" begin
-        W  = A * V
+        mul!(view(W_a, :, 1:j), A, view(V_a, :, 1:j))
         nmv += j
     end
-    SW = Theta(W)
+    @timing "jdsym_rand_block: sketch" begin
+        SW_a[:, 1:j] .= Theta(view(W_a, :, 1:j))
+    end
+
+    V  = view(V_a,  :, 1:j);  SV = view(SV_a, :, 1:j)
+    W  = view(W_a,  :, 1:j);  SW = view(SW_a, :, 1:j)
 
     # M_proj = (ΘV)'*(ΘAV); general complex matrix (approximately Hermitian for Hermitian A)
     @timing "jdsym_rand_block: overlap" M_proj = SV' * SW
@@ -114,7 +134,6 @@ Algorithm outline per iteration:
     # ── Main loop ──────────────────────────────────────────────────────────
     for iter in 1:maxit
         nit = iter
-        j   = size(V, 2)
 
         # Diagonalize projected EVP (general eigen; M_proj only approximately Hermitian)
         @timing "jdsym_rand_block: diag" begin
@@ -134,13 +153,20 @@ Algorithm outline per iteration:
                 nk = min(jmin, j)
                 # QR-orthonormalize: U columns from general eigen are unit-norm but not unitary
                 Q_rst = Matrix(qr(U[:, 1:nk]).Q)[:, 1:nk]
-                V     = V  * Q_rst
-                W     = W  * Q_rst
-                SV    = SV * Q_rst
-                SW    = SW * Q_rst
+                # Zero-allocation rotation via double-buffer swap
+                mul!(view(V_b,  :, 1:nk), V,  Q_rst)
+                mul!(view(SV_b, :, 1:nk), SV, Q_rst)
+                mul!(view(W_b,  :, 1:nk), W,  Q_rst)
+                mul!(view(SW_b, :, 1:nk), SW, Q_rst)
+                V_a, V_b   = V_b,  V_a
+                SV_a, SV_b = SV_b, SV_a
+                W_a, W_b   = W_b,  W_a
+                SW_a, SW_b = SW_b, SW_a
+                j  = nk
+                V  = view(V_a,  :, 1:j);  SV = view(SV_a, :, 1:j)
+                W  = view(W_a,  :, 1:j);  SW = view(SW_a, :, 1:j)
+                nb = max(min(blk, k - nconv, j, jmax - j), 1)
                 M_proj = Q_rst' * M_proj * Q_rst
-                j      = nk
-                nb     = max(min(blk, k - nconv, j, jmax - j), 1)
                 # Re-diagonalize after restart
                 F  = eigen(M_proj)
                 ew = real.(F.values)
@@ -166,35 +192,41 @@ Algorithm outline per iteration:
             R_blk    = W_blk - X_blk * Diagonal(theta_nb)
             # Project out converged eigenvectors (double pass, Θ-norm oblique projector)
             if nconv > 0
+                Qsc  = view(Qschur,  :, 1:nconv)
+                SQsc = view(SQschur, :, 1:nconv)
                 for _ in 1:2
-                    c = SQschur' * Theta(R_blk)
-                    R_blk .-= Qschur * c
+                    c = SQsc' * Theta(R_blk)
+                    R_blk .-= Qsc * c
                 end
             end
         end
-        SR_blk = Theta(R_blk)
+        @timing "jdsym_rand_block: sketch" SR_blk = Theta(R_blk)
 
-        nr = [norm(view(SR_blk, :, ib)) for ib in 1:nb]
-        history = vcat(history, [maximum(nr) Float64(iter) Float64(nmv)])
+        @timing "jdsym_rand_block: check" begin
+            nr = [norm(view(SR_blk, :, ib)) for ib in 1:nb]
+            history[nit, 1] = maximum(nr)
+            history[nit, 2] = Float64(iter)
+            history[nit, 3] = Float64(nmv)
 
-        if disp
-            @printf("jdsym_rand_block it=%4d nconv=%3d j=%3d nb=%2d |r|=%.3e..%.3e\n",
-                    iter, nconv, j, nb, minimum(nr), maximum(nr))
-        end
+            if disp
+                @printf("jdsym_rand_block it=%4d nconv=%3d j=%3d nb=%2d |r|=%.3e..%.3e\n",
+                        iter, nconv, j, nb, minimum(nr), maximum(nr))
+            end
 
-        # Convergence check: consecutive from pair 1 (skip first iteration)
-        nconv_new = 0
-        if iter > 1
-            for ib in 1:nb
-                if nr[ib] < tol
-                    nconv_new += 1
-                else
-                    break
+            # Convergence check: consecutive from pair 1 (skip first iteration)
+            nconv_new = 0
+            if iter > 1
+                for ib in 1:nb
+                    if nr[ib] < tol
+                        nconv_new += 1
+                    else
+                        break
+                    end
                 end
             end
         end
 
-        if nconv_new > 0
+        @timing "jdsym_rand_block: converge" if nconv_new > 0
             # QR-orthonormalize converged Ritz vectors (U cols not unitary for general eigen)
             QY_conv = Matrix(qr(U[:, 1:nconv_new]).Q)[:, 1:nconv_new]
             for ib in 1:nconv_new
@@ -202,17 +234,18 @@ Algorithm outline per iteration:
                 v_conv = V * QY_conv[:, ib]
                 # Θ-orthogonalize against already-stored converged vectors (numerical safety)
                 if nconv > 1
+                    Qsc  = view(Qschur,  :, 1:nconv-1)
+                    SQsc = view(SQschur, :, 1:nconv-1)
                     for _ in 1:2
-                        c = SQschur[:, 1:nconv-1]' * Theta(v_conv)
-                        v_conv .-= Qschur[:, 1:nconv-1] * c
+                        c = SQsc' * Theta(v_conv)
+                        v_conv .-= Qsc * c
                     end
                 end
                 sv_conv = Theta(v_conv)
                 nv = norm(sv_conv)
-                nv > 1e-14 && (v_conv ./= nv)
-                Qschur  = hcat(Qschur,  v_conv)
-                SQschur = hcat(SQschur, Theta(v_conv))
-                push!(lambda_conv, theta_nb[ib])
+                nv > 1e-14 && (v_conv ./= nv; sv_conv ./= nv)
+                Qschur[:,  nconv] .= v_conv     # in-place: no hcat allocation
+                SQschur[:, nconv] .= Theta(v_conv)
                 if disp
                     @printf("  >>> band %d CONVERGED: e=%.10e  |r|=%.3e  at iter %d\n",
                             nconv, theta_nb[ib], nr[ib], iter)
@@ -230,33 +263,46 @@ Algorithm outline per iteration:
                     U_rest = U_rest - QY_conv * (QY_conv' * U_rest)
                 end
                 Q_def = Matrix(qr(U_rest).Q)[:, 1:jnew]
-                V     = V  * Q_def
-                W     = W  * Q_def
-                SV    = SV * Q_def
-                SW    = SW * Q_def
+                # Zero-allocation rotation via double-buffer swap
+                mul!(view(V_b,  :, 1:jnew), V,  Q_def)
+                mul!(view(SV_b, :, 1:jnew), SV, Q_def)
+                mul!(view(W_b,  :, 1:jnew), W,  Q_def)
+                mul!(view(SW_b, :, 1:jnew), SW, Q_def)
+                V_a, V_b   = V_b,  V_a
+                SV_a, SV_b = SV_b, SV_a
+                W_a, W_b   = W_b,  W_a
+                SW_a, SW_b = SW_b, SW_a
+                j  = jnew
+                V  = view(V_a,  :, 1:j);  SV = view(SV_a, :, 1:j)
+                W  = view(W_a,  :, 1:j);  SW = view(SW_a, :, 1:j)
                 M_proj = Q_def' * M_proj * Q_def
-                j = jnew
             else
                 # Subspace exhausted: reinitialize with a single random vector
                 v_new = randn(T, n)
                 if nconv > 0
+                    Qsc  = view(Qschur,  :, 1:nconv)
+                    SQsc = view(SQschur, :, 1:nconv)
                     for _ in 1:2
-                        c = SQschur' * Theta(v_new)
-                        v_new .-= Qschur * c
+                        c = SQsc' * Theta(v_new)
+                        v_new .-= Qsc * c
                     end
                 end
                 sv_new = Theta(v_new)
                 nv = norm(sv_new)
                 nv > 1e-14 && (v_new ./= nv)
-                V  = reshape(v_new, n, 1)
+                V_a[:, 1] .= v_new
                 @timing "jdsym_rand_block: matvec" begin
-                    W  = reshape(A * V[:, 1], n, 1)
+                    mul!(view(W_a, :, 1:1), A, view(V_a, :, 1:1))
                     nmv += 1
                 end
-                SV     = Theta(V)
-                SW     = Theta(W)
+                @timing "jdsym_rand_block: sketch" begin
+                    SV_a[:, 1] .= Theta(view(V_a, :, 1:1))
+                    SW_a[:, 1] .= Theta(view(W_a, :, 1:1))
+                end
+                j  = 1
+                V  = view(V_a,  :, 1:j);  SV = view(SV_a, :, 1:j)
+                W  = view(W_a,  :, 1:j);  SW = view(SW_a, :, 1:j)
                 M_proj = SV' * SW
-                j      = 1
             end
 
             # Reuse unconverged residuals instead of wasting an iteration.
@@ -283,13 +329,21 @@ Algorithm outline per iteration:
                 end
             end
             # Sketched oblique projection out of converged + active Ritz vectors:
-            # (I - Q*(SQ)†*S) where (SQ)† uses QR of the sketched Ritz block
+            # (I - Q*(SQ)†*S) where (SQ)† uses QR of the sketched Ritz block.
+            # Use thin Q (avoid materialising the full s×s unitary matrix).
             SX_blk  = Theta(X_blk)
             F_qr    = qr(SX_blk)
-            SX_proj = Matrix(F_qr.Q)[:, 1:nb]   # orthonormal basis for span(SX_blk)
+            SX_proj = F_qr.Q * Matrix{T}(I, size(SX_blk, 1), nb)  # thin Q, s×nb
             X_proj  = X_blk / F_qr.R             # such that Theta(X_proj) ≈ SX_proj
-            Q_proj  = nconv > 0 ? hcat(Qschur, X_proj)  : X_proj
-            SQ_proj = nconv > 0 ? hcat(SQschur, SX_proj) : SX_proj
+            if nconv > 0
+                Qsc  = view(Qschur,  :, 1:nconv)
+                SQsc = view(SQschur, :, 1:nconv)
+                Q_proj  = hcat(Qsc,  X_proj)
+                SQ_proj = hcat(SQsc, SX_proj)
+            else
+                Q_proj  = X_proj
+                SQ_proj = SX_proj
+            end
             T_corr  = theta_orth_block_against(T_corr, Q_proj, SQ_proj, Theta, orth_method)
         end
 
@@ -300,49 +354,59 @@ Algorithm outline per iteration:
         end
 
         if size(T_corr, 2) > 0
+            nb_new = size(T_corr, 2)
             @timing "jdsym_rand_block: matvec" begin
-                W_new = A * T_corr
-                nmv  += size(T_corr, 2)
+                mul!(view(W_a, :, j+1:j+nb_new), A, T_corr)
+                nmv += nb_new
             end
-            SW_new = Theta(W_new)
-            # Incremental update: M_proj grows by nact rows/cols
+            @timing "jdsym_rand_block: sketch" begin
+                SW_a[:, j+1:j+nb_new] .= Theta(view(W_a, :, j+1:j+nb_new))
+                SV_a[:, j+1:j+nb_new] .= ST_corr
+            end
+            # Incremental M_proj update (before changing j so SV/SW still point to old block)
             @timing "jdsym_rand_block: overlap" begin
-                M_proj = [M_proj SV'*SW_new; ST_corr'*SW ST_corr'*SW_new]
+                SW_new = view(SW_a, :, j+1:j+nb_new)
+                M_proj = [M_proj      SV'*SW_new;
+                          ST_corr'*SW ST_corr'*SW_new]
             end
-            V  = hcat(V,  T_corr)
-            SV = hcat(SV, ST_corr)
-            W  = hcat(W,  W_new)
-            SW = hcat(SW, SW_new)
+            # Write T_corr into V buffer and update views (zero allocation)
+            @timing "jdsym_rand_block: expand" begin
+                V_a[:, j+1:j+nb_new] .= T_corr
+                j += nb_new
+                V  = view(V_a,  :, 1:j);  SV = view(SV_a, :, 1:j)
+                W  = view(W_a,  :, 1:j);  SW = view(SW_a, :, 1:j)
+            end
         end
     end
 
     disp && @printf("jdsym_rand_block: done. nconv=%d notcnv=%d iter=%d nmv=%d\n",
                     nconv, k - nconv, nit, nmv)
 
-    # Recover accurate eigenpairs via sketched-to-fully refinement
-    X_out, lambda_out = if nconv > 0
-        sketched_to_fully(A, Qschur)
-    else
-        zeros(T, n, 0), Float64[]
-    end
+    @timing "jdsym_rand_block: finalize" begin
+        # Recover accurate eigenpairs via sketched-to-fully refinement
+        X_out, lambda_out = if nconv > 0
+            sketched_to_fully(A, view(Qschur, :, 1:nconv))
+        else
+            zeros(T, n, 0), Float64[]
+        end
 
-    # Fill unconverged slots with best available Ritz approximations
-    notcnv = k - nconv
-    if notcnv > 0 && size(V, 2) > 0
-        j_cur  = size(V, 2)
-        F_fin  = eigen(M_proj)
-        ew_fin = real.(F_fin.values)
-        U_fin  = F_fin.vectors
-        perm_f = _jdrb_sort_perm(ew_fin, sigma)
-        ew_fin = ew_fin[perm_f]
-        U_fin  = U_fin[:, perm_f]
-        for i in 1:min(notcnv, j_cur)
-            X_out      = hcat(X_out, V * U_fin[:, i])
-            lambda_out = vcat(lambda_out, [ew_fin[i]])
+        # Fill unconverged slots with best available Ritz approximations
+        notcnv = k - nconv
+        if notcnv > 0 && j > 0
+            F_fin  = eigen(M_proj)
+            ew_fin = real.(F_fin.values)
+            U_fin  = F_fin.vectors
+            perm_f = _jdrb_sort_perm(ew_fin, sigma)
+            ew_fin = ew_fin[perm_f]
+            U_fin  = U_fin[:, perm_f]
+            for i in 1:min(notcnv, j)
+                X_out      = hcat(X_out, V * U_fin[:, i])
+                lambda_out = vcat(lambda_out, [ew_fin[i]])
+            end
         end
     end
 
-    return X_out, lambda_out, history
+    return X_out, lambda_out, history[1:nit, :]
 end
 
 

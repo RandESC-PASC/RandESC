@@ -61,66 +61,46 @@ function theta_orth_block(V0, Theta, method::Symbol; tol::Float64=1e-14)
         return zeros(T, n, 0), zeros(T, s, 0)
     end
 
+    # Sketch entire block at once (one BLAS call, not p separate calls)
     SV0 = Theta(V0)
     s = size(SV0, 1)
 
-    if method == :rcgs || method == :rcgs2
-        # Modified Gram-Schmidt in Θ-inner product
-        npass = (method == :rcgs2) ? 2 : 1
+    # Pre-allocate output; use ncols to track accepted vectors
+    V  = zeros(T, n, p)
+    SV = zeros(T, s, p)
+    ncols = 0
 
-        V = zeros(T, n, 0)
-        SV = zeros(T, s, 0)
+    for i in 1:p
+        v  = V0[:,  i]
+        sv = SV0[:, i]
 
-        for i in 1:p
-            v = V0[:, i]
-            sv = Theta(v)
+        if ncols > 0
+            Vc  = view(V,  :, 1:ncols)
+            SVc = view(SV, :, 1:ncols)
 
-            for _ in 1:npass
-                if size(SV, 2) > 0
-                    h = SV' * sv
-                    v = v - V * h
-                    sv = sv - SV * h
+            if method == :rgs
+                h  = SVc \ sv
+                v  = v  - Vc  * h
+                sv = sv - SVc * h
+            else  # :rcgs / :rcgs2
+                npass = (method == :rcgs2) ? 2 : 1
+                for _ in 1:npass
+                    h  = SVc' * sv
+                    v  = v  - Vc  * h
+                    sv = sv - SVc * h
                 end
             end
-
-            nv = norm(sv)
-
-            if nv > tol
-                v = v / nv
-                sv = sv / nv
-                V = hcat(V, v)
-                SV = hcat(SV, sv)
-            end
         end
 
-        return V, SV
-
-    else  # :rgs (default) - Randomized GS via least squares
-        V = zeros(T, n, 0)
-        SV = zeros(T, s, 0)
-
-        for i in 1:p
-            v = V0[:, i]
-            sv = Theta(v)
-
-            if size(SV, 2) > 0
-                h = SV \ sv
-                v = v - V * h
-                sv = sv - SV * h
-            end
-
-            nv = norm(sv)
-
-            if nv > tol
-                v = v / nv
-                sv = sv / nv
-                V = hcat(V, v)
-                SV = hcat(SV, sv)
-            end
+        nv = norm(sv)
+        if nv > tol
+            ncols += 1
+            V[:,  ncols] .= v  ./ nv
+            SV[:, ncols] .= sv ./ nv
         end
-
-        return V, SV
     end
+
+    return V[:, 1:ncols], SV[:, 1:ncols]
 end
 
 
@@ -136,29 +116,23 @@ function theta_orth_block_against(V0, Q, SQ, Theta, method::Symbol)
         return V0
     end
 
-    V = copy(V0)
-    SV = Theta(V)
+    # Compute sketch of V0 directly (no copy of V0 needed)
+    SV = Theta(V0)
 
     if method == :rcgs
-        # Randomized block CGS (single pass)
         H = SQ' * SV
-        V = V - Q * H
+        return V0 - Q * H
 
     elseif method == :rcgs2
-        # Randomized block CGS with reorthogonalization (two passes)
-        for _ in 1:2
-            SV = Theta(V)
-            H = SQ' * SV
-            V = V - Q * H
-        end
+        V = V0 - Q * (SQ' * SV)
+        SV = Theta(V)
+        H2 = SQ' * SV
+        return V - Q * H2
 
     else  # :rgs (default)
-        # Randomized block GS via least squares
         H = SQ \ SV
-        V = V - Q * H
+        return V0 - Q * H
     end
-
-    return V
 end
 
 
