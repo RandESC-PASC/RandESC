@@ -104,16 +104,18 @@ Algorithm outline per iteration:
     SW_a = zeros(T, s, jmax);  SW_b = zeros(T, s, jmax)
 
     # ── Initialize subspace ───────────────────────────────────────────────
-    v0_init = isnothing(v0) ? randn(T, n, blk) : v0
-    if size(v0_init, 2) < blk
-        v0_init = hcat(v0_init, randn(T, n, blk - size(v0_init, 2)))
+    @timing "jdsym_rand_block: init" begin
+        v0_init = isnothing(v0) ? randn(T, n, blk) : v0
+        if size(v0_init, 2) < blk
+            v0_init = hcat(v0_init, randn(T, n, blk - size(v0_init, 2)))
+        end
+        V_init, SV_init = init_space_sketched(n, v0_init, Theta,
+                                              view(Qschur, :, 1:0), view(SQschur, :, 1:0),
+                                              T, orth_method, jmax)
+        j = size(V_init, 2)
+        V_a[:, 1:j]  .= V_init
+        SV_a[:, 1:j] .= SV_init
     end
-    V_init, SV_init = init_space_sketched(n, v0_init, Theta,
-                                          view(Qschur, :, 1:0), view(SQschur, :, 1:0),
-                                          T, orth_method, jmax)
-    j = size(V_init, 2)
-    V_a[:, 1:j]  .= V_init
-    SV_a[:, 1:j] .= SV_init
 
     @timing "jdsym_rand_block: matvec" begin
         mul!(view(W_a, :, 1:j), A, view(V_a, :, 1:j))
@@ -200,24 +202,26 @@ Algorithm outline per iteration:
         end
         @timing "jdsym_rand_block: sketch" SR_blk = Theta(R_blk)
 
-        nr = [norm(view(SR_blk, :, ib)) for ib in 1:nb]
-        history[nit, 1] = maximum(nr)
-        history[nit, 2] = Float64(iter)
-        history[nit, 3] = Float64(nmv)
+        @timing "jdsym_rand_block: check" begin
+            nr = [norm(view(SR_blk, :, ib)) for ib in 1:nb]
+            history[nit, 1] = maximum(nr)
+            history[nit, 2] = Float64(iter)
+            history[nit, 3] = Float64(nmv)
 
-        if disp
-            @printf("jdsym_rand_block it=%4d nconv=%3d j=%3d nb=%2d |r|=%.3e..%.3e\n",
-                    iter, nconv, j, nb, minimum(nr), maximum(nr))
-        end
+            if disp
+                @printf("jdsym_rand_block it=%4d nconv=%3d j=%3d nb=%2d |r|=%.3e..%.3e\n",
+                        iter, nconv, j, nb, minimum(nr), maximum(nr))
+            end
 
-        # Convergence check: consecutive from pair 1 (skip first iteration)
-        nconv_new = 0
-        if iter > 1
-            for ib in 1:nb
-                if nr[ib] < tol
-                    nconv_new += 1
-                else
-                    break
+            # Convergence check: consecutive from pair 1 (skip first iteration)
+            nconv_new = 0
+            if iter > 1
+                for ib in 1:nb
+                    if nr[ib] < tol
+                        nconv_new += 1
+                    else
+                        break
+                    end
                 end
             end
         end
@@ -378,25 +382,27 @@ Algorithm outline per iteration:
     disp && @printf("jdsym_rand_block: done. nconv=%d notcnv=%d iter=%d nmv=%d\n",
                     nconv, k - nconv, nit, nmv)
 
-    # Recover accurate eigenpairs via sketched-to-fully refinement
-    X_out, lambda_out = if nconv > 0
-        sketched_to_fully(A, view(Qschur, :, 1:nconv))
-    else
-        zeros(T, n, 0), Float64[]
-    end
+    @timing "jdsym_rand_block: finalize" begin
+        # Recover accurate eigenpairs via sketched-to-fully refinement
+        X_out, lambda_out = if nconv > 0
+            sketched_to_fully(A, view(Qschur, :, 1:nconv))
+        else
+            zeros(T, n, 0), Float64[]
+        end
 
-    # Fill unconverged slots with best available Ritz approximations
-    notcnv = k - nconv
-    if notcnv > 0 && j > 0
-        F_fin  = eigen(M_proj)
-        ew_fin = real.(F_fin.values)
-        U_fin  = F_fin.vectors
-        perm_f = _jdrb_sort_perm(ew_fin, sigma)
-        ew_fin = ew_fin[perm_f]
-        U_fin  = U_fin[:, perm_f]
-        for i in 1:min(notcnv, j)
-            X_out      = hcat(X_out, V * U_fin[:, i])
-            lambda_out = vcat(lambda_out, [ew_fin[i]])
+        # Fill unconverged slots with best available Ritz approximations
+        notcnv = k - nconv
+        if notcnv > 0 && j > 0
+            F_fin  = eigen(M_proj)
+            ew_fin = real.(F_fin.values)
+            U_fin  = F_fin.vectors
+            perm_f = _jdrb_sort_perm(ew_fin, sigma)
+            ew_fin = ew_fin[perm_f]
+            U_fin  = U_fin[:, perm_f]
+            for i in 1:min(notcnv, j)
+                X_out      = hcat(X_out, V * U_fin[:, i])
+                lambda_out = vcat(lambda_out, [ew_fin[i]])
+            end
         end
     end
 
