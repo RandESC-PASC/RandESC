@@ -12,11 +12,15 @@ Uses double-MGS (MGS2) orthogonalization. No sketching.
 
 Algorithm outline per iteration:
   1. Diagonalize projected matrix Hc → (ew, Vc)
-  2. Restart subspace if j + nb > kmax  (keep best jmin Ritz vectors)
-  3. Compute nb Ritz vectors and residuals
-  4. Check residual-norm convergence; deflate converged pairs
+  2. Restart subspace if j + nb > kmax  (keep locked + best active Ritz vectors)
+  3. Compute nb Ritz vectors and residuals for active pairs (indices nconv+1:nconv+nb)
+  4. Check residual-norm convergence; Ritz-rotate subspace to lock converged pairs
   5. Apply preconditioner to residuals (correction vectors)
-  6. Expand subspace: MGS2 against V, normalize, update Hc = V'*AV
+  6. Expand subspace: MGS2 against V (incl. locked), normalize, update Hc = V'*AV
+
+Locked (converged) eigenvectors occupy V[:,1:nconv] and are included in every Ritz
+diagonalization. No separate deflation or projection against locked vectors is needed;
+orthogonalization against V[:,1:j] keeps new vectors orthogonal to locked ones.
 
 # Arguments
 - `A`: Symmetric/Hermitian matrix (dense or sparse)
@@ -75,7 +79,6 @@ Algorithm outline per iteration:
     Vtmp = zeros(T, n, kmax)       # temporary for restart / deflation
     Wtmp = zeros(T, n, kmax)       # temporary for restart / deflation
 
-    X_conv = zeros(T, n, k)        # converged eigenvectors
     lambda = zeros(Float64, k)     # converged eigenvalues
 
     nconv = 0
@@ -116,12 +119,14 @@ Algorithm outline per iteration:
             Vc[1:j, 1:j] .= F.vectors
         end
 
-        nb = max(min(nblock, k - nconv, j), 1)
+        nb = max(min(nblock, k - nconv, j - nconv), 1)
 
         # Restart if not enough room for nb new vectors
         if j + nb > kmax
             @timing "jdsym_block: restart" begin
-                jnew = min(k - nconv, j)
+                # Keep all nconv locked vectors + best (jmin) active Ritz vectors
+                jmin = min(k - nconv, j - nconv)
+                jnew = nconv + jmin
                 @views mul!(Vtmp[:, 1:jnew], V[:, 1:j], Vc[1:j, 1:jnew])
                 @views mul!(Wtmp[:, 1:jnew], W[:, 1:j], Vc[1:j, 1:jnew])
                 @views V[:, 1:jnew] .= Vtmp[:, 1:jnew]
@@ -129,7 +134,7 @@ Algorithm outline per iteration:
                 Hc[1:kmax, 1:kmax] .= zero(T)
                 for i in 1:jnew; Hc[i, i] = ew[i]; end
                 j = jnew
-                nb = max(min(nblock, k - nconv, j, kmax - j), 1)
+                nb = max(min(nblock, k - nconv, j - nconv, kmax - j), 1)
                 # Re-diagonalize after restart
                 @views F = eigen(Hermitian(Hc[1:j, 1:j]))
                 ew[1:j]      .= F.values
@@ -138,22 +143,38 @@ Algorithm outline per iteration:
             end
         end
 
-        @timing "jdsym_block: residual" begin
-            # Ritz vectors: ub[:,1:nb] = V[:,1:j] * Vc[1:j,1:nb]
-            @views mul!(ub[:, 1:nb], V[:, 1:j], Vc[1:j, 1:nb])
-            # H * Ritz: rb = W * Vc[:,1:nb]
-            @views mul!(rb[:, 1:nb], W[:, 1:j], Vc[1:j, 1:nb])
-            # Residuals: rb -= ew[ib] * ub  (rb = (A - theta*I) * u)
-            for ib in 1:nb
-                @views rb[:, ib] .-= ew[ib] .* ub[:, ib]
-            end
-            # Project out converged eigenvectors from residuals (double pass)
-            if nconv > 0
+        # Guard: if no active vectors remain (j == nconv), seed a new one
+        if j <= nconv
+            if j < kmax
+                j += 1
+                @views V[:, j] .= randn(T, n)
                 for _ in 1:2
-                    @views c = X_conv[:, 1:nconv]' * rb[:, 1:nb]
-                    @views rb[:, 1:nb] .-= X_conv[:, 1:nconv] * c
+                    @views c = V[:, 1:j-1]' * V[:, j]
+                    @views V[:, j] .-= V[:, 1:j-1] * c
                 end
+                nv = norm(view(V, :, j))
+                nv < 1e-14 && (j -= 1; continue)
+                @views V[:, j] ./= nv
+                @views mul!(W[:, j], A, V[:, j])
+                nmv += 1
+                @views Hc[1:j, j] .= V[:, 1:j]' * W[:, j]
+                @views Hc[j, 1:j-1] .= conj.(Hc[1:j-1, j])
+                Hc[j, j] = real(Hc[j, j])
             end
+            continue
+        end
+
+        @timing "jdsym_block: residual" begin
+            # Ritz vectors for active pairs: indices nconv+1 : nconv+nb
+            @views mul!(ub[:, 1:nb], V[:, 1:j], Vc[1:j, nconv+1:nconv+nb])
+            # H * active Ritz vectors
+            @views mul!(rb[:, 1:nb], W[:, 1:j], Vc[1:j, nconv+1:nconv+nb])
+            # Residuals: rb -= ew[nconv+ib] * ub  (rb = (A - theta*I) * u)
+            for ib in 1:nb
+                @views rb[:, ib] .-= ew[nconv+ib] .* ub[:, ib]
+            end
+            # No explicit projection against locked vectors:
+            # orthogonalization in _jdb_expand! against V[:,1:j] handles it.
         end
 
         rnorms = [norm(view(rb, :, ib)) for ib in 1:nb]
@@ -166,7 +187,7 @@ Algorithm outline per iteration:
 
         # Convergence check: consecutive from pair 1
         nconv_new = 0
-        if iter > 1
+        # if iter > 1
             for ib in 1:nb
                 if rnorms[ib] < tol
                     nconv_new += 1
@@ -174,63 +195,45 @@ Algorithm outline per iteration:
                     break
                 end
             end
-        end
+        # end
 
         if nconv_new > 0
-            for ib in 1:nconv_new
-                nconv += 1
-                @views X_conv[:, nconv] .= ub[:, ib]
-                lambda[nconv] = ew[ib]
-                if disp
+            if disp
+                for ib in 1:nconv_new
                     @printf("  >>> band %d CONVERGED: e=%.10e  |r|=%.3e  at iter %d\n",
-                            nconv, ew[ib], rnorms[ib], iter)
+                            nconv + ib, ew[nconv + ib], rnorms[ib], iter)
                 end
             end
+            for ib in 1:nconv_new
+                lambda[nconv + ib] = ew[nconv + ib]
+            end
 
+            # Ritz rotation: bring V/W/Hc to the Ritz basis so that
+            # V[:,1:nconv+nconv_new] become the converged eigenvectors.
+            # Locked vectors stay at the front; j is unchanged.
+            @views mul!(Vtmp[:, 1:j], V[:, 1:j], Vc[1:j, 1:j])
+            @views mul!(Wtmp[:, 1:j], W[:, 1:j], Vc[1:j, 1:j])
+            @views V[:, 1:j] .= Vtmp[:, 1:j]
+            @views W[:, 1:j] .= Wtmp[:, 1:j]
+            Hc[1:kmax, 1:kmax] .= zero(T)
+            for i in 1:j; Hc[i, i] = ew[i]; end
+
+            nconv += nconv_new
             nconv >= k && break
-
-            # Deflate: rotate subspace to remove converged Ritz vectors
-            if j > nconv_new
-                jnew = j - nconv_new
-                @views mul!(Vtmp[:, 1:jnew], V[:, 1:j], Vc[1:j, nconv_new+1:j])
-                @views mul!(Wtmp[:, 1:jnew], W[:, 1:j], Vc[1:j, nconv_new+1:j])
-                @views V[:, 1:jnew] .= Vtmp[:, 1:jnew]
-                @views W[:, 1:jnew] .= Wtmp[:, 1:jnew]
-                # After Ritz rotation: Hc = diag(ew[nconv_new+1:j])
-                Hc[1:kmax, 1:kmax] .= zero(T)
-                for i in 1:jnew; Hc[i, i] = ew[nconv_new + i]; end
-                j = jnew
-            else
-                # Subspace exhausted: reinitialize with a random vector
-                j = 1
-                @views V[:, 1] .= randn(T, n)
-                if nconv > 0
-                    for _ in 1:2
-                        @views c = X_conv[:, 1:nconv]' * V[:, 1]
-                        @views V[:, 1] .-= X_conv[:, 1:nconv] * c
-                    end
-                end
-                nv = norm(view(V, :, 1))
-                nv > 1e-14 && (@views V[:, 1] ./= nv)
-                @views mul!(W[:, 1], A, V[:, 1])
-                nmv += 1
-                Hc[1:kmax, 1:kmax] .= zero(T)
-                @views Hc[1, 1] = real(dot(V[:, 1], W[:, 1]))
-            end
 
             # Reuse unconverged residuals instead of wasting an iteration
             nb -= nconv_new
             if nb > 0
                 for ib in 1:nb
                     @views rb[:, ib] .= rb[:, nconv_new + ib]
-                    ew[ib] = ew[nconv_new + ib]
+                    @views ub[:, ib] .= ub[:, nconv_new + ib]
                 end
             else
                 continue
             end
         end
 
-        # Apply preconditioner and project out converged vectors (correction step)
+        # Apply preconditioner (correction step)
         @timing "jdsym_block: correction" begin
             if !isnothing(M)
                 !isnothing(precond_preparator) && precond_preparator(M, view(ub, :, 1:nb))
@@ -238,12 +241,8 @@ Algorithm outline per iteration:
                     @views rb[:, ib] .= M \ rb[:, ib]
                 end
             end
-            if nconv > 0
-                for _ in 1:2
-                    @views c = X_conv[:, 1:nconv]' * rb[:, 1:nb]
-                    @views rb[:, 1:nb] .-= X_conv[:, 1:nconv] * c
-                end
-            end
+            # No explicit projection against locked vectors needed:
+            # _jdb_expand! orthogonalizes against all of V[:,1:j] including locked.
         end
 
         # Expand subspace
@@ -255,19 +254,26 @@ Algorithm outline per iteration:
     disp && @printf("cjdsym: done. nconv=%d notcnv=%d iter=%d nmv=%d\n",
                     nconv, k - nconv, jd_iter, nmv)
 
-    # Fill unconverged slots with best available Ritz approximations
+    # Construct output eigenvectors.
+    # V[:,1:nconv] are the converged eigenvectors (placed there by Ritz rotations).
+    # Fill any unconverged slots with the best active Ritz approximations.
+    X_out = zeros(T, n, k)
+    @views X_out[:, 1:nconv] .= V[:, 1:nconv]
+
     notcnv = k - nconv
-    if notcnv > 0 && j > 0
-        for i in 1:min(notcnv, j)
-            @views mul!(X_conv[:, nconv + i], V[:, 1:j], Vc[1:j, i])
-            lambda[nconv + i] = ew[i]
+    if notcnv > 0 && j > nconv
+        @views Fout = eigen(Hermitian(Hc[1:j, 1:j]))
+        nfill = min(notcnv, j - nconv)
+        @views mul!(X_out[:, nconv+1:nconv+nfill], V[:, 1:j], Fout.vectors[1:j, nconv+1:nconv+nfill])
+        for i in 1:nfill
+            lambda[nconv + i] = Fout.values[nconv + i]
         end
-        for i in j+1:notcnv
-            lambda[nconv + i] = ew[min(i, j)]
+        for i in nfill+1:notcnv
+            lambda[nconv + i] = Fout.values[nconv + min(nfill, j - nconv)]
         end
     end
 
-    return X_conv, lambda, history
+    return X_out, lambda, history
 end
 
 
