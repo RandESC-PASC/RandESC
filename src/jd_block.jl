@@ -5,16 +5,18 @@ using Printf
     jdsym_block(A; k=5, kwargs...)
 
 Davidson eigensolver for symmetric/Hermitian matrices (smallest eigenvalues).
-All kb = k + nbuff Ritz vectors always participate in the Ritz diagonalization.
-Correction vectors are generated for unconverged pairs among the first k, plus all
-nbuff buffer pairs. Convergence is checked via residual norm ||r_i|| < tol per pair.
+
+Soft-locking: converged Ritz vectors stay in V so the full subspace is always used
+in the Ritz diagonalization. Corrections are generated only for active (unconverged)
+pairs. _jdb_expand! orthogonalizes against all of V, implicitly keeping corrections
+in the orthogonal complement of the soft-locked subspace.
 
 Algorithm outline per iteration:
-  1. Diagonalize projected matrix Hc → (ew, Vc)
-  2. Compute residuals r_i = A*u_i - ew_i*u_i for all kb pairs
-  3. Check convergence: ||r_i|| < tol for i=1..k independently
-  4. Restart subspace if j + notcnv_kb > kmax  (rebuild from kb current Ritz vectors)
-  5. Pack unconverged corrections; apply preconditioner
+  1. Diagonalize projected matrix Hc → (ew, Vc)  [full subspace incl. soft-locked]
+  2. Restart if j + nb > kmax  (keep kb = k+nbuff Ritz vectors, incl. soft-locked)
+  3. Compute residuals for active pairs nconv+1..nconv+nb (blocked BLAS-3)
+  4. Check consecutive convergence; update monotone nconv
+  5. Apply preconditioner to active residuals
   6. Expand subspace: MGS2 against V, normalize, update Hc = V'*AV
 
 # Arguments
@@ -22,11 +24,11 @@ Algorithm outline per iteration:
 - `k`: Number of eigenpairs to compute (default: 5)
 
 # Keyword Arguments
-- `tol=1e-8`: Convergence tolerance; pair i converges when ||r_i|| < tol
+- `tol=1e-8`: Convergence tolerance on residual norms
 - `maxit=100`: Maximum outer iterations
 - `nblock=-1`: Unused (kept for API compatibility)
-- `nbuff=0`: Number of buffer vectors beyond k; block size is kb = k + nbuff
-- `kmax=-1`: Max subspace dimension (default: `2*kb + 10`)
+- `nbuff=0`: Extra buffer pairs; corrections generated for k-nconv+nbuff active pairs
+- `kmax=-1`: Max subspace dimension (default: `2*(k+nbuff) + k + 10`; the extra `k` accounts for soft-locked vectors occupying slots)
 - `v0=nothing`: Initial vectors (n × ≤kb matrix)
 - `M=nothing`: Preconditioner (applied as `M \\ r`)
 - `precond_preparator=nothing`: Callback `f(M, X)` to refresh preconditioner
@@ -43,7 +45,7 @@ Algorithm outline per iteration:
                      tol::Float64=1e-8,
                      maxit::Int=100,
                      nblock::Int=-1,
-                     nbuff::Int=15,
+                     nbuff::Int=1,
                      kmax::Int=-1,
                      v0=nothing,
                      M=nothing,
@@ -53,13 +55,13 @@ Algorithm outline per iteration:
 
     n = size(A, 1)
     k = min(k, n)
-    kb = min(k + nbuff, n)   # block size: target + buffer
+    kb = min(k + nbuff, n)
 
     if n < 1
         return zeros(Float64, 0, 0), Float64[], zeros(Float64, 0, 3)
     end
 
-    kmax = kmax < 0 ? min(n, 2kb + 10) : kmax
+    kmax = kmax < 0 ? min(n, 4kb) : kmax
 
     if kb > kmax ÷ 2
         error("kmax too small: need kmax > 2*(k+nbuff) (kb=$kb, kmax=$kmax)")
@@ -69,23 +71,23 @@ Algorithm outline per iteration:
 
     # ── Workspace ─────────────────────────────────────────────────────────
     @timing "jdsym_block: allocation" begin
-        V    = zeros(T, n, kmax)    # search space basis
-        W    = zeros(T, n, kmax)    # A * V
-        Hc   = zeros(T, kmax, kmax) # projected Hamiltonian: V' * W
-        Vc   = zeros(T, kmax, kmax) # eigenvectors of projected problem
-        ew   = zeros(Float64, kmax) # eigenvalues of projected problem
-        ub   = zeros(T, n, kb)      # Ritz vectors for correction
-        rb   = zeros(T, n, kb)      # residuals / corrections
-        Vtmp = zeros(T, n, kb)      # temporary for restart
-        Wtmp = zeros(T, n, kb)      # temporary for restart
-        lambda  = zeros(Float64, k)
-        rnorms  = zeros(Float64, kb)
-        conv    = falses(k)
-        c_mgs   = zeros(T, kmax)
-        c_exp1  = zeros(T, kmax, kb)
-        c_exp2  = zeros(T, kb)
+        V      = zeros(T, n, kmax)    # search space basis (includes soft-locked)
+        W      = zeros(T, n, kmax)    # A * V
+        Hc     = zeros(T, kmax, kmax) # projected Hamiltonian
+        Vc     = zeros(T, kmax, kmax) # Ritz vectors of projected problem
+        ew     = zeros(Float64, kmax) # Ritz values
+        ub     = zeros(T, n, kb)      # Ritz vectors for active pairs
+        rb     = zeros(T, n, kb)      # residuals / corrections
+        Vtmp   = zeros(T, n, k + kb)  # scratch for restart (nconv + kb ≤ k + kb)
+        Wtmp   = zeros(T, n, k + kb)  # scratch for restart
+        lambda = zeros(Float64, k)
+        rnorms = zeros(Float64, kb)
+        c_mgs  = zeros(T, kmax)
+        c_exp1 = zeros(T, kmax, kb)
+        c_exp2 = zeros(T, kb)
     end
 
+    nconv    = 0
     nmv      = 0
     history  = zeros(Float64, maxit, 3)
     hist_row = 0
@@ -109,117 +111,126 @@ Algorithm outline per iteration:
 
     # ── Main loop ──────────────────────────────────────────────────────────
     jd_iter = 0
-    notcnv = k
     for iter in 1:maxit
         jd_iter = iter
 
-        # Diagonalize projected EVP
+        # Diagonalize over full subspace (soft-locked pairs stay in V)
         @timing "jdsym_block: diag" begin
             @views F = eigen(Hermitian(Hc[1:j, 1:j]))
             ew[1:j]      .= F.values
             Vc[1:j, 1:j] .= F.vectors
         end
 
-        # Compute all kb Ritz vectors and residuals (blocked BLAS-3)
-        @timing "jdsym_block: residual" begin
-            @views mul!(ub[:, 1:kb], V[:, 1:j], Vc[1:j, 1:kb])
-            @views mul!(rb[:, 1:kb], W[:, 1:j], Vc[1:j, 1:kb])
-            @views rb[:, 1:kb] .-= ub[:, 1:kb] .* ew[1:kb]'
-            for i in 1:kb; rnorms[i] = norm(view(rb, :, i)); end
-        end
+        # Active pairs: nconv+1 .. nconv+nb  (k-nconv target + nbuff buffer)
+        nb = max(min(k - nconv + nbuff, j - nconv), 1)
 
-        # Check convergence for first k pairs
-        notcnv = 0
-        for i in 1:k
-            conv[i] = rnorms[i] < tol
-            conv[i] || (notcnv += 1)
-        end
-
-        notcnv == 0 && break
-
-        # Number of corrections: unconverged among 1:k + all buffer pairs
-        notcnv_kb = notcnv + (kb - k)
-
-        # Restart: rebuild from kb current Ritz vectors; recompute residuals after
-        if j + notcnv_kb > kmax
+        # Restart: keep kb Ritz vectors (soft-locked stay in V)
+        if j + nb > kmax
             @timing "jdsym_block: restart" begin
-                @views mul!(Vtmp[:, 1:kb], V[:, 1:j], Vc[1:j, 1:kb])
-                @views mul!(Wtmp[:, 1:kb], W[:, 1:j], Vc[1:j, 1:kb])
-                @views V[:, 1:kb] .= Vtmp[:, 1:kb]
-                @views W[:, 1:kb] .= Wtmp[:, 1:kb]
+                jnew = min(nconv + kb, j)   # keep nconv soft-locked + kb active Ritz vectors
+                @views mul!(Vtmp[:, 1:jnew], V[:, 1:j], Vc[1:j, 1:jnew])
+                @views mul!(Wtmp[:, 1:jnew], W[:, 1:j], Vc[1:j, 1:jnew])
+                @views V[:, 1:jnew] .= Vtmp[:, 1:jnew]
+                @views W[:, 1:jnew] .= Wtmp[:, 1:jnew]
                 Hc[1:kmax, 1:kmax] .= zero(T)
-                for i in 1:kb; Hc[i, i] = ew[i]; end
-                j = kb
+                for i in 1:jnew; Hc[i, i] = ew[i]; end
+                j = jnew
+                nb = max(min(k - nconv + nbuff, j - nconv), 1)
                 @views F = eigen(Hermitian(Hc[1:j, 1:j]))
                 ew[1:j]      .= F.values
                 Vc[1:j, 1:j] .= F.vectors
-                (disp || debug) && @printf("  RESTART -> j=%d  notcnv=%d/%d\n", j, notcnv, k)
-            end
-            @timing "jdsym_block: residual" begin
-                @views mul!(ub[:, 1:kb], V[:, 1:j], Vc[1:j, 1:kb])
-                @views mul!(rb[:, 1:kb], W[:, 1:j], Vc[1:j, 1:kb])
-                @views rb[:, 1:kb] .-= ub[:, 1:kb] .* ew[1:kb]'
+                (disp || debug) && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
             end
         end
 
-        # Pack unconverged corrections into contiguous slots for expand
-        np = 0
-        for i in 1:kb
-            i <= k && conv[i] && continue
-            np += 1
-            if np != i
-                @views rb[:, np] .= rb[:, i]
-                @views ub[:, np] .= ub[:, i]
+        # Compute residuals for active pairs nconv+1..nconv+nb (blocked BLAS-3)
+        @timing "jdsym_block: residual" begin
+            @views mul!(ub[:, 1:nb], V[:, 1:j], Vc[1:j, nconv+1:nconv+nb])
+            @views mul!(rb[:, 1:nb], W[:, 1:j], Vc[1:j, nconv+1:nconv+nb])
+            @views rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv+1:nconv+nb]'
+            for ib in 1:nb; rnorms[ib] = norm(view(rb, :, ib)); end
+        end
+
+        # Consecutive convergence check (target pairs only, skip first iteration)
+        nb_target = min(k - nconv, nb)
+        nconv_new = 0
+        if iter > 1
+            for ib in 1:nb_target
+                rnorms[ib] < tol ? nconv_new += 1 : break
             end
         end
 
         hist_row += 1
-        history[hist_row, :] .= (maximum(view(rnorms, 1:k)), iter, nmv)
+        history[hist_row, :] .= (maximum(view(rnorms, 1:nb_target)), iter, nmv)
 
         if disp
-            @printf("jdsym_block it=%4d  notcnv=%d/%d  j=%d  |r|=%.2e..%.2e\n",
-                    iter, notcnv, k, j,
-                    minimum(view(rnorms, 1:k)), maximum(view(rnorms, 1:k)))
+            @printf("jdsym_block it=%4d  nconv=%d/%d  j=%d  nb=%d  |r|=%.2e..%.2e\n",
+                    iter, nconv, k, j, nb,
+                    minimum(view(rnorms, 1:nb_target)), maximum(view(rnorms, 1:nb_target)))
         end
         if debug
-            ew_str = k <= 6 ? join([@sprintf("%.4e", ew[i]) for i in 1:k], " ") :
-                               @sprintf("%.4e..%.4e", ew[1], ew[k])
-            @printf("DEBUG it=%4d  notcnv=%d/%d  kb=%d  j=%d  |r|=%.2e..%.2e  ew=[%s]\n",
-                    iter, notcnv, k, kb, j,
-                    minimum(view(rnorms, 1:k)), maximum(view(rnorms, 1:k)), ew_str)
+            ew_str = nb_target <= 6 ?
+                join([@sprintf("%.4e", ew[nconv+i]) for i in 1:nb_target], " ") :
+                @sprintf("%.4e..%.4e", ew[nconv+1], ew[nconv+nb_target])
+            @printf("DEBUG it=%4d  nconv=%d/%d  j=%d  nb=%d  |r|=%.2e..%.2e  ew=[%s]\n",
+                    iter, nconv, k, j, nb,
+                    minimum(view(rnorms, 1:nb_target)), maximum(view(rnorms, 1:nb_target)), ew_str)
+        end
+
+        # Lock newly converged pairs (Ritz vectors stay in V via soft-locking)
+        if nconv_new > 0
+            @timing "jdsym_block: lock" begin
+                for _ in 1:nconv_new
+                    nconv += 1
+                    lambda[nconv] = ew[nconv]
+                end
+            end
+            nconv >= k && break
+            # Shift remaining active residuals to front
+            nb -= nconv_new
+            if nb > 0
+                for ib in 1:nb
+                    @views rb[:, ib] .= rb[:, nconv_new + ib]
+                    @views ub[:, ib] .= ub[:, nconv_new + ib]
+                end
+            else
+                continue
+            end
         end
 
         # Apply preconditioner
         @timing "jdsym_block: correction" begin
             if !isnothing(M)
-                !isnothing(precond_preparator) && precond_preparator(M, view(ub, :, 1:notcnv_kb))
-                for ip in 1:notcnv_kb
+                !isnothing(precond_preparator) && precond_preparator(M, view(ub, :, 1:nb))
+                for ip in 1:nb
                     @views rb[:, ip] .= M \ rb[:, ip]
                 end
             end
         end
 
         # Expand subspace
-        nact = _jdb_expand!(V, W, Hc, rb, j, notcnv_kb, kmax, A, c_exp1, c_exp2)
+        nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, c_exp1, c_exp2)
         nmv += nact
         j += nact
-        debug && nact < notcnv_kb && @printf("DEBUG           expand: only %d/%d vectors accepted (j=%d)\n", nact, notcnv_kb, j)
-
+        debug && nact < nb && @printf("DEBUG           expand: only %d/%d vectors accepted (j=%d)\n", nact, nb, j)
     end
 
-    disp && @printf("jdsym_block: done. notcnv=%d  iter=%d  nmv=%d\n", notcnv, jd_iter, nmv)
+    disp && @printf("jdsym_block: done. nconv=%d/%d  iter=%d  nmv=%d\n", nconv, k, jd_iter, nmv)
 
-    if !all(conv)
+    if nconv < k
         @warn "jdsym_block did not converge within $maxit iterations."
+        # Fill unconverged slots with best available Ritz approximations
+        nb_fill = min(k - nconv, max(j - nconv, 0))
+        for i in 1:nb_fill
+            lambda[nconv + i] = ew[nconv + i]
+        end
     end
 
-    # Compute final Ritz vectors from current basis
-    @views Fout = eigen(Hermitian(Hc[1:j, 1:j]))
-    @views mul!(Vtmp[:, 1:k], V[:, 1:j], Fout.vectors[1:j, 1:k])
-    @views V[:, 1:k] .= Vtmp[:, 1:k]
-    lambda .= Fout.values[1:k]
+    # Compute eigenvectors from current Ritz vectors
+    X = zeros(T, n, k)
+    @views mul!(X, V[:, 1:j], Vc[1:j, 1:k])
 
-    return view(V, :, 1:k), lambda, history[1:hist_row, :]
+    return X, lambda, history[1:hist_row, :]
 end
 
 
