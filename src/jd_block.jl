@@ -97,20 +97,18 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         # Restart: keep kb Ritz vectors (soft-locked stay in V)
         if j + nb >= kmax
             @timing "jdsym_block: restart" begin
-                j = jmin
-                @views mul!(Vtmp[:, 1:j], V[:, 1:j], Vc[1:j, 1:j])
-                @views mul!(Wtmp[:, 1:j], W[:, 1:j], Vc[1:j, 1:j])
-                @views V[:, 1:j] .= Vtmp[:, 1:j]
-                @views W[:, 1:j] .= Wtmp[:, 1:j]
+                @views mul!(Vtmp[:, 1:jmin], V[:, 1:j], Vc[1:j, 1:jmin])
+                @views mul!(Wtmp[:, 1:jmin], W[:, 1:j], Vc[1:j, 1:jmin])
+                @views V[:, 1:jmin] .= Vtmp[:, 1:jmin]
+                @views W[:, 1:jmin] .= Wtmp[:, 1:jmin]
                 Hc[1:kmax, 1:kmax] .= zero(T)
-                for i in 1:j; Hc[i, i] = ew[i]; end
+                for i in 1:jmin; Hc[i, i] = ew[i]; end
+                j = jmin
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
                 @views F = eigen(Hermitian(Hc[1:j, 1:j]))
                 ew[1:j]      .= F.values
                 Vc[1:j, 1:j] .= F.vectors
-                if disp
-                    @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
-                end
+                disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
             end
         end
 
