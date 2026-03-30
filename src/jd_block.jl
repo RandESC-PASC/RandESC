@@ -45,7 +45,7 @@ Algorithm outline per iteration:
                      tol::Float64=1e-8,
                      maxit::Int=100,
                      nblock::Int=-1,
-                     nbuff::Int=1,
+                     nbuff::Int=2,
                      kmax::Int=-1,
                      v0=nothing,
                      M=nothing,
@@ -202,9 +202,8 @@ Algorithm outline per iteration:
         @timing "jdsym_block: correction" begin
             if !isnothing(M)
                 !isnothing(precond_preparator) && precond_preparator(M, view(ub, :, 1:nb))
-                for ip in 1:nb
-                    @views rb[:, ip] .= M \ rb[:, ip]
-                end
+                @views ldiv!(ub[:, 1:nb], M, rb[:, 1:nb])
+                @views rb[:, 1:nb] .= ub[:, 1:nb]
             end
         end
 
