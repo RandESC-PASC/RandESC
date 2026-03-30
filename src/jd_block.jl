@@ -5,67 +5,37 @@ using Printf
     jdsym_block(A; k=5, kwargs...)
 
 Davidson eigensolver for symmetric/Hermitian matrices (smallest eigenvalues).
+Soft-locking: converged Ritz vectors stay in V; corrections are generated only
+for active pairs. nbuff=2 buffer pairs are kept beyond k. Search space restarts
+to jmin=2*(k+nbuff) vectors when full, and grows up to kmax=4*(k+nbuff).
 
-Soft-locking: converged Ritz vectors stay in V so the full subspace is always used
-in the Ritz diagonalization. Corrections are generated only for active (unconverged)
-pairs. _jdb_expand! orthogonalizes against all of V, implicitly keeping corrections
-in the orthogonal complement of the soft-locked subspace.
+Arguments:
+- A: Hermitian matrix or operator
+- k: number of eigenpairs (default 5)
+- tol: residual norm convergence threshold (default 1e-8)
+- maxit: max iterations (default 100)
+- v0: initial vectors (n x m matrix, optional)
+- M: preconditioner, applied as M \\ r (optional)
+- precond_preparator: callback f(M, X) to refresh preconditioner (optional)
+- disp: print iteration info
 
-Algorithm outline per iteration:
-  1. Diagonalize projected matrix Hc → (ew, Vc)  [full subspace incl. soft-locked]
-  2. Restart if j + nb > kmax  (keep kb = k+nbuff Ritz vectors, incl. soft-locked)
-  3. Compute residuals for active pairs nconv+1..nconv+nb (blocked BLAS-3)
-  4. Check consecutive convergence; update monotone nconv
-  5. Apply preconditioner to active residuals
-  6. Expand subspace: MGS2 against V, normalize, update Hc = V'*AV
-
-# Arguments
-- `A`: Symmetric/Hermitian matrix (dense or sparse)
-- `k`: Number of eigenpairs to compute (default: 5)
-
-# Keyword Arguments
-- `tol=1e-8`: Convergence tolerance on residual norms
-- `maxit=100`: Maximum outer iterations
-- `nblock=-1`: Unused (kept for API compatibility)
-- `nbuff=0`: Extra buffer pairs; corrections generated for k-nconv+nbuff active pairs
-- `kmax=-1`: Max subspace dimension (default: `2*(k+nbuff) + k + 10`; the extra `k` accounts for soft-locked vectors occupying slots)
-- `v0=nothing`: Initial vectors (n × ≤kb matrix)
-- `M=nothing`: Preconditioner (applied as `M \\ r`)
-- `precond_preparator=nothing`: Callback `f(M, X)` to refresh preconditioner
-- `disp=false`: Print iteration info
-- `debug=false`: Print detailed debug info
-
-# Returns
-`(X, lambda, history)` where
-- `X` (n × k): eigenvectors
-- `lambda` (k,): eigenvalues in ascending order
-- `history` (nit × 3): columns are [max_rnorm, iter, nmv]
+Returns (X, lambda, history) where X is n x k, lambda is length k,
+and history is nit x 3 with columns [max_rnorm, iter, nmv].
 """
 @timing "jdsym_block" function jdsym_block(A; k::Int=5,
                      tol::Float64=1e-8,
                      maxit::Int=100,
-                     nblock::Int=-1,
-                     nbuff::Int=2,
-                     kmax::Int=-1,
                      v0=nothing,
                      M=nothing,
                      precond_preparator=nothing,
-                     disp::Bool=false,
-                     debug::Bool=false)
+                     disp::Bool=false)
 
     n = size(A, 1)
     k = min(k, n)
-    kb = min(k + nbuff, n)
-
-    if n < 1
-        return zeros(Float64, 0, 0), Float64[], zeros(Float64, 0, 3)
-    end
-
-    kmax = kmax < 0 ? min(n, 4kb) : kmax
-
-    if kb > kmax ÷ 2
-        error("kmax too small: need kmax > 2*(k+nbuff) (kb=$kb, kmax=$kmax)")
-    end
+    nbuff = 2 # buffer of unrequested vector that are added to search space
+    kb = min(k + nbuff, n) # block size
+    jmin = 2 * (k + nbuff) # search space size after restart
+    kmax = min(n, 4kb) # maximal search space dimension
 
     T = isnothing(v0) ? Float64 : eltype(v0)
 
@@ -78,8 +48,8 @@ Algorithm outline per iteration:
         ew     = zeros(Float64, kmax) # Ritz values
         ub     = zeros(T, n, kb)      # Ritz vectors for active pairs
         rb     = zeros(T, n, kb)      # residuals / corrections
-        Vtmp   = zeros(T, n, k + kb)  # scratch for restart (nconv + kb ≤ k + kb)
-        Wtmp   = zeros(T, n, k + kb)  # scratch for restart
+        Vtmp   = zeros(T, n, jmin)
+        Wtmp   = zeros(T, n, jmin)
         lambda = zeros(Float64, k)
         rnorms = zeros(Float64, kb)
         c_mgs  = zeros(T, kmax)
@@ -125,21 +95,22 @@ Algorithm outline per iteration:
         nb = max(min(k - nconv + nbuff, j - nconv), 1)
 
         # Restart: keep kb Ritz vectors (soft-locked stay in V)
-        if j + nb > kmax
+        if j + nb >= kmax
             @timing "jdsym_block: restart" begin
-                jnew = min(nconv + kb, j)   # keep nconv soft-locked + kb active Ritz vectors
-                @views mul!(Vtmp[:, 1:jnew], V[:, 1:j], Vc[1:j, 1:jnew])
-                @views mul!(Wtmp[:, 1:jnew], W[:, 1:j], Vc[1:j, 1:jnew])
-                @views V[:, 1:jnew] .= Vtmp[:, 1:jnew]
-                @views W[:, 1:jnew] .= Wtmp[:, 1:jnew]
+                j = jmin
+                @views mul!(Vtmp[:, 1:j], V[:, 1:j], Vc[1:j, 1:j])
+                @views mul!(Wtmp[:, 1:j], W[:, 1:j], Vc[1:j, 1:j])
+                @views V[:, 1:j] .= Vtmp[:, 1:j]
+                @views W[:, 1:j] .= Wtmp[:, 1:j]
                 Hc[1:kmax, 1:kmax] .= zero(T)
-                for i in 1:jnew; Hc[i, i] = ew[i]; end
-                j = jnew
+                for i in 1:j; Hc[i, i] = ew[i]; end
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
                 @views F = eigen(Hermitian(Hc[1:j, 1:j]))
                 ew[1:j]      .= F.values
                 Vc[1:j, 1:j] .= F.vectors
-                (disp || debug) && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
+                if disp
+                    @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
+                end
             end
         end
 
@@ -167,14 +138,6 @@ Algorithm outline per iteration:
             @printf("jdsym_block it=%4d  nconv=%d/%d  j=%d  nb=%d  |r|=%.2e..%.2e\n",
                     iter, nconv, k, j, nb,
                     minimum(view(rnorms, 1:nb_target)), maximum(view(rnorms, 1:nb_target)))
-        end
-        if debug
-            ew_str = nb_target <= 6 ?
-                join([@sprintf("%.4e", ew[nconv+i]) for i in 1:nb_target], " ") :
-                @sprintf("%.4e..%.4e", ew[nconv+1], ew[nconv+nb_target])
-            @printf("DEBUG it=%4d  nconv=%d/%d  j=%d  nb=%d  |r|=%.2e..%.2e  ew=[%s]\n",
-                    iter, nconv, k, j, nb,
-                    minimum(view(rnorms, 1:nb_target)), maximum(view(rnorms, 1:nb_target)), ew_str)
         end
 
         # Lock newly converged pairs (Ritz vectors stay in V via soft-locking)
@@ -211,7 +174,6 @@ Algorithm outline per iteration:
         nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, c_exp1, c_exp2)
         nmv += nact
         j += nact
-        debug && nact < nb && @printf("DEBUG           expand: only %d/%d vectors accepted (j=%d)\n", nact, nb, j)
     end
 
     disp && @printf("jdsym_block: done. nconv=%d/%d  iter=%d  nmv=%d\n", nconv, k, jd_iter, nmv)
