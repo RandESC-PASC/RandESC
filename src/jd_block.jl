@@ -37,6 +37,8 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     jmin = 2 * (k + nbuff) # search space size after restart
     kmax = min(n, 4kb) # maximal search space dimension
 
+    two_pass_orth = false # if true, orthogonalization is more accurate (and more expensive)
+
     T = isnothing(v0) ? Float64 : eltype(v0)
 
     # ── Workspace ─────────────────────────────────────────────────────────
@@ -74,7 +76,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         @views V[:, 1:j] .= randn(T, n, j)
     end
 
-    @timing "jdsym_block: ortho" _jdb_mgs2!(V, j, c_mgs)
+    @timing "jdsym_block: ortho" _jdb_mgs2!(V, j, c_mgs, two_pass_orth)
     @timing "jdsym_block: matvec" @views mul!(W[:, 1:j], A, V[:, 1:j])
     nmv += j
     @timing "jdsym_block: overlap" @views mul!(Hc[1:j, 1:j], V[:, 1:j]', W[:, 1:j])
@@ -169,7 +171,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         end
 
         # Expand subspace
-        nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, c_exp1, c_exp2)
+        nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, c_exp1, c_exp2, two_pass_orth)
         nmv += nact
         j += nact
     end
@@ -196,7 +198,7 @@ end
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 """Double-pass MGS orthonormalization of V[:,1:m] in-place. `c` is a preallocated buffer of length ≥ m-1."""
-function _jdb_mgs2!(V::AbstractMatrix, m::Int, c::AbstractVector)
+function _jdb_mgs2!(V::AbstractMatrix, m::Int, c::AbstractVector, two_pass::Bool=true)
     for i in 1:m
         if i > 1
             ci = view(c, 1:i-1)
@@ -204,8 +206,10 @@ function _jdb_mgs2!(V::AbstractMatrix, m::Int, c::AbstractVector)
             Vp = view(V, :, 1:i-1)
             mul!(ci, Vp', vi)
             mul!(vi, Vp, ci, -1, 1)
-            mul!(ci, Vp', vi)
-            mul!(vi, Vp, ci, -1, 1)
+            if two_pass
+                mul!(ci, Vp', vi)
+                mul!(vi, Vp, ci, -1, 1)
+            end
         end
         nv = norm(view(V, :, i))
         nv > 1e-14 && (view(V, :, i) ./= nv)
@@ -226,7 +230,7 @@ Returns the number of accepted vectors `nact`.
 function _jdb_expand!(V::AbstractMatrix, W::AbstractMatrix,
                       Hc::AbstractMatrix, rb::AbstractMatrix,
                       j::Int, nb::Int, kmax::Int, A,
-                      c1::AbstractMatrix, c2::AbstractVector)
+                      c1::AbstractMatrix, c2::AbstractVector, two_pass::Bool=true)
     nact = 0
 
     @timing "jdsym_block: ortho" begin
@@ -234,8 +238,10 @@ function _jdb_expand!(V::AbstractMatrix, W::AbstractMatrix,
         let Vj = view(V, :, 1:j), rbv = view(rb, :, 1:nb), c1v = view(c1, 1:j, 1:nb)
             mul!(c1v, Vj', rbv)
             mul!(rbv, Vj, c1v, -1, 1)
-            mul!(c1v, Vj', rbv)
-            mul!(rbv, Vj, c1v, -1, 1)
+            if two_pass
+                mul!(c1v, Vj', rbv)
+                mul!(rbv, Vj, c1v, -1, 1)
+            end
         end
 
         # Phase 2: sequential orthogonalization among the nb new vectors
@@ -246,8 +252,10 @@ function _jdb_expand!(V::AbstractMatrix, W::AbstractMatrix,
                 let Vnew = view(V, :, j+1:j+nact), rbib = view(rb, :, ib), c2v = view(c2, 1:nact)
                     mul!(c2v, Vnew', rbib)
                     mul!(rbib, Vnew, c2v, -1, 1)
-                    mul!(c2v, Vnew', rbib)
-                    mul!(rbib, Vnew, c2v, -1, 1)
+                    if two_pass
+                        mul!(c2v, Vnew', rbib)
+                        mul!(rbib, Vnew, c2v, -1, 1)
+                    end
                 end
             end
 
