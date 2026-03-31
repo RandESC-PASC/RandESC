@@ -6,25 +6,23 @@
 \def\input@path{{theme/}}
 \makeatother
 \usetheme{CleanEasy}
-% \setbeamercovered{transparent}
 \usepackage[utf8]{inputenc}
 \usepackage{lmodern}
 \usepackage[T1]{fontenc}
-% \usepackage[brazil]{babel}
 \usepackage{fix-cm}
 \usepackage{amsmath}
 \usepackage{mathtools}
 \usepackage{listings}
-\usepackage{xcolor}
+% \usepackage{xcolor}
+\usepackage[table]{xcolor}
 \usepackage{hyperref}
 \usepackage{bm}
-\usepackage{graphicx} % Allows including images
-\usepackage{booktabs} % Allows the use of \toprule, \midrule and \bottomrule in tables
+\usepackage{graphicx}
+\usepackage{booktabs}
 \usepackage{tikz}
-\usetikzlibrary{positioning, shapes, arrows, calc, decorations.pathreplacing, arrows.meta, backgrounds, patterns, overlay-beamer-styles}
-
-\usepackage{amsmath}
-\usepackage{tikz}
+% \usepackage{colortbl}
+\usetikzlibrary{positioning, shapes, arrows, calc, decorations.pathreplacing,
+                arrows.meta, backgrounds, patterns, overlay-beamer-styles}
 \usepackage{mathdots}
 \usepackage{yhmath}
 \usepackage{pifont}
@@ -36,24 +34,12 @@
 \usepackage{amssymb}
 \usepackage{tabularx}
 \usepackage{extarrows}
-\usepackage{booktabs}
 \usepackage{geometry}
-\usepackage{mathtools}
 \usepackage{nicematrix}
-
 \usepackage{relsize}
-\usepackage{tikz}
-\usepackage{mathdots}
-\usepackage{yhmath}
-\usepackage{pifont}
-\usetikzlibrary{fadings}
-\usetikzlibrary{patterns}
-\usetikzlibrary{shadows.blur}
-\usetikzlibrary{shapes}
-\usetikzlibrary{matrix}
-\usetikzlibrary{shapes.geometric, arrows}
+\usetikzlibrary{fadings,patterns,shadows.blur,shapes,matrix,
+                shapes.geometric,arrows}
 \usetikzlibrary{matrix,positioning,decorations.pathreplacing}
-
 \usepackage{setspace}
 \usepackage{xspace}
 \usepackage{bold-extra}
@@ -64,11 +50,9 @@
 \colorlet{texemcolor}{red!70!black}
 \colorlet{texpreamble}{red!70!black}
 \colorlet{codebackground}{black!25!white!25}
-
-\newcommand\bs{\symbol{'134}} % print backslash in typewriter OT1/T1
-\newcommand{\preamble}[2][\small]{\textcolor{texpreamble}{#1\texttt{#2 \emph{\% <- Preamble}}}}
-
-
+\newcommand\bs{\symbol{'134}}
+\newcommand{\preamble}[2][\small]{%
+  \textcolor{texpreamble}{#1\texttt{#2 \emph{\% <- Preamble}}}}
 \usepackage{subfig}
 \usepackage{stmaryrd}
 \usepackage{stackengine}
@@ -83,7 +67,6 @@
 \DeclareMathOperator*{\argmax}{arg\,max}
 \DeclareMathOperator*{\argmin}{arg\,min}
 
-%%packages
 \newcommand{\E}{\mathbb{E}}
 \newcommand{\Z}{\mathbb{Z}}
 \newcommand{\bigO}{\mathcal{O}}
@@ -94,13 +77,11 @@
 \newcommand{\flr}[1]{\left\lfloor {#1} \right\rfloor}
 \newcommand{\cei}[1]{\left\lceil{#1}\right\rceil}
 \newcommand{\diag}[1]{\mathrm{diag}{#1}}
-
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\C}{\mathbb{C}}
 \newcommand{\N}{\mathbb{N}}
 \newcommand{\p}{\mathbb{P}}
 \newcommand{\eps}{\varepsilon}
-\newcommand{\ind}{\mathbbm{1}}
 \newcommand{\F}{\mathcal{F}}
 \def\E{\mathbb{E}}
 \newcommand{\ubar}[1]{\underaccent{\bar}{#1}}
@@ -108,18 +89,18 @@
 \def\a{\mathbf{a}}
 \def\S{\mathcal{S}}
 \def\s{\mathbf{s}}
-\def\E{\mathbb{E}}
 \newcommand{\rr}[1]{\textcolor{red}{#1}}
 \newcommand{\rrr}[2]{\textcolor{blue}{(#1)}\textnormal{$\leftarrow$}\textcolor{red}{#2}}
-%\newcommand{\rrrr}[1]{\textcolor{blue}{(#1) $\leftarrow$ (remove)}}
-\usepackage[normalem]{ulem}\newcommand{\rrrr}[1]{\textcolor{blue}{\sout{(#1)}}}
-% \newcommand{\rrrr}[1]{\textcolor{blue}{(#1)}\textnormal{$\leftarrow$}\textcolor{blue}{{\rm remove}}}
+\usepackage[normalem]{ulem}
+\newcommand{\rrrr}[1]{\textcolor{blue}{\sout{(#1)}}}
 \newcommand{\bb}[1]{\textcolor{blue}{#1}}
+\newcommand{\bl}[1]{{\color{blue}#1}}
 \newcommand{\bbb}[2]{\textcolor{blue}{(#1) $\leftarrow$ #2}}
 \newcommand{\bbbb}[1]{\textcolor{blue}{(#1) $\leftarrow$ (remove)}}
-
-% \setbeamercovered{invisible}
-% \setbeamertemplate{headline}{}
+\definecolor{convgreen}{RGB}{210,240,210}
+\definecolor{failred}  {RGB}{255,210,210}
+\newcommand{\OK}[1]{\cellcolor{convgreen}#1}
+\newcommand{\FL}[1]{\cellcolor{failred}\textbf{#1}}
 
 %----------------------------------------------------------------------------------------
 %    LAYOUT CONFIGURATION
@@ -139,527 +120,391 @@
   \titlepage
 \end{frame}
 
-\begin{frame}{About me briefly}
+% ====== PART I: PROBLEM SETTING ======
 
-\begin{itemize}
-  \item \textbf{Name:} Taejun Park
-  \item \textbf{Position:} Postdoc at EPFL under Prof. Laura Grigori
-  \item \textbf{Background:} Numerical Analysis Group at the University of Oxford
-  \item \textbf{Supervisor:} Prof. Yuji Nakatsukasa
-  \item \textbf{Thesis title:} On the accuracy and robustness of randomised methods for matrix computations
-  \item \textbf{Research interests:} Numerical Linear Algebra, Randomized Algorithms, Matrix Perturbation Theory
-\end{itemize}
-
-\end{frame}
-
-% ====== FRAMES ONLY: Randomized & Low-Precision Eigenvalue Methods ======
-
-% --- Motivation & landscape ---
 \begin{frame}{Motivation \& Context}
 \begin{itemize}
-  \item Compute selected eigenpairs of large sparse matrices: $\mat{Ax} = \lambda \vec{x}$
-  \item Direct solvers are expensive, so we resort to iterative methods
-  \pause
-  \item \textbf{Challenges:} scalability, memory, communication, clustered/interior eigenvalues, conditioning, preconditioning, ...
-  \item \textbf{Opportunities:}
-    \begin{itemize}
-      \item \textbf{Randomization}: projection onto lower-dimensional space for efficiency
-      \item \textbf{Mixed-Precision}: fast low-precision bulk, high-precision critical steps.
-    \end{itemize}
+  \item Compute selected eigenpairs of large matrices: $\mat{A}\vec{x} = \lambda\vec{x}$
+  \item \textbf{Challenges:} scalability, memory, communication,
+        clustered/interior eigenvalues, conditioning, preconditioning, \ldots
+\end{itemize}
+\pause
+\textbf{Dominant costs:}
+\begin{itemize}
+  \item Matvecs with $\mat{A}$
+  \item \only<2>{Orthogonalization of search space $\mat{V}$}%
+        \only<3>{\rr{Orthogonalization of search space $\mat{V}$}}
+  \item Solving the reduced problem $\mat{V}^*\!\mat{AV}\vec{y} = \theta\vec{y}$
 \end{itemize}
 \pause
 \begin{block}{Algorithms}
-    \begin{itemize}
-  \item \textbf{IRA} (Implicitly Restarted Arnoldi): Krylov + implicit restart; extremal eigenvalues.
-  \item \textbf{JD} (Jacobi-Davidson Method): Rayleigh--Ritz + correction equation; good for interior/clustered eigenvalues.
-  \item \textbf{LOBPCG} (Locally Optimal Block Preconditioned CG): Efficient for Hermitian/SPD problems.
+\begin{itemize}
+  \item \textbf{Krylov-Schur}:
+        {\footnotesize de Damas--Grigori (2025); Grigori--Kressner--Shao--Simunec (2026)}
+  \item \rr{\textbf{JD} (Jacobi--Davidson)}: Rayleigh--Ritz + correction equation;
+        good for interior/clustered eigenvalues.
+  \item \textbf{LOBPCG} (Locally Optimal Block Preconditioned CG): efficient for
+        Hermitian/SPD problems.
 \end{itemize}
 \end{block}
 \end{frame}
 
+% ====== PART II: CLASSICAL ORTHOGONALIZATION ======
 
-% --- IRA and rIRA ---
-\begin{frame}{Implicitly Restarted Arnoldi (IRA)}
-\begin{itemize}
-  \item Arnoldi relation: $\mat{A V}_k = \mat{V}_{k}\mat{H}_k + h_{k+1,k}\vec{v}_{k+1}\vec{e}_{k}^\top$, $\mat{V}_k^\top\mat{V}_k = \mat{I}$.
-  \item Implicit restart $\equiv$ polynomial filtering of unwanted spectral components.
-\end{itemize}
-\pause
-\vspace{1em}
-\textbf{Pros:}
-\begin{itemize}
-    \item Memory efficient: keeps Krylov subspace small
-    \item Computationally efficient: filters out unwanted Ritz values
-    \item Works well for extreme eigenvalues
-    \item Preconditioner is not needed
-\end{itemize}
-\vspace{0.3cm}
-\pause
-\textbf{Cons:}
-\begin{itemize}
-    \item Convergence to interior eigenvalues can be very slow
-    \item Convergence can be slow if eigenvalues are clustered
-\end{itemize}
-\vspace{1em}
-\pause
-\begin{itemize}
-    \item \textbf{Randomized version:} {\footnotesize Balabanov-Grigori (2022); de Damas-Grigori (2024)}
-    \item \textbf{Basic Idea:} Replace $\ell_2$-orthogonality with sketched orthogonality
-\end{itemize}
-\end{frame}
-
-\begin{frame}{Randomization in Numerical Linear Algebra}
-    \textbf{\underline{Basic Idea:}} 
-\begin{itemize}
-    \item We have a quantity of interest we would like to estimate, e.g., surrogate for $\mat{A}$ or row/column space of $\mat{A}$
-    \item Use randomization/random matrices to approximate.
-\end{itemize}
-\vspace{1em}
-\pause
-\textbf{\underline{Pros and Cons:}} 
-    \begin{itemize}
-        \item[\bb{\textbf{+}}] Speed, Storage, Communication costs
-        \item[\bb{\textbf{+}}] Robustness against adversarial examples
-        \pause
-        \item[\rr{\textbf{-}}] Output different for each run 
-        \item[\rr{\textbf{-}}] Can fail with (very) small probability and lose a bit of accuracy
-    \end{itemize}
-    \pause
-    \vspace{1em}
-    \centering \large
-    \textbf{Usually randomized algorithms obtain near-optimal solution very quickly!} \\
-    {\footnotesize See Halko, Martinsson, Tropp, (2011); Woodruff, (2014); Drineas, Mahoney, (2017); Martinsson, Tropp, (2020);  Kireeva, Tropp (2024).}
-\end{frame}
-
-\begin{frame}{Subspace Embedding Property}
-    \begin{block}{Subspace Embedding {\footnotesize [Sarl\'os, 2006]}}
-    A matrix $\mat{S}\in \R^{s\times m}$ is a subspace embedding for $\mat{A}\in \R^{m\times n}$ if for all $\vec{x}\in \operatorname{range}(\mat{A})$ and for some distortion $\eta \in (0,1)$,
-        \begin{equation*}
-            (1-\eta)\norm{\vec{x}}_2^2 \leq \norm{\vec{Sx}}_2^2 \leq (1+\eta) \norm{\vec{x}}_2^2.
-        \end{equation*} Typically, $s \ll m$ and $s = \bigO(\operatorname{rank}(\mat{A}))$.
-        Analogues for $\mathbb{C}$ exist.
-    \end{block}
-    \textbf{Related topics:} Johnson-Lindenstrauss (JL) Lemma, Restricted Isometry Property (RIP).
-    \pause
-    \begin{block}{Examples of Random Embeddings}
-        \begin{itemize}
-            \item Scaled Gaussian Embedding ($S_{ij} \sim N(0,1/\sqrt{s})$)
-            \item Subsampled Randomized Trigonometric Transforms (SRTTs)
-            \item Sparse Sign Embedding
-        \end{itemize}
-    \end{block}
-\end{frame}
-
-
-\begin{frame}{Consequences:}
-\begin{itemize}
-    \item Inner product is approximately preserved:
-    \begin{equation*}
-        |\langle \mat{x},\mat{y}\rangle - \langle \mat{Sx},\mat{Sy}\rangle| \leq \eta \norm{\vec{x}}_2\norm{\vec{y}}_2
-    \end{equation*} for all $\vec{x},\vec{y} \in \operatorname{range}(\mat{A})$.
-    \pause
-    \item Singular values are approximately preserved:
-    \begin{equation*}
-        (1-\eta)\sigma_{i}(\mat{A})^2 \leq \sigma_i(\mat{SA})^2 \leq (1+\eta)\sigma_i(\mat{A})^2
-    \end{equation*}
-    \pause
-    \item Condition number is approximately similar:
-    \begin{equation*}
-        \kappa_2(\mat{SA}) \leq \sqrt{\frac{1+\eta}{1-\eta}} \cdot\kappa_2(\mat{A}), 
-    \end{equation*} where $\kappa_2(\mat{A}) = \sigma_1(\mat{A})/\sigma_n(\mat{A})$.
-\end{itemize}
-\end{frame}
-
-\begin{frame}{Sketched orthogonality}
-Given basis $\mat{V}\in\mathbb{R}^{n\times k}$ and sketch $\mat{S}\in\mathbb{R}^{s\times n}$ ($s\ll n$, e.g. $s = 2k$):
-
-\begin{itemize}
-  \item Classical orthogonal projector (keep $\mat{V}$ orthogonal):
-  \[
-    \mat{P} = \mat{V}(\mat{V}^\top \mat{V})^{-1} \mat{V}^\top = \mat{VV}^\top,
-  \]
-  \pause
-  \item Sketched / oblique projector (keep $\mat{SV}$ orthogonal):
-  \[
-    \mat{P}_{\mat{S}} = \mat{V}(\mat{SV})^{-1}\mat{S} = \mat{V}(\mat{SV})^\top \mat{S},
-  \]
-  where $\mat{P}_{\mat{S}}$ projects onto $\operatorname{span}(\mat{V})$ but orthogonality is defined in the \emph{sketched inner product} $\langle \vec{x},\vec{y}\rangle_{\mat{S}} = \langle \vec{Sx},\vec{Sy}\rangle$.
-  \pause
-  \item Keeping $\mat{SV}$ orthogonal $\Rightarrow$ well-conditioned basis $\kappa_2(\mat{V})\leq \sqrt{\frac{1+\eta}{1-\eta}}$
-\end{itemize}
-\end{frame}
-
-% --- Sketched least squares and mixed precision ---
-\begin{frame}{Sketched least squares formulation}
-\small
-\textbf{Classical GS step:} orthogonalize $\vec{t}$ against $\mat{V}$ ($\ell_2$-orthogonal) by solving
+\begin{frame}{Orthogonalizing a basis}
+Given $\mat{V}=[\vec{v}_1,\ldots,\vec{v}_k]\in\R^{n\times k}$
+with $\mat{V}^\top\mat{V}=\mat{I}$ and a new vector $\vec{t}\in\R^n$, find the
+\emph{orthogonalized residual}:
 \[
-  \min_{\vec{h}} \|\vec{t} - \vec{Vh}\|_2^2, \quad \text{solution: } \vec{h}_*=\vec{V}^\top \vec{t}.
+  \tilde{\vec{t}} = \vec{t} - \mat{V}\vec{h},
+  \qquad
+  \vec{h} = \argmin_{\vec{h}}\|\vec{t} - \mat{V}\vec{h}\|_2^2 = \mat{V}^\top\vec{t}.
 \]
+\emph{Same problem}, but differ in when they
+apply the subtraction and how many communication rounds they use.
+
 \pause
-\textbf{Sketched GS step:} replace by sketched least squares
-\[
-  \min_{\vec{h}} \|\vec{S}(\vec{t} - \vec{Vh})\|_2^2, \quad \text{solution: } \vec{\tilde{h}}_*=(\mat{SV})^\dagger \mat{S} \vec{t}.
-\]
-\pause
-\begin{itemize}
-  \item If $\mat{S}$ is a subspace embedding for $[\mat{V},\vec{t}]$
+\vspace{0.4em}
+\textbf{CGS2:}
+
+\begin{tcolorbox}[colback=green!5,colframe=green!50!black,
+  boxrule=0.4pt,top=2pt,bottom=2pt,left=3pt,right=3pt]
+\begin{columns}[T]
+\column{0.38\textwidth}
+  
+  \begin{algorithmic}[1]
+    \State $\vec{h} \gets \mat{V}^\top \vec{t}$   
+    \State $\tilde{\vec{t}} \gets \vec{t} - \mat{V}\vec{h}$
+    \State $\vec{h}' \gets \mat{V}^\top \tilde{\vec{t}}$
+    \State $\tilde{\vec{t}} \gets \tilde{\vec{t}} - \mat{V}\vec{h}'$
+    \State $\vec{t} \gets \tilde{\vec{t}}/\|\tilde{\vec{t}}\|$
+  \end{algorithmic}
+\column{0.58\textwidth}
+  \vspace{1em}
+  \textbf{Projector:}
   \begin{equation*}
-      \|\vec{t} - \vec{V\tilde{h}}_*\|_2^2 \leq \frac{1+\eta}{1-\eta} \|\vec{t} - \vec{Vh}_*\|_2^2.
+      \vec{\tilde{t}} \gets (\mat{I}-\mat{VV}^\top)(\mat{I}-\mat{VV}^\top)\vec{t}
   \end{equation*}
-  \item $\Rightarrow$ Orthonormalization, Rayleigh--Ritz, and residual checks can all be phrased in this sketched LS framework.
-  \pause
-  \item \textbf{Mixed precision is natural:}
-    \begin{itemize}
-      \item Forming $\mat{SV}$ and $\vec{St}$: high-dimensional computation in low-precision
-      \item Solving small $k\times k$ systems/eigenvalue problem: lower-dimensional computation in high-precision.
-    \end{itemize}
-\end{itemize}
+\end{columns}
+\end{tcolorbox}
 \end{frame}
 
 
-% --- JD algorithm: overview ---
-\begin{frame}{Jacobi--Davidson algorithm (overview)}
-\textbf{Goal:} compute a few eigenpairs of $\mat{A}\in\mathbb{R}^{n\times n}$. \\
-\vspace{0.5em}
-\pause
-\textbf{Input:} $\mat{A}$, target shift $\sigma$, initial vector $\vec{v}_1$.
+% ====== PART IV: RANDNLA ======
 
-\begin{enumerate}
-  \item Build orthogonal subspace $\vec{V}_k = [\vec{v}_1,\ldots,\vec{v}_k]$.
-  \item Compute Ritz pair $(\theta,\vec{u}=\vec{V}_k\vec{y})$ by solving $\mat{V}_k^\top \mat{AV}_k\vec{y} = \theta \vec{y}$.
-  \item If residual satisfies $\|\vec{r} (= \vec{Au}-\theta \vec{u})\|\le \text{tol}$, accept $(\theta,u)$ (lock/deflate).
-  \item Solve \textbf{correction equation} approximately:
-  \[
-    (\mat{I}-\vec{uu}^\top)(\mat{A}-\theta \mat{I})(\mat{I}-\vec{uu}^\top)\vec{t} = -\vec{r},\quad \vec{t}\perp \vec{u}.
-  \]
-  \item Orthogonalize $\vec{t}$ against $\mat{V}_k$ and normalize:
-  \begin{equation*}
-      \vec{t} \gets \vec{t} - \mat{V}_k\mat{V}_k^\top\vec{t},\quad \vec{t}\gets \vec{t}/\|\vec{t}\|_2
-  \end{equation*}
-  \item Expand subspace: $\mat{V}_{k+1} = [\mat{V}_k,\; \vec{t}]$.
-  \item Restart if $k$ too large (thick restart, keep best Ritz vectors).
-\end{enumerate}
-\pause
-\textbf{Remarks:} 
-
-Inner solve (line $4$) can be inexact (preconditioned Krylov, low precision); outer iteration provides refinement.
-
-With block form: replace $(\vec{u},\theta)$ by Ritz block $(\mat{U},\mat{\Theta})$ and $\vec{t}$ by block $\mat{T}$.
-\end{frame}
-
-% --- Derivation of correction equation ---
-\begin{frame}{Derivation of JD correction equation}
-Given current Ritz pair $(\theta,\vec{u})$ we seek a correction $\vec{t}$ orthogonal to $\vec{u}$:
-\begin{align*}
-    \mat{A}(\vec{u}+\vec{t}) &= \lambda(\vec{u}+\vec{t}), \quad \vec{u}\perp\vec{t}
-\end{align*}
-\pause
-Multiply $\mat{I}-\vec{uu}^\top$ and rearranging gives:
+\begin{frame}{RandNLA}
+\begin{block}{Subspace embedding {\footnotesize [Sarl\'os, 2006]}}
+A matrix $\mat{S}\in\R^{s\times m}$ is a subspace embedding for $\mat{A}\in\R^{m\times n}$
+if for all $\vec{x}\in\operatorname{range}(\mat{A})$ and for some distortion $\eta\in(0,1)$,
 \begin{equation*}
-    (\mat{I}-\vec{uu}^\top)\mat{A}(\vec{u}+\vec{t}) =\lambda \vec{t} \implies (\mat{I}-\vec{uu}^\top)(\mat{A}-\lambda\mat{I}) \vec{t} = -(\mat{Au}-\theta \vec{u}) (= -\vec{r}).
-\end{equation*} \pause Now $(\mat{I}-\vec{uu}^\top)\vec{t} = \vec{t}$ and approximating the eigenvalue $\lambda$ with Ritz value $\theta$ gives the JD correction equation:
-\begin{equation} \label{eq:JDCE}
-    (\mat{I}-\vec{uu}^\top)(\mat{A}-\theta \mat{I})(\mat{I}-\vec{uu}^\top)\vec{t} = -\vec{r}.
-\end{equation} Note that $\vec{u} \perp \vec{t}$ is needed as $\vec{t} = \vec{u}$ is a solution to \eqref{eq:JDCE}, otherwise leading to stagnation. \pause
+  (1-\eta)\norm{\vec{x}}_2^2 \;\leq\; \norm{\mat{S}\vec{x}}_2^2
+  \;\leq\; (1+\eta)\norm{\vec{x}}_2^2.
+\end{equation*}
+Typically $s\ll m$ and $s=\bigO(\operatorname{rank}(\mat{A}))$.
+\end{block}
+\pause
+\textbf{Examples:}
 \begin{itemize}
-    \item Solving JD correction equation exactly: same convergence rate with Rayleigh Quotient Iteration (Quadratic local convergence)
-    \item Solving JD correction equation exactly with a fixed shift instead of Ritz value $\theta$: Shifted inverse iteration (Linear convergence)
+  \item Scaled Gaussian embedding ($S_{ij}\sim\mathcal{N}(0,1/\sqrt{s})$)
+  \item Subsampled Randomized Trigonometric Transforms (SRTTs)
+  \item Sparse Sign Embedding
 \end{itemize}
+See also subspace injections {\footnotesize Cama\~{n}o--Epperly--Meyer--Tropp (2025)}
+\end{frame}
+
+\begin{frame}{Consequences}
+\begin{itemize}
+  \item Inner product is approximately preserved:
+  \begin{equation*}
+    |\langle\vec{x},\vec{y}\rangle - \langle\mat{S}\vec{x},\mat{S}\vec{y}\rangle|
+    \;\leq\; \eta\norm{\vec{x}}_2\norm{\vec{y}}_2
+  \end{equation*}
+  for all $\vec{x},\vec{y}\in\operatorname{range}(\mat{A})$.
+  \pause
+  \item Singular values are approximately preserved:
+  \begin{equation*}
+    (1-\eta)\sigma_i(\mat{A})^2 \;\leq\;
+    \sigma_i(\mat{SA})^2 \;\leq\; (1+\eta)\sigma_i(\mat{A})^2
+  \end{equation*}
+  \item Condition number is approximately preserved:
+  \begin{equation*}
+    \kappa_2(\mat{SA}) \;\leq\; \sqrt{\frac{1+\eta}{1-\eta}}\cdot\kappa_2(\mat{A}),
+    \qquad \kappa_2(\mat{A})=\sigma_1(\mat{A})/\sigma_n(\mat{A}).
+  \end{equation*}
+\end{itemize}
+\end{frame}
+
+% ====== PART V: SKETCH-ORTHOGONALIZATION ======
+
+% --- Transition: what the sketch buys ---
+\begin{frame}{From embeddings to orthogonalization}
+\textbf{Key connection:} if $\mat{S}$ is an $\eta$-embedding for
+$\operatorname{span}(\mat{V}, \vec{t})$, then solving the \emph{sketched}
+least-squares problem
+\[
+  \min_{\vec{h}}\|\mat{S}(\vec{t} - \mat{V}\vec{h})\|_2^2 = \min_{\vec{h}}\|\mat{S}\vec{t} - \mat{S}\mat{V}\vec{h}\|_2^2
+\]
+gives a residual within a factor $\sqrt{\frac{1+\eta}{1-\eta}} \approx 1$ of
+the optimal $\ell_2$ residual. \\
+\pause
+\vspace{1em}
+\textbf{RGS:} {\footnotesize [Balabanov, Grigori, 2022]} Keep $(\mat{SV})^\top (\mat{SV}) = \mat{I} \implies \kappa_2(\mat{V}) \leq \sqrt{\frac{1+\eta}{1-\eta}}$.
+\begin{tcolorbox}[colback=orange!5,colframe=orange!60!black,
+  boxrule=0.4pt,top=2pt,bottom=2pt,left=3pt,right=3pt]
+\begin{columns}[T]
+\column{0.50\textwidth}
+  \begin{algorithmic}[1]
+    \State $\vec{p} \gets \mat{S}\vec{t}$
+    \State \rr{$\vec{h} \gets \mat{P}^\dagger \vec{p}$}
+          \Comment{exact: $\mat{P}^\dagger = \mat{P}^\top$}
+    \State $\tilde{\vec{t}} \gets \vec{t} {-} \mat{V}\vec{h}$;
+           $\;\tilde{\vec{p}} \gets \vec{p} {-} \mat{P}\vec{h}$
+    \State $\tau \gets \|\tilde{\vec{p}}\|$
+    \State $\vec{t} \gets \tilde{\vec{t}}/\tau$;
+           $\;\mat{P} \leftarrow [\mat{P},\, \tilde{\vec{p}}/\tau]$
+  \end{algorithmic}
+\column{0.46\textwidth}
+  \footnotesize\vspace{1em}
+  \textbf{RGS (Oblique) Projector:}
+  \begin{equation*}
+      \vec{\tilde{t}} \gets (\mat{I}-\mat{V}(\mat{SV})^\dagger\mat{S})\vec{t}
+  \end{equation*}
+\end{columns}
+\end{tcolorbox}
+\end{frame}
+
+% ====== PART VI: JACOBI--DAVIDSON ======
+
+\begin{frame}{Jacobi--Davidson algorithm (overview)}
+ \textbf{Goal:} compute a few eigenpairs of
+  $\mat{A}\in\R^{n\times n}$.
+ 
+  \vspace{0.5em}
+  \pause
+ 
+  \textbf{Input:} $\mat{A}$, target shift $\sigma$,
+  \alt<2>{initial vector $\vec{v}_1$}%
+         {\bl{initial block $\mat{V}_0\in\R^{n\times b}$}}.
+ 
+  \begin{enumerate}
+ 
+    \item Build orthogonal subspace $\mat{V}_k=[\vec{v}_1,\ldots,\vec{v}_k]$
+
+    \item Compute
+          \alt<2>{Ritz pair $(\theta,\,\vec{u}=\mat{V}_k\vec{y})$}%
+                 {\bl{Ritz block $(\mat{\Theta},\,\mat{U}=\mat{V}_k\mat{Y})$}}
+          by solving
+          \alt<2>{$\mat{V}_k^\top\mat{A}\mat{V}_k\vec{y}
+                   =\theta\vec{y}$}%
+                 {\bl{$\mat{V}_k^\top\mat{A}\mat{V}_k\mat{Y}
+                      =\mat{Y}\mat{\Theta}$}}.
+ 
+    \item If
+          \alt<2>{$\|\vec{r}\,(=\mat{A}\vec{u}-\theta\vec{u})\|
+                   \leq\mathrm{tol}$,
+                  accept $(\theta,\vec{u})$}%
+                 {\bl{$\|\vec{r}_i\,(=\mat{A}\vec{u}_i
+                       -\theta_i\vec{u}_i)\|\leq\mathrm{tol}$
+                  for $i=1,\ldots,b$,
+                  accept $(\theta_i,\mat{u}_i)$}}
+ 
+    \item Solve \textbf{correction equation} approximately:
+    \[
+      \alt<2>%
+        {(\mat{I}-\vec{u}\vec{u}^\top)(\mat{A}-\theta\mat{I})
+         (\mat{I}-\vec{u}\vec{u}^\top)\vec{t}=-\vec{r},
+         \quad\vec{t}\perp\vec{u}}%
+        {\bl{(\mat{I}-\mat{U}\mat{U}^\top)(\mat{A}-\theta_i \mat{I})
+             (\mat{I}-\mat{U}\mat{U}^\top)\mat{t}_i=-\mat{r}_i,}
+         \quad\bl{\mat{t}_i\perp\mat{U}}}
+    \]
+ 
+    \item
+          \alt<2>{Orthogonalize $\vec{t}$ against $\mat{V}_k$
+                  and normalize:}%
+                 {\bl{Orthogonalize block $\mat{T} = [\vec{t}_1,...,\vec{t}_b]$ against $\mat{V}_k$,
+                  then $\mat{T}\gets\mathrm{orth}(\mat{T})$:}}
+    \[
+      \alt<2>%
+        {\vec{t}\gets\vec{t}-\mat{V}_k\mat{V}_k^\top\vec{t},
+         \qquad\vec{t}\gets\vec{t}/\|\vec{t}\|_2}%
+        {\bl{\mat{T}\gets\mat{T}-\mat{V}_k\mat{V}_k^\top\mat{T},
+             \qquad\mat{T}\gets\mathrm{orth}(\mat{T})}}
+    \]
+ 
+    \item Expand subspace:
+          $\mat{V}_{k+1}=\bigl[\mat{V}_k,\;
+           \alt<2>{\vec{t}}{\bl{\mat{T}}}\bigr]$.
+ 
+    \item Restart if $k$ too large.
+ 
+  \end{enumerate}
+\pause
+\textbf{Remarks:} the inner solve (line 4) can be inexact (preconditioned
+Krylov, low precision); the outer iteration provides refinement.
+\end{frame}
+
+\begin{frame}{JD correction equation}
+\vspace{-0.3cm}
+\begin{equation*}
+  (\mat{I}-\vec{u}\vec{u}^\top)(\mat{A}-\theta\mat{I})
+  (\mat{I}-\vec{u}\vec{u}^\top)\vec{t}=-\vec{r},
+  \qquad\vec{t}\perp\vec{u}.
+\end{equation*}
+\vspace{-0.5cm}
+\begin{itemize}
+  \item Solving inexactly to tolerance proportional to
+        $\|\mat{A}\vec{u}-\theta\vec{u}\|$ has the same effect as an exact solve.
+  \item A cruder solve sacrifices convergence speed
+        (quadratic $\rightarrow$ linear or \\ cubic $\rightarrow$ quadratic if Hermitian).
+\end{itemize}
+% \pause
+% \vspace{0.3cm}
+% \begin{equation*}
+%     (\mat{I}-\vec{u}(\mat{S}\vec{u})^\top \mat{S})(\mat{A}-\tilde{\theta}\mat{I})
+%     (\mat{I}-\vec{u}(\mat{S}\vec{u})^\top \mat{S})\vec{t}=-\vec{r},
+%     \quad\vec{t}\perp_{\mat{S}}\vec{u}.
+% \end{equation*}
+% \vspace{-0.5cm}
+% \begin{itemize}
+%     \item $\tilde{\theta} = (\vec{Su})^\top(\vec{SAu})$ if $\mat{A}$ Hermitian
+%     \item $\mat{\tilde{H}}_k = (\mat{SV}_k)^\top (\vec{SAV}_k)$ is not symmetric $\Rightarrow$ Convergence is quadratic if the (sketched) correction equation is solved exactly.
+% \end{itemize}
+\pause
+\begin{block}{`Olsen' Solve}
+    Solve correction equations via
+    \begin{equation*}
+        \vec{T} = -(\mat{I}-\mat{UU}^\top)\mat{K}^{-1}\vec{R} \quad \text{ or } \quad \vec{T} = -(\mat{I}-\mat{U}(\mat{SU})^\top\vec{S})\mat{K}^{-1}\vec{R}
+    \end{equation*} where $\mat{K}$ is a preconditioner. No matvec with $A$, but still converges linearly!
+\end{block}
+\end{frame}
+
+\begin{frame}{Sketched Galerkin Condition}
+Change Galerkin condition to sketched Galerkin:
+\begin{equation*}
+  \mat{AV}\vec{y}-\lambda\mat{V}\vec{y}\perp\mat{V}
+  \;\rightarrow\;
+  \mat{AV}\vec{y}-\lambda\mat{V}\vec{y}\perp_{\mat{S}}\mat{V}
+  \;\Rightarrow\;
+  \mat{SAV}\vec{y}-\lambda\mat{SV}\vec{y}\perp\mat{SV}
+\end{equation*}
+\pause
+leading to the reduced (generalized) eigenproblem
+\begin{equation*}
+  \mat{V}^\top\mat{AV}\vec{y}=\lambda\mat{V}^\top\mat{V}\vec{y}
+  \;\rightarrow\;
+  (\mat{SV})^\top(\mat{SAV})\vec{y}
+  =\lambda(\mat{SV})^\top(\mat{SV})\vec{y}
+\end{equation*}
+\pause
+\textbf{With RGS,} $(\mat{SV}_k)^\top\mat{SV}_k=\mat{I}$ by construction.
+Substituting into the sketched Galerkin condition:
+\begin{equation*}
+  (\mat{SV}_k)^\top(\mat{SAV}_k)\vec{y}
+  = \lambda\underbrace{(\mat{SV}_k)^\top(\mat{SV}_k)}_{=\,\mat{I}}\vec{y}
+  \quad\Longrightarrow\quad
+  \underbrace{(\mat{SV}_k)^\top(\mat{SAV}_k)}_{\tilde{\mat{H}}_k}\vec{y}
+  = \lambda\vec{y}.
+\end{equation*}
+Standard (not generalized) EVP --- same structure as classical JD.
+
+Downside: $\tilde{\mat{H}}_k$ is no longer symmetric.
+
 \end{frame}
 
 \begin{frame}{Jacobi-Davidson with sketched orthogonality}
-    Change Galerkin condition to Sketched Galerkin condition:
-  \begin{equation*}
-      \mat{AV}\vec{y} - \lambda \vec{Vy} \perp \mat{V} \Rightarrow \mat{AV}\vec{y} - \lambda \vec{Vy} \perp_{\mat{S}} \mat{V} \Rightarrow \mat{SAV}\vec{y} - \lambda \vec{SVy} \perp \mat{SV} 
-  \end{equation*} \pause leading to the reduced eigenproblem
-  \begin{align*}
-      \mat{V}^\top\mat{AV}\vec{y} = \lambda \mat{V}^\top\mat{V}\vec{y} \Rightarrow (\mat{SV})^\top (\mat{SAV}) \vec{y} = \lambda (\mat{SV})^\top (\mat{SV})\vec{y} 
-  \end{align*}
-\pause
-\vspace{-0.5cm}
-\begin{enumerate}
-  \item Build\only<4>{ \rr{sketched}} orthogonal subspace $\vec{V}_k = [\vec{v}_1,\ldots,\vec{v}_k]$ \only<4>{\rr{$(\mat{SV}_k)^\top \mat{SV}_k = \mat{I}$}}
-  \item Compute Ritz pair $(\theta,\vec{u}=\vec{V}_k\vec{y})$ by solving \only<3>{$\mat{V}_k^\top \mat{AV}_k\vec{y} = \theta \vec{y}$}\only<4>{\rr{$(\mat{S}\mat{V}_k)^\top (\mat{SAV}_k)\vec{y} = \theta \vec{y}$}}
-  \item If \only<4>{\rr{sketched} }res. satisfies \only<3>{$\|\vec{r} (= \vec{Au}-\theta \vec{u})\|\le \text{tol}$}\only<4>{\rr{$\|\vec{SAu}-\theta \vec{Su}\|\le \text{tol}$}}, accept $\vec{u}$ (lock/deflate)
-  \item Solve \textbf{correction equation} approximately: \only<4>{\rr{(next slide)}}
-  \[
-    (\mat{I}-\vec{uu}^\top)(\mat{A}-\theta \mat{I})(\mat{I}-\vec{uu}^\top)\vec{t} = -\vec{r},\quad \vec{t}\perp \vec{u}.
-  \]
-  \item \only<3>{Orthogonalize}\only<4>{\rr{Sketch orthogonalize}} $\vec{t}$ against $\mat{V}_k$ and normalize:
-  \begin{equation*}
-      \only<3>{\vec{t} \gets \vec{t} - \mat{V}_k\mat{V}_k^\top\vec{t},\quad \vec{t}\gets \vec{t}/\|\vec{t}\|_2}
-      \only<4>{\rr{\vec{t} \gets \vec{t} - \mat{V}_k(\mat{SV}_k)^\top\mat{S}\vec{t},\quad \vec{t}\gets \vec{t}/\|\vec{St}\|_2}}
-  \end{equation*}
-  \item Expand subspace: $\mat{V}_{k+1} = [\mat{V}_k,\; \vec{t}]$.
-  \item Restart if $k$ too large (thick restart, keep best Ritz vectors).
-\end{enumerate}
-\end{frame}
+  \textbf{Goal:} compute a few eigenpairs of
+  $\mat{A}\in\R^{n\times n}$.
+  \vspace{0.3em}
 
-% --- Inexact solves & low precision ---
-\begin{frame}{JD Correction equation}
-\begin{equation*}
-    (\mat{I}-\vec{uu}^\top)(\mat{A}-\theta \mat{I})(\mat{I}-\vec{uu}^\top)\vec{t} = -\vec{r},\quad \vec{t}\perp \vec{u}.
-\end{equation*}
-\begin{itemize}
-    \item Solving the correction equation inexactly to the tolerance proportional to the residual $\|\mat{Au}-\theta\vec{u}\|$ has the same effect as exact solve.
-    \item Can be more inexact but sacrifices convergence speed. (Quadratic $\rightarrow$ Linear)
-\end{itemize}
- \pause
-\underline{Some considerations:}
-\begin{itemize}
-    \item Low-precision can be used
-    \item Sketched orthogonal projector $\mat{I} - \mat{u}(\mat{Su})^\dagger \mat{S}$ instead of orthogonal projector $\mat{I}-\vec{uu}^\top$.
-    \item sGMRES with truncated Arnoldi can be used; {\footnotesize Nakatsukasa, Tropp (2024)}
-    \item Replace $\mat{A}$ by a preconditioner $\mat{K}$:
+ 
+  \textbf{Input:} $\mat{A}$, target shift $\sigma$,
+  \only<1-2>{initial vector $\vec{v}_1$}%
+  \only<3->{\bl{initial block $\mat{V}_0\in\R^{n\times b}$}}.
+ 
+  \begin{enumerate}
+ 
+    \item Build\only<2->{ \rr{sketched}} orthogonal subspace
+          \only<1>{$\mat{V}_k=[\vec{v}_1,\ldots,\vec{v}_k]$}
+          \only<2>{\rr{$\tilde{\mat{V}}_k=[\vec{v}_1,\ldots,\vec{v}_k]$}}
+          \only<2->{\rr{$(\mat{S\tilde{V}}_k)^\top\mat{S\tilde{V}}_k=\mat{I}$}}
+ 
+    \item Compute
+          \only<1>{Ritz pair $(\theta,\vec{u}=\mat{V}_k\vec{y})$}%
+          \only<2>{Ritz pair $(\rr{\tilde{\theta},\tilde{\vec{u}}=\tilde{\mat{V}}_k \tilde{\vec{y}}})$}
+          \only<3->{\bl{$(\tilde{\mat{\Theta}},\tilde{\mat{U}}=\tilde{\mat{V}}_k\tilde{\mat{Y}})$}}
+          by solving
+          \only<1>{$\mat{V}_k^\top\mat{A}\mat{V}_k\vec{y}=\theta\vec{y}$}%
+          \only<2>{\rr{$(\mat{S\tilde{V}}_k)^\top(\mat{SA}\tilde{\mat{V}}_k)\tilde{\vec{y}}
+                       =\tilde{\theta}\tilde{\vec{y}}$}}%
+          \only<3->{\rr{$(\mat{S\tilde{V}}_k)^\top(\mat{SA}\tilde{\mat{V}}_k)$}%
+                   \bl{$\tilde{\mat{Y}}=\tilde{\mat{Y}}\tilde{\mat{\Theta}}$}}
+ 
+    \item If\only<2->{ \rr{sketched}} res.\ satisfies
+          \only<1>{$\|\vec{r}\,(=\mat{A}\vec{u}-\theta\vec{u})\|
+                   \leq\mathrm{tol}$}%
+          \only<2>{\rr{$\|\mat{S}\mat{A}\tilde{\vec{u}}-\tilde{\theta}\mat{S}\tilde{\vec{u}}\|
+                       \leq\mathrm{tol}$}}%
+          \only<3->{\rr{$\|\mat{S}\mat{A}\tilde{\vec{u}}_i
+                       -\tilde{\theta}_i\mat{S}\tilde{\vec{u}}_i\|\leq\mathrm{tol}$}%
+                   \bl{, $i=1,\ldots,b$}},
+          accept
+          \only<1>{$\vec{u}$}%
+          \only<2>{\rr{$\tilde{\vec{u}}$}}%
+          \only<3->{\bl{$\tilde{\vec{u}}_i$}}
+ 
+    \item Solve\only<2->{ \rr{sketched}} correction eq.\ approximately:
     \begin{equation*}
-    (\mat{I}-\vec{uu}^\top)(\mat{K}-\theta \mat{I})(\mat{I}-\vec{uu}^\top)\vec{t} = -\vec{r}
-\end{equation*}
-\end{itemize}
-\end{frame}
-
-
-% ===== LOBPCG: Algorithm, Theory, Mixed Precision, Randomization =====
-
-% --- Problem + search subspace ---
-\begin{frame}{LOBPCG}
-\textbf{Aim:} Solve Generalized Hermition EVP: 
-\begin{equation*}
-    \mat{AV} = \mat{B V}\mat{\Lambda}, \quad \mat{A},\mat{B} \text{ Hermitian}, \,\,\,\mat{B} \succ 0
-\end{equation*}
-\pause
-At each iteration finds, locally optimal subspace:
-\begin{equation*}
-    \mathcal{S}_k \;=\; \mathrm{span}\{\,\mat{V}_k,\; \mat{W}_k,\; \mat{V}_{k-1}\,\}, \,\,\, \mat{R}_k := \mat{A V}_k - \mat{B V}_k \mat{\Theta}_k, \,\,\, \mat{W}_k := \mat{K R}_k
-\end{equation*} with Ritz pairs $(\mat{\Theta}_k,\mat{V}_k)$ and precond. $\mat{K}$. \pause Then takes locally optimal step: $\mat{V}_{k+1}$ is a $\mat{B}$-orthonormal Ritz block minimizing the Rayleigh quotient over $\mathcal{S}_k$. ($(3b)\!\times\! (3b)$ Rayleigh-Ritz solve, block size $b$) \\
-\vspace{0.5em}
-\pause
-\textbf{\underline{Comments:}}
-\begin{itemize}
-    \item Preconditioned Eigensolvers; {\footnotesize Neymeyr (2001); Knyazaev (2003)}
-    \item Local Optimality: $\mat{V}_{k+1}$ minimizes $\operatorname{trace}(\mat{V}^\top \mat{A V})$ over
-$\{\mat{V}\in\mathcal{S}_k : \mat{V}^\top \mat{B V} = \mat{I}\}$ $\Rightarrow$ monotone Ritz values
-    \item Weak theory. Local convergence to some eigenpair at linear rate.
-    \item Works very well in practice.
-    \item Hard/soft lock converged Ritz pairs.
-\end{itemize}
-\end{frame}
-
-% % --- Algorithm (three-block) ---
-% \begin{frame}{LOBPCG algorithm}
-% \small
-% \textbf{Input:} $\mat{A},\mat{B}$ with $\mat{B}\succ 0$, preconditioner $\mat{K}$, initial $\mat{V}_0$ with $\mat{V}_0^\top \mat{B V}_0=\mat{I}$, set $\mat{P}_0=\emptyset$.
-
-% For $k=0,1,2,\dots$ until convergence:
-% \begin{enumerate}
-%   \item Residuals: $\mat{R}_k = \mat{A V}_k - \mat{B V}_k \mat{\Theta}_k$, \; $\mat{\Theta}_k = \mat{V}_k^\top \mat{A V}_k$.
-%   \item Precondition: $\mat{W}_k = \mat{K R}_k$.
-%   \item Build basis $\mat{V}_k = [\,\mat{X}_k\ \ \mat{W}_k\ \ \mat{P}_k\,]$; $B$-orthonormalize columns
-%   \item Rayleigh--Ritz in $\mathcal{S}_k$: solve small $(3p)\!\times\!(3p)$ EVP
-%   \[
-%     \mat{V}_k^\top \mat{A V}_k Z = M Z \Lambda_{k+1},\quad
-%     K=V_k^\top A V_k,\ \ M=V_k^\top B V_k.
-%   \]
-%   \item Extract: $X_{k+1} = V_k Z_1$, \; $P_{k+1} = V_k Z_2$ (the Ritz complement block), enforce $X_{k+1}^\top B X_{k+1}=I$.
-%   \item Lock converged columns (hard/soft) and continue.
-% \end{enumerate}
-% \end{frame}
-
-% --- Mixed precision policy (aligned with Kressner--Ma--Shao) ---
-\begin{frame}{Mixed precision in LOBPCG}
-\textbf{Fast path in lower precision:}
-\begin{itemize}
-  \item Apply preconditioner: $\mat{W}_k = \mat{K R}_k$ (often inherently low-accuracy).
-\end{itemize}
-\pause
-\textbf{Accuracy-critical in high precision:}
-\begin{itemize}
-  \item Small $(3b)\!\times\!(3b)$ Rayleigh--Ritz solve.
-  \item $\mat{B}$-orthonormalization of $\mat{V}_{k+1}$; residual norms for locking/deflation.
-\end{itemize}
-\pause
-\textbf{Outcome:} preserves accuracy and convergence while typically yielding $1.4$–$2\times$ speedups on modern CPU/GPU systems; Kressner, Ma, Shao (2023).
-\pause
-\begin{block}{Randomization?}
-    \begin{itemize}
-    \item For standard EVP ($\mat{B} = \mat{I}$), sketched inner product as before.
-    \item For generalized EVP, tricky as the obvious way is 
+      \only<1>{%
+        (\mat{I}-\vec{u}\vec{u}^\top)(\mat{A}-\theta\mat{I})
+        (\mat{I}-\vec{u}\vec{u}^\top)\vec{t}=-\vec{r},
+        \quad\vec{t}\perp\vec{u}}%
+      \only<2>{\rr{%
+        (\mat{I}-\tilde{\vec{u}}(\mat{S}\tilde{\vec{u}})^\top\mat{S})(\mat{A}-\tilde{\theta}\mat{I})
+        (\mat{I}-\tilde{\vec{u}}(\mat{S}\tilde{\vec{u}})^\top\mat{S})\tilde{\vec{t}}=-\tilde{\vec{r}},
+        \;\tilde{\vec{t}}\perp_{\!\mat{S}}\tilde{\vec{u}}}}%
+      \only<3->{%
+        \bl{(\mat{I}-\tilde{\vec{U}}(\mat{S}\tilde{\vec{U}})^\top\mat{S})
+            (\mat{A}-\tilde{\theta}_i\mat{I})
+            (\mat{I}-\tilde{\vec{U}}(\mat{S}\tilde{\vec{U}})^\top\mat{S})}%
+        \bl{\tilde{\vec{t}}_i=-\tilde{\vec{r}}_i,}
+        \;\bl{\forall i,\;\vec{t}_i\perp_{\!\mat{S}}\mat{U}}}
+    \end{equation*}
+ 
+    \item \only<1>{Orthogonalize $\vec{t}$ against $\mat{V}_k$}%
+          \only<2>{\rr{Sketch-orthogonalize $\tilde{\vec{t}}$}}
+          \only<3->{\rr{Sketch-orthogonalize} \bl{$\tilde{\vec{T}}$}}
+          \only<2->{\rr{against $\tilde{\mat{V}}_k$}} and normalize:
     \begin{equation*}
-        \langle \vec{x},\vec{y} \rangle_{\mat{B}} = \langle \mat{B}^{1/2} \vec{x}, \mat{B}^{1/2}\vec{y} \rangle \Rightarrow  \langle \mat{S}\mat{B}^{1/2} \vec{x}, \mat{S}\mat{B}^{1/2}\vec{y} \rangle, 
-    \end{equation*} which requires cholesky/square root of $\mat{B}$. We can try
-        $\langle \mat{S} \vec{x}, \mat{SB}\vec{y} \rangle$, but disrespects symmetry in the problem.
-\end{itemize}
-\end{block} 
+      \only<1>{%
+        \vec{t}\gets\vec{t}-\mat{V}_k\mat{V}_k^\top\vec{t},\quad
+        \vec{t}\gets\vec{t}/\|\vec{t}\|_2}%
+      \only<2>{\rr{%
+        \tilde{\vec{t}}\gets\tilde{\vec{t}}-\tilde{\mat{V}}_k(\mat{S\tilde{V}}_k)^\top\mat{S}\tilde{\vec{t}},\quad
+        \tilde{\vec{t}}\gets\tilde{\vec{t}}/\|\mat{S}\tilde{\vec{t}}\|_2}}%
+      \only<3->{%
+        \rr{\tilde{\mat{T}}\gets\tilde{\mat{T}}-\tilde{\mat{V}}_k(\mat{S\tilde{V}}_k)^\top\mat{S}\tilde{\mat{T}},}
+        \quad\bl{\tilde{\mat{T}}\gets\mathrm{sketch\_orth}(\tilde{\mat{T}})}}
+    \end{equation*}
+ 
+    \item Expand:
+          $\only<1>{\mat{V}_{k+1}=\bigl[\mat{V}_k,\;
+           \vec{t}\bigr]}
+           \only<2>{\rr{\tilde{\mat{V}}_{k+1}=\bigl[\tilde{\mat{V}}_k,\;\tilde{\vec{t}}\bigr]}}
+           \only<3->{\bl{\tilde{\mat{V}}_{k+1}=\bigl[\tilde{\mat{V}}_k,\;\tilde{\mat{T}}\bigr]}}$.
+ 
+    \item Restart if $k$ too large.
+ 
+  \end{enumerate}
+    \only<4>{ 
+    \begin{itemize}
+        \item block size: $b = k$ (OR $b = k + 2$ for robustness)
+        \item restart sizes: $[2k, 5k]$ (OR $[3k, 6k]$ for robustness)
+    \end{itemize}  
+    }
 \end{frame}
 
-% % --- Comparison slide: IRA vs JD vs LOBPCG ---
-% \begin{frame}{Comparison of IRA, JD, and LOBPCG}
-% \footnotesize
-% \begin{tabular}{@{}p{2cm}p{3cm}p{3cm}p{3cm}@{}}
-% \toprule
-%  & \textbf{IRA} & \textbf{Jacobi--Davidson (JD)} & \textbf{LOBPCG} \\
-% \midrule
-% \textbf{Matrix type} & General & General; strong for interior/clustered eigenvalues & Hermitian / SPD \\
-% \textbf{Search subspace} & Krylov basis, restarted & Ritz vector + correction ($u+t$) & Block $\{X_k,W_k,P_k\}$ \\
-% \textbf{Restarting} & Implicit polynomial filtering & Thick restart, locking & Built-in via block dimension \\
-% \textbf{Preconditioning} & Not typical & Crucial in correction eqn & Crucial ($W_k=T R_k$) \\
-% \textbf{Orthogonality bottleneck} & Arnoldi GS ($m$ dot prods/step) & GS of $t$ vs subspace & Block $B$-orthogonalization \\
-% \textbf{Randomization} & rIRA: sketch Gram matrix & Sketched GS for correction updates & Sketched $B$-GS for blocks \\
-% \textbf{Mixed precision} & Matvecs in FP32; RR in FP64 & Inner correction in FP32; outer RR/residual in FP64 & Preconditioner in FP32; RR/orth. in FP64 \\
-% \textbf{Best use} & Extremal eigenvalues, general $A$ & Interior/clustered eigenpairs; flexible preconditioning & Many smallest eigenpairs; clusters in Hermitian/SPD \\
-% \bottomrule
-% \end{tabular}
-% \end{frame}
 
 
 
-% % --- Sketched orthogonality (correct projectors) ---
-% \begin{frame}{Sketched orthogonality for LOBPCG (Petrov--Galerkin view)}
-% \small
-% Define the \emph{sketched $B$-inner product}
-% \[
-% \langle x,y\rangle_{S,B} := \langle S B^{1/2}x,\ S B^{1/2}y\rangle, \qquad S\in\mathbb{R}^{s\times n},\ s\ll n.
-% \]
-% With $V_k=[X_k\ W_k\ P_k]$, the Petrov--Galerkin projector onto $\mathrm{range}(V_k)$ is
-% \[
-% P_{S,B} \;=\; V_k \big(V_k^\top B^{1/2} S^\top S\, B^{1/2} V_k\big)^{-1} V_k^\top B^{1/2} S^\top S\, B^{1/2}.
-% \]
-% \textbf{Use in practice:}
-% \begin{itemize}
-%   \item Replace $V_k^\top B V_k$ by $(S B^{1/2}V_k)^\top (S B^{1/2}V_k)$ in orthogonalization/LS steps.
-%   \item One global reduction per block (compute $S B^{1/2}V_k$); dense $s\times(3p)$ BLAS-3 on GPU.
-%   \item JL guarantees preserve subspace geometry up to $O(\varepsilon)$; occasional FP64 $B$-reorthogonalization controls drift.
-% \end{itemize}
-% \end{frame}
-
-% % --- Communication & stability (concise) ---
-% \begin{frame}{Communication \& stability (concise)}
-% \small
-% \textbf{Communication:} Classical $B$-GS uses many block inner products $\Rightarrow$ multiple reductions.
-% Sketched GS: precompute $Y = S B^{1/2}V_k$; per step need only one reduction for forming $Y$.
-
-% \textbf{Stability:} With sketch in FP32,
-% \[
-% \|V_k^\top B V_k - I\| \;\lesssim\; c_1 u_{32} + c_2 \varepsilon, \qquad
-% \text{cleanup in FP64} \Rightarrow O(u_{64}).
-% \]
-% Choose $s \approx 2\!-\!4 \times (3p)$; cleanup every few iterations.
-% \end{frame}
-
-% % --- Comparison + DFT ---
-% \begin{frame}{Comparison (qualitative)}
-% \begin{tabular}{@{}lccc@{}}
-% \toprule
-%  & IRA & JD & LOBPCG \\
-% \midrule
-% Matrix type & general & general (interior) & Hermitian/SPD \\
-% Core idea & Krylov+restart & RR+correction eqn & Block CG+RR \\
-% Best use & extremal & interior/clusters & many lowest eigenpairs \\
-% Restart/locking & implicit restart & thick+locking & block lock \\
-% Preconditioning? & $\times$ & $\checkmark$ & $\checkmark$ \\
-% \bottomrule
-% \end{tabular}
-% \end{frame}
-
-% --- Conclusion slide ---
-\begin{frame}{Conclusions}
-\begin{itemize}
-  \item \textbf{Randomization} (sketched orthogonality):
-    \begin{itemize}
-      \item Reduces communication bottlenecks %($\mat{V}^\top \vec{t}$ vs $(\mat{SV})^\top \mat{St}$).
-      \item Preserves subspace geometry up to distortion $O(\eta)$.
-      \item Achieves speedups with little accuracy loss.
-    \end{itemize}
-    \pause
-  \item \textbf{Mixed precision}:
-    \begin{itemize}
-      \item Natural for sketching, inexact inner solves, and preconditioning.
-      \item Critical steps (Rayleigh--Ritz, residual norms) remain in higher precision.
-      \item Achieves speedups with accuracy guarantees.
-    \end{itemize}
-\end{itemize}
-\pause
-\vspace{2mm}
-\centering
-Randomization + mixed precision can be incorporated into existing eigensolvers to provide mathematically justified, hardware-aware strategies that make eigensolvers scalable.
-\end{frame}
-
-% % --- Classical vs Sketched Orthogonalization (communication focus) ---
-% \begin{frame}{Classical vs.\ Sketched Orthogonalization}
-% \small
-% \textbf{Classical Gram--Schmidt (new $t$ vs.\ $V=[v_1,\ldots,v_m]$):}
-% \[
-% h = V^\top t = \begin{bmatrix} v_1^\top t \\ \vdots \\ v_m^\top t \end{bmatrix},
-% \]
-% \begin{itemize}
-%   \item Requires $m$ inner products.
-%   \item In parallel: $\mathbf{m}$ global reductions per new vector.
-% \end{itemize}
-
-% \textbf{Sketched Gram--Schmidt:}
-% \[
-% Y = S V \in \mathbb{R}^{s\times m},\quad y_t = S t,\quad h = Y^\top y_t.
-% \]
-% \begin{itemize}
-%   \item Only $1$ global reduction to form $y_t=S t$.
-%   \item Rest = local BLAS-3 with small $s\times m$ matrices.
-%   \item Subspace geometry preserved up to $O(\varepsilon)$ (JL lemma).
-% \end{itemize}
-
-% \vspace{2mm}
-% \centering
-% \textbf{Scalability win:} \; $m$ reductions $\;\longrightarrow\;$ $1$ reduction.
-% \end{frame}
-
-% % --- Focused conclusion: randomization + mixed precision ---
-% \begin{frame}{Conclusions: Randomization \& Mixed Precision}
-% \small
-% \textbf{Randomization (sketched orthogonality):}
-% \begin{itemize}
-%   \item Removes communication bottlenecks: 1 reduction per step instead of $m$.
-%   \item Preserves orthogonality and Ritz properties within $O(\varepsilon)$.
-%   \item Block-friendly and GPU-friendly (dense $s\times m$ kernels).
-% \end{itemize}
-
-% \textbf{Mixed precision:}
-% \begin{itemize}
-%   \item Inner solves, preconditioning, and sketch products in FP32/TF32.
-%   \item Critical steps (Rayleigh--Ritz, residual norms, cleanup) in FP64.
-%   \item Achieves significant speedups with accuracy guarantees.
-% \end{itemize}
-
-% \vspace{2mm}
-% \centering
-% \textbf{Takeaway:} Randomization and mixed precision are mathematically sound,\\
-% hardware-aware strategies that make eigenvalue solvers scalable.
-% \end{frame}
-
-
-% \begin{frame}{Conclusion}
-% \begin{itemize}
-%   \item \textbf{Randomization}: JL guarantees, removes comms bottlenecks, GPU-friendly.
-%   \item \textbf{Inexact low-precision solves}: sufficient; JD convergence robust.
-%   \item \textbf{Block variants}: essential for clustered spectra; efficient on modern hardware.
-% \end{itemize}
-
-% Generalized Eigenvalue extension - difficult because of loss of symmetry.
-% Mixed Precision
-% Randomization
-% Theory
-% Problem, Applications
-% \end{frame}
-
-% % --- References slide ---
-% \begin{frame}{Key references}
-% \small
-% \begin{itemize}
-%   \item Sleijpen \& Van der Vorst (1996): Jacobi--Davidson.
-%   \item Knyazev (2001): LOBPCG.
-%   \item Balabanov \& Grigori (2022): randomized GS.
-%   \item de Damas \& Grigori (2024): randomized IRA.
-%   \item Kressner--Ma--Shao (2023): mixed-precision LOBPCG.
-%   \item Saad (2011): \emph{Numerical Methods for Large Eigenvalue Problems}.
-%   \item Stewart \& Sun (1990): \emph{Matrix Perturbation Theory}.
-% \end{itemize}
-% \end{frame}
 \end{document}
