@@ -1,6 +1,29 @@
 # sketch.jl
 using Random, LinearAlgebra, SparseArrays, FFTW
 
+# ── Sketch operator types ──────────────────────────────────────────────────
+# Wrapping the sketch matrix in a struct lets us define mul!(Y, Theta, X),
+# which writes the sketch in-place without allocating a temporary.
+
+struct MatrixSketchOp{M<:AbstractMatrix}
+    S::M
+end
+(op::MatrixSketchOp)(X) = op.S * X
+LinearAlgebra.mul!(Y::AbstractVecOrMat, op::MatrixSketchOp, X::AbstractVecOrMat) = mul!(Y, op.S, X)
+
+struct SRTTSketchOp
+    diag_sign::Vector
+    IX::Vector{Int}
+    field::Symbol
+    scale::Float64
+end
+(op::SRTTSketchOp)(X) = op.scale * SRTT(op.diag_sign, op.IX, X, op.field)
+# FFT inside SRTT always allocates; mul! avoids the outer alloc but not the FFT temp
+function LinearAlgebra.mul!(Y::AbstractVecOrMat, op::SRTTSketchOp, X::AbstractVecOrMat)
+    Y .= op(X)
+    return Y
+end
+
 """
     sketch(n::Integer, s::Integer, type::AbstractString; seed::Union{Nothing,Integer}=nothing)
 
@@ -19,42 +42,34 @@ function sketch(n::Integer, s::Integer, type::AbstractString; seed::Union{Nothin
 
     t = lowercase(type)
     if t == "real_gaussian"
-        # S ~ N(0, 1/s), real
         S = randn(rng, s, n) / sqrt(s)
-        SS = (X -> S * X)
+        return MatrixSketchOp(S)
 
     elseif t == "complex_gaussian"
-        # E|S_ij|^2 = 1/s (split real/imag equally)
         S = randn(rng, s, n) / sqrt(2s) .+ im * randn(rng, s, n) / sqrt(2s)
-        SS = (X -> S * X)
+        return MatrixSketchOp(S)
 
     elseif t == "complex_srtt"
-        # Subsampled randomized trig transform with complex phases + FFT
-        IX = randperm(rng, n)[1:s]                      # choose s rows
-        diag_sign = exp.(im .* (2π) .* rand(rng, n))    # unit-modulus phases
-        SS = (X -> sqrt(n/s) * SRTT(diag_sign, IX, X, :complex))
+        IX = randperm(rng, n)[1:s]
+        diag_sign = exp.(im .* (2π) .* rand(rng, n))
+        return SRTTSketchOp(diag_sign, IX, :complex, sqrt(n/s))
 
     elseif t == "real_srtt"
         IX = randperm(rng, n)[1:s]
-        diag_sign = rand(rng, (-1.0, 1.0), n)           # Rademacher signs
-        SS = (X -> sqrt(n/s) * SRTT(diag_sign, IX, X, :real))
+        diag_sign = rand(rng, (-1.0, 1.0), n)
+        return SRTTSketchOp(diag_sign, IX, :real, sqrt(n/s))
 
     elseif t == "sparsesign"
         ζ = 8
-        S = sparsesign(s, n, ζ; rng)
-        SS = (X -> S * X)
+        return MatrixSketchOp(sparsesign(s, n, ζ; rng))
 
     elseif t == "sparsestack"
-        # Blocked one-per-block construction (MEX translation)
         ζ = 4
-        S = sparsestack(s, n, ζ; rng)
-        SS = (X -> S * X)
+        return MatrixSketchOp(sparsestack(s, n, ζ; rng))
 
     else
         throw(ArgumentError("Unknown sketch.type \"$type\""))
     end
-
-    return SS
 end
 
 # Subsampled Random Trig Transform (SRFT/SRDT variants)

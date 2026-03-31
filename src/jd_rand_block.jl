@@ -84,6 +84,18 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         lambda  = zeros(Float64, k)
         rnorms  = zeros(Float64, kb)
         theta_b = zeros(Float64, kb)   # Ritz values for active pairs
+        # Scratch buffers for in-place orthogonalization in _jdrb_expand!
+        # T_corr_buf/ST_corr_buf hold the accepted correction vectors after orth
+        # SV_scratch is used as temporary sketch storage during both orth phases
+        # H_buf: projection coefficients in theta_orth_block_against! (jmax×kb)
+        # h_work: per-column projection coefficients in theta_orth_block! (jmax)
+        T_corr_buf  = zeros(T, n, kb)
+        ST_corr_buf = zeros(T, s, kb)
+        SV_scratch  = zeros(T, s, kb)
+        H_buf       = zeros(T, jmax, kb)
+        v_work      = zeros(T, n)
+        sv_work     = zeros(T, s)
+        h_work      = zeros(T, kb)
     end
 
     nconv    = 0
@@ -195,10 +207,11 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
             @views rb[:, 1:nb] .-= ub[:, 1:nb] .* theta_b[1:nb]'
         end
 
-        # Sketch residuals for Θ-norm computation
+        # Sketch residuals for Θ-norm computation — reuse sv_work to avoid per-column alloc
         @timing "jdsym_rand_block: sketch" begin
             for ib in 1:nb
-                rnorms[ib] = norm(Theta(view(rb, :, ib)))   # Θ-norm replaces standard norm
+                mul!(sv_work, Theta, view(rb, :, ib))
+                rnorms[ib] = norm(sv_work)
             end
         end
 
@@ -255,7 +268,8 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
         # Expand subspace: Θ-orthogonalize corrections against V, update Mc in-place.
         # Mirrors _jdb_expand! but with sketched orthogonalization and Mc instead of Hc.
-        nact = _jdrb_expand!(V_a, SV_a, W_a, SW_a, Mc, rb, j, nb, jmax, A, Theta, orth_method)
+        nact = _jdrb_expand!(V_a, SV_a, W_a, SW_a, Mc, rb, j, nb, jmax, A, Theta, orth_method,
+                             T_corr_buf, ST_corr_buf, SV_scratch, H_buf, v_work, sv_work, h_work)
         nmv += nact
         j   += nact
     end
@@ -302,44 +316,44 @@ Then compute A * new columns, sketch, and update Mc[:,j+1:j+nact] and Mc[j+1:j+n
 
 Returns the number of accepted vectors `nact`.
 """
-function _jdrb_expand!(V_a, SV_a, W_a, SW_a, Mc, rb, j, nb, jmax, A, Theta, orth_method)
+function _jdrb_expand!(V_a, SV_a, W_a, SW_a, Mc, rb, j, nb, jmax, A, Theta, orth_method,
+                       T_corr_buf, ST_corr_buf, SV_scratch, H_buf, v_work, sv_work, h_work)
     V  = view(V_a,  :, 1:j)
     SV = view(SV_a, :, 1:j)
 
-    # Phase 1: Θ-orthogonalize all nb corrections against existing V[:,1:j]
-    @timing "jdsym_rand_block: ortho" T_corr = theta_orth_block_against(view(rb, :, 1:nb), V, SV, Theta, orth_method)
-
-    # Phase 2: Θ-orthonormalize among the correction vectors; drop near-zero columns
-    @timing "jdsym_rand_block: ortho" T_corr, ST_corr = theta_orth_block(T_corr, Theta, orth_method)
-
-    nact = size(T_corr, 2)
-    nact == 0 && return 0
-    if j + nact > jmax
-        nact    = jmax - j
-        T_corr  = T_corr[:,  1:nact]
-        ST_corr = ST_corr[:, 1:nact]
+    # Phase 1: Θ-orthogonalize all nb corrections against V[:,1:j] — in-place, no alloc
+    @timing "jdsym_rand_block: ortho" begin
+        rbb = view(rb, :, 1:nb)
+        theta_orth_block_against!(rbb, V, SV, Theta, orth_method, SV_scratch, H_buf)
     end
+
+    # Phase 2: Θ-orthonormalize among the nb corrections into pre-allocated buffers
+    @timing "jdsym_rand_block: ortho" begin
+        nact = theta_orth_block!(T_corr_buf, ST_corr_buf, view(rb, :, 1:nb), Theta,
+                                 orth_method, SV_scratch, v_work, sv_work, h_work)
+    end
+
     nact == 0 && return 0
+    nact = min(nact, jmax - j)
+    nact == 0 && return 0
+
+    T_corr  = view(T_corr_buf,  :, 1:nact)
+    ST_corr = view(ST_corr_buf, :, 1:nact)
 
     # Compute A * new basis vectors and their sketches
     @timing "jdsym_rand_block: matvec" mul!(view(W_a, :, j+1:j+nact), A, T_corr)
     @timing "jdsym_rand_block: sketch" begin
-        SW_a[:, j+1:j+nact] .= Theta(view(W_a, :, j+1:j+nact))
+        mul!(view(SW_a, :, j+1:j+nact), Theta, view(W_a, :, j+1:j+nact))
         SV_a[:, j+1:j+nact] .= ST_corr
     end
 
     # Update Mc in-place (mirrors jdsym_block's Hc column+row update, BLAS-3).
-    # Mc[1:j+nact, 1:j+nact] = [SV_old  ST_corr]' * [SW_old  SW_new]
-    # Only the new block columns/rows need to be filled; top-left is already up to date.
     @timing "jdsym_rand_block: overlap" begin
         SW_new = view(SW_a, :, j+1:j+nact)
         SW_old = view(SW_a, :, 1:j)
-        # New columns: Mc[1:j, j+1:j+nact] = SV_old' * SW_new
-        mul!(view(Mc, 1:j,      j+1:j+nact), SV',     SW_new)
-        # New rows:    Mc[j+1:j+nact, 1:j]  = ST_corr' * SW_old
-        mul!(view(Mc, j+1:j+nact, 1:j),      ST_corr', SW_old)
-        # Bottom-right corner: Mc[j+1:j+nact, j+1:j+nact] = ST_corr' * SW_new
-        mul!(view(Mc, j+1:j+nact, j+1:j+nact), ST_corr', SW_new)
+        mul!(view(Mc, 1:j,          j+1:j+nact), SV',      SW_new)
+        mul!(view(Mc, j+1:j+nact,   1:j),        ST_corr', SW_old)
+        mul!(view(Mc, j+1:j+nact,   j+1:j+nact), ST_corr', SW_new)
     end
 
     # Write T_corr into V buffer

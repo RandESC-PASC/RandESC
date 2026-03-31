@@ -174,6 +174,85 @@ function theta_orth_against(v, V, SV, Theta, method::Symbol)
 end
 
 
+"""
+    theta_orth_block_against!(V0, Q, SQ, Theta, method, SV_buf, H_buf)
+
+In-place version of `theta_orth_block_against`. Modifies `V0` in-place.
+`SV_buf` (s × size(V0,2)) and `H_buf` (size(Q,2) × size(V0,2)) are pre-allocated scratch.
+
+Since Q is Θ-orthonormal, SQ has orthonormal ℓ₂ columns (SQ'*SQ = I), so projection
+coefficients are H = SQ'*SV for all methods — `\\` and `'*` are equivalent here, but
+`mul!` avoids the QR factorization that `\\` would trigger internally.
+The method argument controls the number of passes only.
+"""
+function theta_orth_block_against!(V0::AbstractMatrix, Q, SQ, Theta, method::Symbol,
+                                   SV_buf::AbstractMatrix, H_buf::AbstractMatrix)
+    isempty(Q) && return V0
+    nb = size(V0, 2)
+    nq = size(SQ, 2)
+    SV = view(SV_buf, :, 1:nb)
+    H  = view(H_buf,  1:nq, 1:nb)
+    mul!(SV, Theta, V0)           # in-place sketch, no allocation
+    mul!(H,  SQ', SV)             # projection coefficients, no allocation
+    mul!(V0, Q,   H, -1, 1)      # V0 -= Q*H, in-place
+    if method == :rcgs2
+        mul!(SV, Theta, V0)       # re-sketch in-place
+        mul!(H,  SQ', SV)
+        mul!(V0, Q,   H, -1, 1)
+    end
+    return V0
+end
+
+
+"""
+    theta_orth_block!(V_out, SV_out, V0, Theta, method, SV_buf, v_work, sv_work, h_work) -> nact
+
+In-place version of `theta_orth_block`. Writes accepted vectors into the first `nact`
+columns of the pre-allocated `V_out` (n×p) and `SV_out` (s×p).
+`SV_buf` (s×p), `v_work` (n), `sv_work` (s), and `h_work` (p) are scratch buffers.
+Returns `nact`, the number of accepted (non-degenerate) vectors.
+
+Since each accepted column is Θ-normalized, SVc has orthonormal ℓ₂ columns, so
+h = SVc'*sv_work is exact (same result as SVc\\sv_work but without the QR allocation).
+The method argument controls the number of orthogonalization passes.
+"""
+function theta_orth_block!(V_out::AbstractMatrix, SV_out::AbstractMatrix,
+                           V0::AbstractMatrix, Theta, method::Symbol,
+                           SV_buf::AbstractMatrix, v_work::AbstractVector,
+                           sv_work::AbstractVector, h_work::AbstractVector;
+                           tol::Float64=1e-14)
+    n, p = size(V0)
+    mul!(view(SV_buf, :, 1:p), Theta, V0)   # sketch entire input block in-place
+    ncols = 0
+    npass = (method == :rcgs2) ? 2 : 1      # :rgs and :rcgs both use 1 pass
+
+    for i in 1:p
+        copyto!(v_work,  view(V0,     :, i))
+        copyto!(sv_work, view(SV_buf, :, i))
+
+        if ncols > 0
+            Vc  = view(V_out,  :, 1:ncols)
+            SVc = view(SV_out, :, 1:ncols)
+            h   = view(h_work, 1:ncols)
+            for _ in 1:npass
+                mul!(h,       SVc', sv_work)  # no allocation: SVc has orthonormal columns
+                mul!(v_work,  Vc,   h, -1, 1)
+                mul!(sv_work, SVc,  h, -1, 1)
+            end
+        end
+
+        nv = norm(sv_work)
+        if nv > tol
+            ncols += 1
+            @views V_out[:,  ncols] .= v_work  ./ nv
+            @views SV_out[:, ncols] .= sv_work ./ nv
+        end
+    end
+
+    return ncols
+end
+
+
 function solve_correction_sketched(Q, SQ, Theta, r, M, orth_method::Symbol, precond_preparator, u)
     """Olsen-style correction with Θ inner product"""
     t = copy(r)
