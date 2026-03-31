@@ -57,6 +57,9 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     jmax = min(n, 4 * kb)             # maximal search space dimension
     s    = sketch_size < 0 ? max(4jmax, 4k) : sketch_size
 
+    println("n: $n, k: $k, s: $s")
+
+
     T = isnothing(v0) ? ComplexF64 : eltype(v0)
 
     Theta = sketch(n, s, sketch_type)
