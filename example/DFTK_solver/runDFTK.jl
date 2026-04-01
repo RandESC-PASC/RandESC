@@ -10,6 +10,7 @@ using Printf
 
 # precondprep!(P, X) = P
 ecut = 30
+useRandomization = false
 
 function my_eig_solver(A, X0; prec = nothing, maxiter, tol, kwargs...)
 
@@ -71,7 +72,7 @@ function my_eig_solver(A, X0; prec = nothing, maxiter, tol, kwargs...)
         println("done writing")
     end
 
-    return randESCSolver(A, size(X0, 1), size(X0, 2); X0=X0, preconditioner=prec, maxiter=maxiter, tol=tol, useRandomization=false, method="JD_BLOCK", cleanEigenvectors=false, verbose=false, precond_preparator=precond_preparation, normA=ecut)
+    return randESCSolver(A, size(X0, 1), size(X0, 2); X0=X0, preconditioner=prec, maxiter=maxiter, tol=tol, useRandomization=useRandomization, method="JD_BLOCK", cleanEigenvectors=false, verbose=false, precond_preparator=precond_preparation, normA=ecut)
 end
 
 
@@ -107,38 +108,40 @@ positionvecs = [ invlat * positions[:, i] for i in 1:nat]
 
 
 model = model_DFT(lattice, atom_psps, positionvecs; spin_polarization=:none, functionals=PBE(), temperature=0.01)
-badbasis = PlaneWaveBasis(model, Ecut=4,  kgrid=[1, 1, 1])
-println("starting bad basis")
-compres = self_consistent_field(badbasis)
-compres = self_consistent_field(badbasis, eigensolver = my_eig_solver);
-println("starting good basis")
+badbasis = PlaneWaveBasis(model, Ecut=4,  kgrid=[2, 2, 2])
+compres = self_consistent_field(badbasis, maxiter=1)
+useRandomization = false
+compres = self_consistent_field(badbasis, maxiter=1, eigensolver = my_eig_solver);
+useRandomization = true
+compres = self_consistent_field(badbasis, maxiter=1, eigensolver = my_eig_solver);
+
+println("\n\n" * "*"^80 * "\n\n")
+println("LOBPCG\n")
+
 basis = PlaneWaveBasis(model; Ecut=ecut, kgrid=[2, 2, 2])
 DFTK.reset_timer!(DFTK.timer)
 RandESC.reset_timer!(RandESC.timer)
-println("why am i so slow?")
 scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
-# scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
 println(DFTK.timer)
 println(RandESC.timer)
 
 
-# # Print occupations
-# println("Occupations of Kohn-Sham states:")
-# for (i, occ) in enumerate(scfres.occupation)
-#     println("State $i: occupation = $occ")
-# end
-
+println("\n\n" * "*"^80 * "\n\n")
+println("JD\n")
 
 DFTK.reset_timer!(DFTK.timer)
 RandESC.reset_timer!(RandESC.timer)
-# scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);
+useRandomization = false
 scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
 println(DFTK.timer)
 println(RandESC.timer)
 
+println("\n\n" * "*"^80 * "\n\n")
+println("rand-JD\n")
 
-# # Print occupations
-# println("Occupations of Kohn-Sham states:")
-# for (i, occ) in enumerate(scfres.occupation)
-#     println("State $i: occupation = $occ")
-# end
+DFTK.reset_timer!(DFTK.timer)
+RandESC.reset_timer!(RandESC.timer)
+useRandomization = true
+scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
+println(DFTK.timer)
+println(RandESC.timer)
