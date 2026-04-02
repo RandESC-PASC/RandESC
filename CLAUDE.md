@@ -23,9 +23,10 @@ Tests generate random symmetric matrices (n=50, k=7) and verify all solvers agai
 - `src/LOBPCG.jl` / `src/LOBPCG_sketch.jl` — LOBPCG variants (with locking, soft locking, sketched)
 - `src/jd.jl` / `src/jd_rand.jl` — Jacobi-Davidson (standard / randomized)
 - `src/jd_block.jl` - blocked jacobi davidson implementation with soft locking that works very well.
+- `src/jd_rand_block.jl` — blocked jacobi davidson with sketched (Θ-norm) orthogonalization; mirrors `jd_block.jl` but uses RGS instead of MGS.
 - `src/sketched_to_fully.jl` — post-processing to recover clean eigenvectors from sketched results
 - `src/randomization_utils.jl` utils for randomization, most useful for jacobi davidson flavours
-- `latex/presentation.tex` a tex file containing theory for eigensolvers and randomization.
+- `latex/presentation.tex` a tex file containing theory for eigensolvers and randomization. the theory of jacobi davidson and randomized jacobi davidson ist explained in detail in here
 - `test/tests.jl` — test suite using `@testset`
 
 ## Code Conventions
@@ -50,6 +51,12 @@ Tests generate random symmetric matrices (n=50, k=7) and verify all solvers agai
 - **Ritz pairs**: Approximate eigenpairs from projecting onto a subspace.
 - **Orthogonalization methods**: MGS, MGS2/DGKS, CGS, CGS2, RGS (sketch-based).
 
+## Preferred Solvers
+
+- **`jdsym_block`** — recommended default for most problems. Blocked Jacobi-Davidson with soft locking and standard MGS orthogonalization.
+- **`jdsym_rand_block`** — recommended when orthogonalization is the bottleneck (large `n`). Same algorithm but with sketched (Θ-norm) RGS orthogonalization.
+- All other solvers (`ira`, `rand_ira`, `lobpcg_*`, `jdsym`, `jdsym_rand`) are either deprecated or superseded by the block variants above.
+
 ## Exported API
 
-`ira`, `rand_ira`, `lobpcg`, `lobpcg_lock`, `lobpcg_softlock`, `lobpcg_sketch_lock`, `jdsym`, `jdsym_rand`, `sketched_to_fully`, `randESCSolver`
+`ira`, `rand_ira`, `lobpcg`, `lobpcg_lock`, `lobpcg_softlock`, `lobpcg_sketch_lock`, `jdsym`, `jdsym_rand`, `jdsym_block`, `jdsym_rand_block`, `sketched_to_fully`, `randESCSolver`

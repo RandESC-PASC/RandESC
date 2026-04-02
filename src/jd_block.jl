@@ -4,45 +4,27 @@ using Printf
 """
     jdsym_block(A; k=5, kwargs...)
 
-Blocked Jacobi-Davidson for symmetric/Hermitian matrices (smallest eigenvalues).
-Direct translation of `cjdsym` from Quantum ESPRESSO (Phys. Rev. Research, 2025).
+Davidson eigensolver for symmetric/Hermitian matrices (smallest eigenvalues).
+Soft-locking: converged Ritz vectors stay in V; corrections are generated only
+for active pairs. nbuff=2 buffer pairs are kept beyond k. Search space restarts
+to jmin=2*(k+nbuff) vectors when full, and grows up to kmax=4*(k+nbuff).
 
-Computes `nblock` correction vectors per iteration for better BLAS-3 utilization.
-Uses double-MGS (MGS2) orthogonalization. No sketching.
+Arguments:
+- A: Hermitian matrix or operator
+- k: number of eigenpairs (default 5)
+- tol: residual norm convergence threshold (default 1e-8)
+- maxit: max iterations (default 100)
+- v0: initial vectors (n x m matrix, optional)
+- M: preconditioner, applied as M \\ r (optional)
+- precond_preparator: callback f(M, X) to refresh preconditioner (optional)
+- disp: print iteration info
 
-Algorithm outline per iteration:
-  1. Diagonalize projected matrix Hc → (ew, Vc)
-  2. Restart subspace if j + nb > kmax  (keep best jmin Ritz vectors)
-  3. Compute nb Ritz vectors and residuals
-  4. Check residual-norm convergence; deflate converged pairs
-  5. Apply preconditioner to residuals (correction vectors)
-  6. Expand subspace: MGS2 against V, normalize, update Hc = V'*AV
-
-# Arguments
-- `A`: Symmetric/Hermitian matrix (dense or sparse)
-- `k`: Number of eigenpairs to compute (default: 5)
-
-# Keyword Arguments
-- `tol=1e-8`: Convergence tolerance on residual norms
-- `maxit=100`: Maximum outer iterations
-- `nblock=-1`: Block size (default: `k`)
-- `kmax=-1`: Max subspace dimension (default: `2k + 10`)
-- `v0=nothing`: Initial vectors (n × ≤k matrix)
-- `M=nothing`: Preconditioner (applied as `M \\ r`)
-- `precond_preparator=nothing`: Callback `f(M, X)` to refresh preconditioner
-- `disp=false`: Print iteration info
-
-# Returns
-`(X, lambda, history)` where
-- `X` (n × k): eigenvectors
-- `lambda` (k,): eigenvalues in ascending order
-- `history` (nit × 3): columns are [max_rnorm, iter, nmv]
+Returns (X, lambda, history) where X is n x k, lambda is length k,
+and history is nit x 3 with columns [max_rnorm, iter, nmv].
 """
 @timing "jdsym_block" function jdsym_block(A; k::Int=5,
                      tol::Float64=1e-8,
                      maxit::Int=100,
-                     nblock::Int=-1,
-                     kmax::Int=-1,
                      v0=nothing,
                      M=nothing,
                      precond_preparator=nothing,
@@ -50,40 +32,40 @@ Algorithm outline per iteration:
 
     n = size(A, 1)
     k = min(k, n)
+    nbuff = 2 # buffer of unrequested vector that are added to search space
+    kb = min(k + nbuff, n) # block size
+    jmin = min(n, 2 * (k + nbuff)) # search space size after restart
+    kmax = min(n, 4kb) # maximal search space dimension
 
-    if n < 1
-        return zeros(Float64, 0, 0), Float64[], zeros(Float64, 0, 3)
-    end
-
-    nblock = nblock < 0 ? k : nblock
-    kmax   = kmax < 0 ? min(n, 2k + 10) : kmax
-
-    if k > kmax ÷ 2
-        error("kmax too small: need kmax > 2k (k=$k, kmax=$kmax)")
-    end
+    two_pass_orth = false # if true, orthogonalization is more accurate (and more expensive)
 
     T = isnothing(v0) ? Float64 : eltype(v0)
 
     # ── Workspace ─────────────────────────────────────────────────────────
-    V    = zeros(T, n, kmax)       # search space basis
-    W    = zeros(T, n, kmax)       # A * V
-    Hc   = zeros(T, kmax, kmax)    # projected Hamiltonian: V' * W
-    Vc   = zeros(T, kmax, kmax)    # eigenvectors of projected problem
-    ew   = zeros(Float64, kmax)    # eigenvalues of projected problem
-    ub   = zeros(T, n, nblock)     # Ritz vectors
-    rb   = zeros(T, n, nblock)     # residuals / corrections
-    Vtmp = zeros(T, n, kmax)       # temporary for restart / deflation
-    Wtmp = zeros(T, n, kmax)       # temporary for restart / deflation
+    @timing "jdsym_block: allocation" begin
+        V      = zeros(T, n, kmax)    # search space basis (includes soft-locked)
+        W      = zeros(T, n, kmax)    # A * V
+        Hc     = zeros(T, kmax, kmax) # projected Hamiltonian
+        Vc     = zeros(T, kmax, kmax) # Ritz vectors of projected problem
+        ew     = zeros(Float64, kmax) # Ritz values
+        ub     = zeros(T, n, kb)      # Ritz vectors for active pairs
+        rb     = zeros(T, n, kb)      # residuals / corrections
+        Vtmp   = zeros(T, n, jmin)
+        Wtmp   = zeros(T, n, jmin)
+        lambda = zeros(Float64, k)
+        rnorms = zeros(Float64, kb)
+        c_mgs  = zeros(T, kmax)
+        c_exp1 = zeros(T, kmax, kb)
+        c_exp2 = zeros(T, kb)
+    end
 
-    X_conv = zeros(T, n, k)        # converged eigenvectors
-    lambda = zeros(Float64, k)     # converged eigenvalues
-
-    nconv = 0
-    nmv   = 0
-    history = zeros(Float64, 0, 3)
+    nconv    = 0
+    nmv      = 0
+    history  = zeros(Float64, maxit, 3)
+    hist_row = 0
 
     # ── Initialize subspace ───────────────────────────────────────────────
-    j = min(k, n)
+    j = min(kb, n)
     if !isnothing(v0)
         nc = min(size(v0, 2), j)
         @views V[:, 1:nc] .= v0[:, 1:nc]
@@ -94,209 +76,141 @@ Algorithm outline per iteration:
         @views V[:, 1:j] .= randn(T, n, j)
     end
 
-    @timing "jdsym_block: ortho" _jdb_mgs2!(V, j)
-
+    @timing "jdsym_block: ortho" _jdb_mgs2!(V, j, c_mgs, two_pass_orth)
     @timing "jdsym_block: matvec" @views mul!(W[:, 1:j], A, V[:, 1:j])
     nmv += j
-
-    @timing "jdsym_block: overlap" begin
-        @views mul!(Hc[1:j, 1:j], V[:, 1:j]', W[:, 1:j])
-        _jdb_symmetrize!(Hc, j)
-    end
+    @timing "jdsym_block: overlap" @views mul!(Hc[1:j, 1:j], V[:, 1:j]', W[:, 1:j])
 
     # ── Main loop ──────────────────────────────────────────────────────────
     jd_iter = 0
     for iter in 1:maxit
         jd_iter = iter
 
-        # Diagonalize projected EVP
+        # Diagonalize over full subspace (soft-locked pairs stay in V)
         @timing "jdsym_block: diag" begin
             @views F = eigen(Hermitian(Hc[1:j, 1:j]))
             ew[1:j]      .= F.values
             Vc[1:j, 1:j] .= F.vectors
         end
 
-        nb = max(min(nblock, k - nconv, j), 1)
+        # Active pairs: nconv+1 .. nconv+nb  (k-nconv target + nbuff buffer)
+        nb = max(min(k - nconv + nbuff, j - nconv), 1)
 
-        # Restart if not enough room for nb new vectors
-        if j + nb > kmax
+        # Restart: keep kb Ritz vectors (soft-locked stay in V)
+        if j + nb >= kmax
             @timing "jdsym_block: restart" begin
-                jnew = min(k - nconv, j)
-                @views mul!(Vtmp[:, 1:jnew], V[:, 1:j], Vc[1:j, 1:jnew])
-                @views mul!(Wtmp[:, 1:jnew], W[:, 1:j], Vc[1:j, 1:jnew])
-                @views V[:, 1:jnew] .= Vtmp[:, 1:jnew]
-                @views W[:, 1:jnew] .= Wtmp[:, 1:jnew]
+                @views mul!(Vtmp[:, 1:jmin], V[:, 1:j], Vc[1:j, 1:jmin])
+                @views mul!(Wtmp[:, 1:jmin], W[:, 1:j], Vc[1:j, 1:jmin])
+                @views V[:, 1:jmin] .= Vtmp[:, 1:jmin]
+                @views W[:, 1:jmin] .= Wtmp[:, 1:jmin]
                 Hc[1:kmax, 1:kmax] .= zero(T)
-                for i in 1:jnew; Hc[i, i] = ew[i]; end
-                j = jnew
-                nb = max(min(nblock, k - nconv, j, kmax - j), 1)
-                # Re-diagonalize after restart
+                for i in 1:jmin; Hc[i, i] = ew[i]; end
+                j = jmin
+                nb = max(min(k - nconv + nbuff, j - nconv), 1)
                 @views F = eigen(Hermitian(Hc[1:j, 1:j]))
                 ew[1:j]      .= F.values
                 Vc[1:j, 1:j] .= F.vectors
-                disp && @printf("cjdsym: RESTART j -> %d\n", j)
+                disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
             end
         end
 
+        # Compute residuals for active pairs nconv+1..nconv+nb (blocked BLAS-3)
         @timing "jdsym_block: residual" begin
-            # Ritz vectors: ub[:,1:nb] = V[:,1:j] * Vc[1:j,1:nb]
-            @views mul!(ub[:, 1:nb], V[:, 1:j], Vc[1:j, 1:nb])
-            # H * Ritz: rb = W * Vc[:,1:nb]
-            @views mul!(rb[:, 1:nb], W[:, 1:j], Vc[1:j, 1:nb])
-            # Residuals: rb -= ew[ib] * ub  (rb = (A - theta*I) * u)
-            for ib in 1:nb
-                @views rb[:, ib] .-= ew[ib] .* ub[:, ib]
-            end
-            # Project out converged eigenvectors from residuals (double pass)
-            if nconv > 0
-                for _ in 1:2
-                    @views c = X_conv[:, 1:nconv]' * rb[:, 1:nb]
-                    @views rb[:, 1:nb] .-= X_conv[:, 1:nconv] * c
-                end
-            end
+            @views mul!(ub[:, 1:nb], V[:, 1:j], Vc[1:j, nconv+1:nconv+nb])
+            @views mul!(rb[:, 1:nb], W[:, 1:j], Vc[1:j, nconv+1:nconv+nb])
+            @views rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv+1:nconv+nb]'
+            for ib in 1:nb; rnorms[ib] = norm(view(rb, :, ib)); end
         end
 
-        rnorms = [norm(view(rb, :, ib)) for ib in 1:nb]
-        history = vcat(history, [maximum(rnorms) Float64(iter) Float64(nmv)])
-
-        if disp
-            @printf("cjdsym it=%4d nconv=%3d j=%3d nb=%2d |r|=%.3e..%.3e\n",
-                    iter, nconv, j, nb, minimum(rnorms), maximum(rnorms))
-        end
-
-        # Convergence check: consecutive from pair 1
+        # Consecutive convergence check (target pairs only, skip first iteration)
+        nb_target = min(k - nconv, nb)
         nconv_new = 0
         if iter > 1
-            for ib in 1:nb
-                if rnorms[ib] < tol
-                    nconv_new += 1
-                else
-                    break
-                end
+            for ib in 1:nb_target
+                rnorms[ib] < tol ? nconv_new += 1 : break
             end
         end
 
+        hist_row += 1
+        history[hist_row, :] .= (maximum(view(rnorms, 1:nb_target)), iter, nmv)
+
+        if disp
+            @printf("jdsym_block it=%4d  nconv=%d/%d  j=%d  nb=%d  |r|=%.2e..%.2e\n",
+                    iter, nconv, k, j, nb,
+                    minimum(view(rnorms, 1:nb_target)), maximum(view(rnorms, 1:nb_target)))
+        end
+
+        # Lock newly converged pairs (Ritz vectors stay in V via soft-locking)
         if nconv_new > 0
-            for ib in 1:nconv_new
-                nconv += 1
-                @views X_conv[:, nconv] .= ub[:, ib]
-                lambda[nconv] = ew[ib]
-                if disp
-                    @printf("  >>> band %d CONVERGED: e=%.10e  |r|=%.3e  at iter %d\n",
-                            nconv, ew[ib], rnorms[ib], iter)
-                end
-            end
-
-            nconv >= k && break
-
-            # Deflate: rotate subspace to remove converged Ritz vectors
-            if j > nconv_new
-                jnew = j - nconv_new
-                @views mul!(Vtmp[:, 1:jnew], V[:, 1:j], Vc[1:j, nconv_new+1:j])
-                @views mul!(Wtmp[:, 1:jnew], W[:, 1:j], Vc[1:j, nconv_new+1:j])
-                @views V[:, 1:jnew] .= Vtmp[:, 1:jnew]
-                @views W[:, 1:jnew] .= Wtmp[:, 1:jnew]
-                # After Ritz rotation: Hc = diag(ew[nconv_new+1:j])
-                Hc[1:kmax, 1:kmax] .= zero(T)
-                for i in 1:jnew; Hc[i, i] = ew[nconv_new + i]; end
-                j = jnew
-            else
-                # Subspace exhausted: reinitialize with a random vector
-                j = 1
-                @views V[:, 1] .= randn(T, n)
-                if nconv > 0
-                    for _ in 1:2
-                        @views c = X_conv[:, 1:nconv]' * V[:, 1]
-                        @views V[:, 1] .-= X_conv[:, 1:nconv] * c
+            @timing "jdsym_block: lock" begin
+                nconv += nconv_new
+                nconv >= k && break
+                # Shift remaining active residuals to front
+                nb -= nconv_new
+                if nb > 0
+                    for ib in 1:nb
+                        @views rb[:, ib] .= rb[:, nconv_new + ib]
+                        @views ub[:, ib] .= ub[:, nconv_new + ib]
                     end
+                else
+                    continue
                 end
-                nv = norm(view(V, :, 1))
-                nv > 1e-14 && (@views V[:, 1] ./= nv)
-                @views mul!(W[:, 1], A, V[:, 1])
-                nmv += 1
-                Hc[1:kmax, 1:kmax] .= zero(T)
-                @views Hc[1, 1] = real(dot(V[:, 1], W[:, 1]))
-            end
-
-            # Reuse unconverged residuals instead of wasting an iteration
-            nb -= nconv_new
-            if nb > 0
-                for ib in 1:nb
-                    @views rb[:, ib] .= rb[:, nconv_new + ib]
-                    ew[ib] = ew[nconv_new + ib]
-                end
-            else
-                continue
             end
         end
 
-        # Apply preconditioner and project out converged vectors (correction step)
+        # Apply preconditioner
         @timing "jdsym_block: correction" begin
             if !isnothing(M)
                 !isnothing(precond_preparator) && precond_preparator(M, view(ub, :, 1:nb))
-                for ib in 1:nb
-                    @views rb[:, ib] .= M \ rb[:, ib]
-                end
-            end
-            if nconv > 0
-                for _ in 1:2
-                    @views c = X_conv[:, 1:nconv]' * rb[:, 1:nb]
-                    @views rb[:, 1:nb] .-= X_conv[:, 1:nconv] * c
-                end
+                @views ldiv!(ub[:, 1:nb], M, rb[:, 1:nb])
+                @views rb[:, 1:nb] .= ub[:, 1:nb]
             end
         end
 
         # Expand subspace
-        nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A)
+        nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, c_exp1, c_exp2, two_pass_orth)
         nmv += nact
         j += nact
     end
 
-    disp && @printf("cjdsym: done. nconv=%d notcnv=%d iter=%d nmv=%d\n",
-                    nconv, k - nconv, jd_iter, nmv)
+    disp && @printf("jdsym_block: done. nconv=%d/%d  iter=%d  nmv=%d\n", nconv, k, jd_iter, nmv)
 
-    # Fill unconverged slots with best available Ritz approximations
-    notcnv = k - nconv
-    if notcnv > 0 && j > 0
-        for i in 1:min(notcnv, j)
-            @views mul!(X_conv[:, nconv + i], V[:, 1:j], Vc[1:j, i])
-            lambda[nconv + i] = ew[i]
-        end
-        for i in j+1:notcnv
-            lambda[nconv + i] = ew[min(i, j)]
-        end
+    if nconv < k
+        @warn "jdsym_block did not converge within $maxit iterations."
     end
 
-    return X_conv, lambda, history
+    # Use final Ritz values — consistent with the eigenvectors computed below
+    for i in 1:min(k, j); lambda[i] = ew[i]; end
+
+    # Compute eigenvectors from current Ritz vectors
+    X = zeros(T, n, k)
+    @views mul!(X, V[:, 1:j], Vc[1:j, 1:k])
+
+    return X, lambda, history[1:hist_row, :]
 end
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
-"""Double-pass MGS orthonormalization of V[:,1:m] in-place."""
-function _jdb_mgs2!(V::AbstractMatrix, m::Int)
+"""Double-pass MGS orthonormalization of V[:,1:m] in-place. `c` is a preallocated buffer of length ≥ m-1."""
+function _jdb_mgs2!(V::AbstractMatrix, m::Int, c::AbstractVector, two_pass::Bool=true)
     for i in 1:m
         if i > 1
-            for _ in 1:2
-                @views c = V[:, 1:i-1]' * V[:, i]
-                @views V[:, i] .-= V[:, 1:i-1] * c
+            ci = view(c, 1:i-1)
+            vi = view(V, :, i)
+            Vp = view(V, :, 1:i-1)
+            mul!(ci, Vp', vi)
+            mul!(vi, Vp, ci, -1, 1)
+            if two_pass
+                mul!(ci, Vp', vi)
+                mul!(vi, Vp, ci, -1, 1)
             end
         end
         nv = norm(view(V, :, i))
-        nv > 1e-14 && (@views V[:, i] ./= nv)
+        nv > 1e-14 && (view(V, :, i) ./= nv)
     end
 end
 
-
-"""Symmetrize H[1:m,1:m]: force real diagonal, H[i,j] = conj(H[j,i])."""
-function _jdb_symmetrize!(H::AbstractMatrix, m::Int)
-    for i in 1:m
-        H[i, i] = real(H[i, i])
-        for j in i+1:m
-            H[i, j] = conj(H[j, i])
-        end
-    end
-end
 
 
 """
@@ -310,14 +224,19 @@ Returns the number of accepted vectors `nact`.
 """
 function _jdb_expand!(V::AbstractMatrix, W::AbstractMatrix,
                       Hc::AbstractMatrix, rb::AbstractMatrix,
-                      j::Int, nb::Int, kmax::Int, A)
+                      j::Int, nb::Int, kmax::Int, A,
+                      c1::AbstractMatrix, c2::AbstractVector, two_pass::Bool=true)
     nact = 0
 
     @timing "jdsym_block: ortho" begin
         # Phase 1: orthogonalize all nb corrections against existing V[:,1:j]
-        for _ in 1:2
-            @views c = V[:, 1:j]' * rb[:, 1:nb]
-            @views rb[:, 1:nb] .-= V[:, 1:j] * c
+        let Vj = view(V, :, 1:j), rbv = view(rb, :, 1:nb), c1v = view(c1, 1:j, 1:nb)
+            mul!(c1v, Vj', rbv)
+            mul!(rbv, Vj, c1v, -1, 1)
+            if two_pass
+                mul!(c1v, Vj', rbv)
+                mul!(rbv, Vj, c1v, -1, 1)
+            end
         end
 
         # Phase 2: sequential orthogonalization among the nb new vectors
@@ -325,9 +244,13 @@ function _jdb_expand!(V::AbstractMatrix, W::AbstractMatrix,
             j + nact >= kmax && break   # subspace full
 
             if nact > 0
-                for _ in 1:2
-                    @views c = V[:, j+1:j+nact]' * rb[:, ib]
-                    @views rb[:, ib] .-= V[:, j+1:j+nact] * c
+                let Vnew = view(V, :, j+1:j+nact), rbib = view(rb, :, ib), c2v = view(c2, 1:nact)
+                    mul!(c2v, Vnew', rbib)
+                    mul!(rbib, Vnew, c2v, -1, 1)
+                    if two_pass
+                        mul!(c2v, Vnew', rbib)
+                        mul!(rbib, Vnew, c2v, -1, 1)
+                    end
                 end
             end
 

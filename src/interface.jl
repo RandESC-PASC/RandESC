@@ -215,7 +215,6 @@ function randESCSolver(A, n::Integer, k::Integer; X0=nothing, preconditioner=not
             return (λ=lambda, X=V, residual_norms=residual_norms, n_iter=n_iter, converged=converged, n_matvec=n_matvec)
         end
     elseif method == "JD_BLOCK"
-        maxiter = maxiter * k
         if useRandomization
             # Block Jacobi-Davidson with sketched (Θ-) orthogonalization
             V, lambda, history = jdsym_rand_block(A; k=k, v0=X0, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose,
