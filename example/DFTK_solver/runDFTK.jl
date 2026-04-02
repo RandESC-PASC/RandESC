@@ -16,8 +16,7 @@ function my_eig_solver(A, X0; prec = nothing, maxiter, tol, kwargs...)
 
     # define preconditioner preparation function
     function precond_preparation(M, X)
-        precondprep!(M, X)
-        # DFTK.Eigen.Preconditioners.precondprep(M, X)
+        DFTK.precondprep!(M, X)
     end
 
     writeOperator = false
