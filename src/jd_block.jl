@@ -143,21 +143,18 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         # Lock newly converged pairs (Ritz vectors stay in V via soft-locking)
         if nconv_new > 0
             @timing "jdsym_block: lock" begin
-                for _ in 1:nconv_new
-                    nconv += 1
-                    lambda[nconv] = ew[nconv]
+                nconv += nconv_new
+                nconv >= k && break
+                # Shift remaining active residuals to front
+                nb -= nconv_new
+                if nb > 0
+                    for ib in 1:nb
+                        @views rb[:, ib] .= rb[:, nconv_new + ib]
+                        @views ub[:, ib] .= ub[:, nconv_new + ib]
+                    end
+                else
+                    continue
                 end
-            end
-            nconv >= k && break
-            # Shift remaining active residuals to front
-            nb -= nconv_new
-            if nb > 0
-                for ib in 1:nb
-                    @views rb[:, ib] .= rb[:, nconv_new + ib]
-                    @views ub[:, ib] .= ub[:, nconv_new + ib]
-                end
-            else
-                continue
             end
         end
 
@@ -180,12 +177,10 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
 
     if nconv < k
         @warn "jdsym_block did not converge within $maxit iterations."
-        # Fill unconverged slots with best available Ritz approximations
-        nb_fill = min(k - nconv, max(j - nconv, 0))
-        for i in 1:nb_fill
-            lambda[nconv + i] = ew[nconv + i]
-        end
     end
+
+    # Use final Ritz values — consistent with the eigenvectors computed below
+    for i in 1:min(k, j); lambda[i] = ew[i]; end
 
     # Compute eigenvectors from current Ritz vectors
     X = zeros(T, n, k)
