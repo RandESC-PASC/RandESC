@@ -56,10 +56,11 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     jmin = min(n, 2 * (k + nbuff))    # search space size after restart
     jmax = min(n, 4 * kb)             # maximal search space dimension
     s    = sketch_size < 0 ? max(6jmax, 6k) : sketch_size
-    # s = 1000
-    # sketch_type = "complex_gaussian"
 
-    println("n: $n, k: $k, s: $s")
+    if disp
+        println("Dimension in jdsym_randd_block")
+        println("n: $n, k: $k, s: $s")
+    end
 
 
     T = isnothing(v0) ? ComplexF64 : eltype(v0)
