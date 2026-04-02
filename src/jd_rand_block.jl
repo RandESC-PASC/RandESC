@@ -55,7 +55,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     kb   = min(k + nbuff, n)          # block size
     jmin = min(n, 2 * (k + nbuff))    # search space size after restart
     jmax = min(n, 4 * kb)             # maximal search space dimension
-    s    = sketch_size < 0 ? max(6jmax, 6k) : sketch_size
+    s    = sketch_size < 0 ? max(4.5 * jmax, 4.5 * k) : sketch_size
 
     if disp
         println("Dimension in jdsym_rand_block")
