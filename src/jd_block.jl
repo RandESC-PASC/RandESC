@@ -34,7 +34,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     k = min(k, n)
     nbuff = 2 # buffer of unrequested vector that are added to search space
     kb = min(k + nbuff, n) # block size
-    jmin = 2 * (k + nbuff) # search space size after restart
+    jmin = min(n, 2 * (k + nbuff)) # search space size after restart
     kmax = min(n, 4kb) # maximal search space dimension
 
     two_pass_orth = false # if true, orthogonalization is more accurate (and more expensive)
