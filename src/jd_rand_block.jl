@@ -58,7 +58,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     s    = sketch_size < 0 ? max(6jmax, 6k) : sketch_size
 
     if disp
-        println("Dimension in jdsym_randd_block")
+        println("Dimension in jdsym_rand_block")
         println("n: $n, k: $k, s: $s")
     end
 
