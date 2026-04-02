@@ -30,7 +30,7 @@ to jmin=2*(k+nbuff) vectors when full, and grows up to jmax=4*(k+nbuff).
 - `precond_preparator=nothing`: Callback `f(M, X)` to refresh preconditioner
 - `disp=false`: Print iteration info
 - `sketch_type="sparsestack"`: Sketch operator type (see sketch.jl)
-- `sketch_size=-1`: Sketch dimension s (default: `max(4*jmax, 4*k)`)
+- `sketch_size=-1`: Sketch dimension s (default: `max(6*jmax, 6*k)`)
 - `orth_method=:rgs`: Θ-orthogonalization method (`:rgs`, `:rcgs`, `:rcgs2`)
 
 # Returns
@@ -82,7 +82,6 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # ub is also reused as T_corr_buf during expand (never live at the same time)
         ub      = zeros(T, n, kb)
         rb      = zeros(T, n, kb)
-        lambda  = zeros(Float64, k)
         rnorms  = zeros(Float64, kb)
         theta_b = zeros(Float64, kb)   # Ritz values for active pairs
         # Sketched Ritz vectors for Rayleigh quotient; reused as ST_corr_buf/SV_scratch
@@ -239,21 +238,18 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # Lock newly converged pairs (Ritz vectors stay in V via soft-locking)
         if nconv_new > 0
             @timing "jdsym_rand_block: lock" begin
-                for _ in 1:nconv_new
-                    nconv += 1
-                    lambda[nconv] = ew[nconv]
+                nconv += nconv_new
+                nconv >= k && break
+                # Shift remaining active residuals/Ritz-vectors to front (like jdsym_block)
+                nb -= nconv_new
+                if nb > 0
+                    for ib in 1:nb
+                        @views rb[:, ib] .= rb[:, nconv_new + ib]
+                        @views ub[:, ib] .= ub[:, nconv_new + ib]
+                    end
+                else
+                    continue
                 end
-            end
-            nconv >= k && break
-            # Shift remaining active residuals/Ritz-vectors to front (like jdsym_block)
-            nb -= nconv_new
-            if nb > 0
-                for ib in 1:nb
-                    @views rb[:, ib] .= rb[:, nconv_new + ib]
-                    @views ub[:, ib] .= ub[:, nconv_new + ib]
-                end
-            else
-                continue
             end
         end
 
