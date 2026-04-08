@@ -100,7 +100,9 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                 Hc = Hermitian(Diagonal(T.(ew[1:jmin])))
                 j = jmin
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
-                ew, Vc = eigen(Hc)
+                # Because Hc is diagonal, eigenvalues and eigevectors are trivial
+                ew = ew[1:jmin]
+                Vc = I(jmin)
                 disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
             end
         end
