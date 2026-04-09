@@ -18,12 +18,12 @@ to jmin=2*(k+nbuff) vectors when full, and grows up to jmax=4*(k+nbuff).
 
 # Arguments
 - `A`: Symmetric/Hermitian matrix or operator
+- `v0`: Initial vectors (n x m matrix)
 - `k`: Number of eigenpairs (default 5)
 
 # Keyword Arguments
 - `tol=1e-8`: Residual Θ-norm convergence threshold
 - `maxit=200`: Maximum iterations
-- `v0=nothing`: Initial vectors (n x m matrix, optional)
 - `sigma=:SR`: Target: `:SR` smallest real, `:LR` largest real,
                `:SM` smallest magnitude, `:LM` largest magnitude
 - `M=nothing`: Preconditioner, applied as `M \\ r`
@@ -37,10 +37,10 @@ to jmin=2*(k+nbuff) vectors when full, and grows up to jmax=4*(k+nbuff).
 `(X, lambda, history)` where X is nxk, lambda is length k,
 and history is nitx3 with columns [max_rnorm, iter, nmv].
 """
-@timing "jdsym_rand_block" function jdsym_rand_block(A; k::Int=5,
+@timing "jdsym_rand_block" function jdsym_rand_block(A, v0::AbstractArray;
+                          k::Int=5,
                           tol::Float64=1e-8,
                           maxit::Int=200,
-                          v0=nothing,
                           sigma::Symbol=:SR,
                           M=nothing,
                           precond_preparator=nothing,
@@ -63,7 +63,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     end
 
 
-    T = isnothing(v0) ? ComplexF64 : eltype(v0)
+    T = complex(eltype(v0))
 
     Theta = sketch(n, s, sketch_type)
 
@@ -103,14 +103,10 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     # ── Initialize subspace ───────────────────────────────────────────────
     j = min(kb, n)
     @timing "jdsym_rand_block: init" begin
-        if !isnothing(v0)
-            nc = min(size(v0, 2), j)
-            @views V_a[:, 1:nc] .= v0[:, 1:nc]
-            if nc < j
-                randn!(view(V_a, :, nc+1:j))   # in-place, no temp allocation
-            end
-        else
-            randn!(view(V_a, :, 1:j))           # in-place, no temp allocation
+        nc = min(size(v0, 2), j)
+        @views V_a[:, 1:nc] .= v0[:, 1:nc]
+        if nc < j
+            randn!(view(V_a, :, nc+1:j))   # in-place, no temp allocation
         end
         # Θ-orthonormalize in-place into V_a/SV_a using pre-allocated scratch.
         # V_a[:,1:j] is both input and output — safe because column i is consumed

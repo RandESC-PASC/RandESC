@@ -20,7 +20,9 @@ function my_eig_solver(A, X0; prec = nothing, maxiter, tol, kwargs...)
         # DFTK.Eigen.Preconditioners.precondprep(M, X)
     end
 
-    return randESCSolver(A, size(X0, 1), size(X0, 2); X0=X0, preconditioner=prec, maxiter=maxiter*10, tol=tol, useRandomization=false, method="LOBPCG", cleanEigenvectors=false, verbose=false, precond_preparator=precond_preparation, normA=ecut)
+    return randESCSolver(A, X0, size(X0, 1), size(X0, 2); preconditioner=prec, maxiter=maxiter*10, tol=tol,
+                         useRandomization=false, method="LOBPCG", cleanEigenvectors=false, verbose=false,
+                         precond_preparator=precond_preparation, normA=ecut)
 end
 
 a = 10.26

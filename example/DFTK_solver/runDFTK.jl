@@ -71,7 +71,10 @@ function my_eig_solver(A, X0; prec = nothing, maxiter, tol, kwargs...)
         println("done writing")
     end
 
-    return randESCSolver(A, size(X0, 1), size(X0, 2); X0=X0, preconditioner=prec, maxiter=maxiter, tol=tol, useRandomization=useRandomization, method="JD_BLOCK", cleanEigenvectors=false, verbose=false, precond_preparator=precond_preparation, normA=ecut)
+    return randESCSolver(A, X0, size(X0, 1), size(X0, 2); preconditioner=prec, maxiter=maxiter,
+                         tol=tol, useRandomization=useRandomization, method="JD_BLOCK",
+                         cleanEigenvectors=false, verbose=false,
+                         precond_preparator=precond_preparation, normA=ecut)
 end
 
 
