@@ -258,7 +258,7 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
         end
     end
 
-    nact == 0 && return 0
+    nact == 0 && return copy(Hc), 0
 
     # Compute A * new basis vectors
     @timing "jdsym_block: matvec" mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
