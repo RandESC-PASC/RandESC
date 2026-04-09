@@ -43,11 +43,12 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
 
     # ── Workspace ─────────────────────────────────────────────────────────
     @timing "jdsym_block: allocation" begin
-        V      = zeros(T, n, kmax)    # search space basis (includes soft-locked)
-        W      = zeros(T, n, kmax)    # A * V
-        rb     = zeros(T, n, kb)      # residuals / corrections
-        ub     = zeros(T, n, kb)      # Ritz vectors for active pairs
-        buffer = zeros(T, n, jmin)    # Pre-allocated work array
+        #TODO: How do we know GPU arch? Best is to infer from v0, but if nothing?
+        V      = similar(v0, n, kmax)    # search space basis (includes soft-locked)
+        W      = similar(v0, n, kmax)    # A * V
+        rb     = similar(v0, n, kb)      # residuals / corrections
+        ub     = similar(v0, n, kb)      # Ritz vectors for active pairs
+        buffer = similar(v0, n, jmin)    # Pre-allocated work array
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
@@ -61,11 +62,12 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     hist_row = 0
 
     # ── Initialize subspace ───────────────────────────────────────────────
+    # TODO: for now, assumem v0 is available
     j = min(kb, n)
     nc = min(size(v0, 2), j)
     V[:, 1:nc] .= v0[:, 1:nc]
     if nc < j
-        V[:, nc+1:j] .= randn(T, n, j - nc)
+        randn!(TaskLocalRNG(), V[:, nc+1:j])
     end
 
     @timing "jdsym_block: ortho" _jdb_mgs2!(V, j, two_pass_orth)
@@ -98,7 +100,9 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
                 # Because Hc is diagonal, eigenvalues and eigevectors are trivial
                 ew = ew[1:jmin]
-                Vc = I(jmin)
+                Vc = similar(V, jmin, jmin)  # identity matrix. mul! with GPU arrays
+                fill!(Vc, zero(T))           # do not like I, so explicit matrix
+                Vc[diagind(Vc)] .= one(T)
                 disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
             end
         end
@@ -108,7 +112,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
             mul!(ub[:, 1:nb], V[:, 1:j], Vc[1:j, nconv+1:nconv+nb])
             mul!(rb[:, 1:nb], W[:, 1:j], Vc[1:j, nconv+1:nconv+nb])
             rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv+1:nconv+nb]'
-            rnorms = columnwise_norms(rb[:, 1:nb])
+            rnorms = Array(columnwise_norms(rb[:, 1:nb])) # move to CPU, for element-wise access
         end
 
         # Consecutive convergence check (target pairs only, skip first iteration)
@@ -230,7 +234,9 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
         end
 
         # Phase 2: sequential orthogonalization among the nb new vectors
-        #      can we go block by block?
+        # TODO: phase 2 is slow on the GPU because of the sequencial nature of it
+        #       would QR or SVD be faster? Would then need to make sure it is numerically stable
+        #       What about cholesky too? Should probably test and consult the other guys
         for ib in 1:nb
             j + nact >= kmax && break   # subspace full
 
@@ -252,9 +258,18 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
             nact += 1
             V[:, j + nact] .= rb[:, ib]
         end
+        ### QR test: seems to be significantly faster, to check, also for large systems with many bands
+        #nact = nb
+        #Q = qr(rb[:, 1:nb]).Q
+        #V[:, j+1:j+nact] .= oftype(V, Q) #TODO: deal with numerical rank issues?, avoid allocations?
+
+        ### SVD test
+        #nact = nb
+        #U, S, Vt = svd(rb[:, 1:nb])
+        #V[:, j+1:j+nact] .= U
     end
 
-    nact == 0 && return copy(Hc), 0
+    nact == 0 && return Hc, 0
 
     # Compute A * new basis vectors
     @timing "jdsym_block: matvec" mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
