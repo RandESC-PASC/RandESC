@@ -2,7 +2,7 @@ using LinearAlgebra
 using Printf
 
 """
-    jdsym_block(A; k=5, kwargs...)
+    jdsym_block(A, v0; k=5, kwargs...)
 
 Davidson eigensolver for symmetric/Hermitian matrices (smallest eigenvalues).
 Soft-locking: converged Ritz vectors stay in V; corrections are generated only
@@ -11,10 +11,10 @@ to jmin=2*(k+nbuff) vectors when full, and grows up to kmax=4*(k+nbuff).
 
 Arguments:
 - A: Hermitian matrix or operator
+- v0: initial vectors (n x m matrix)
 - k: number of eigenpairs (default 5)
 - tol: residual norm convergence threshold (default 1e-8)
 - maxit: max iterations (default 100)
-- v0: initial vectors (n x m matrix, optional)
 - M: preconditioner, applied as M \\ r (optional)
 - precond_preparator: callback f(M, X) to refresh preconditioner (optional)
 - disp: print iteration info
@@ -22,10 +22,10 @@ Arguments:
 Returns (X, lambda, history) where X is n x k, lambda is length k,
 and history is nit x 3 with columns [max_rnorm, iter, nmv].
 """
-@views @timing "jdsym_block" function jdsym_block(A; k::Int=5,
+@views @timing "jdsym_block" function jdsym_block(A, v0::AbstractArray;
+                     k::Int=5,
                      tol::Float64=1e-8,
                      maxit::Int=100,
-                     v0=nothing,
                      M=nothing,
                      precond_preparator=nothing,
                      disp::Bool=false)
@@ -39,7 +39,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
 
     two_pass_orth = false # if true, orthogonalization is more accurate (and more expensive)
 
-    T = isnothing(v0) ? Float64 : eltype(v0)
+    T = eltype(v0)
 
     # ── Workspace ─────────────────────────────────────────────────────────
     @timing "jdsym_block: allocation" begin
@@ -62,14 +62,10 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
 
     # ── Initialize subspace ───────────────────────────────────────────────
     j = min(kb, n)
-    if !isnothing(v0)
-        nc = min(size(v0, 2), j)
-        V[:, 1:nc] .= v0[:, 1:nc]
-        if nc < j
-            V[:, nc+1:j] .= randn(T, n, j - nc)
-        end
-    else
-        V[:, 1:j] .= randn(T, n, j)
+    nc = min(size(v0, 2), j)
+    V[:, 1:nc] .= v0[:, 1:nc]
+    if nc < j
+        V[:, nc+1:j] .= randn(T, n, j - nc)
     end
 
     @timing "jdsym_block: ortho" _jdb_mgs2!(V, j, two_pass_orth)

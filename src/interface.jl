@@ -45,17 +45,17 @@ using LinearMaps
 
 
 """
-    randESCSolver(A, n, k; X0, preconditioner, maxiter, tol, useRandomization, method, orth_method="cgs2", cleanEigenvectors=false, normA::float, verbose=false)
+    randESCSolver(A, X0, n, k; preconditioner, maxiter, tol, useRandomization, method, orth_method="cgs2", cleanEigenvectors=false, normA::float, verbose=false)
 
 Solves the eigenvalue problem for the matrix `A`, computing `k` eigenvalues and corresponding eigenvectors.
 
 # Arguments
-- `A`: The matrix or linear operator for which to solve the eigenvalue problem.
-- `n`: The size of the matrix `A`.
-- `k`: The number of eigenvalues (and eigenvectors) to compute.
+- `A`:  The matrix or linear operator for which to solve the eigenvalue problem.
+- `X0`: Initial guess for the eigenvectors.
+- `n`:  The size of the matrix `A`.
+- `k`:  The number of eigenvalues (and eigenvectors) to compute.
 
 # Keyword Arguments
-- `X0`: Initial guess for the eigenvectors.
 - `preconditioner`: Preconditioner to accelerate convergence.
 - `maxiter`: Maximum number of iterations allowed.
 - `tol`: Tolerance for convergence.
@@ -75,22 +75,10 @@ A named tuple with the following fields:
 - `converged`: Boolean indicating whether the solver converged.
 - `n_matvec`: Number of matrix-vector products performed.
 """
-function randESCSolver(A, n::Integer, k::Integer; X0=nothing, preconditioner=nothing, precond_preparator=nothing, maxiter=100, tol=1e-6, useRandomization=false, method="", orth_method=nothing, cleanEigenvectors=false, normA=nothing, verbose=false)
+function randESCSolver(A, X0::AbstractArray, n::Integer, k::Integer; preconditioner=nothing, precond_preparator=nothing, maxiter=100, tol=1e-6, useRandomization=false, method="", orth_method=nothing, cleanEigenvectors=false, normA=nothing, verbose=false)
     # if !(A isa AbstractMatrix) && !(A isa LinearMap)
     #     error("A must be an AbstractMatrix or LinearMap")
     # end
-    if isnothing(X0)
-        # Infer element type from A
-        T = eltype(A)
-        if T <: Complex
-            X0 = randn(ComplexF64, n, k)
-        else
-            X0 = randn(n, k)
-        end
-    end
-    if !(X0 isa AbstractMatrix)
-        error("X0 must be an AbstractMatrix")
-    end
     if size(X0, 1) != n
         error("X0 must have $n rows (got $(size(X0, 1)))")
     end
@@ -217,14 +205,14 @@ function randESCSolver(A, n::Integer, k::Integer; X0=nothing, preconditioner=not
     elseif method == "JD_BLOCK"
         if useRandomization
             # Block Jacobi-Davidson with sketched (Θ-) orthogonalization
-            V, lambda, history = jdsym_rand_block(A; k=k, v0=X0, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose,
+            V, lambda, history = jdsym_rand_block(A, X0; k=k, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose,
                                                   orth_method=isnothing(orth_method) ? :rgs : orth_method)
             if cleanEigenvectors
                 V, lambda = sketched_to_fully(A, V)
             end
         else
             # Block Jacobi-Davidson with standard MGS orthogonalization (translation of QE cjdsym)
-            V, lambda, history = jdsym_block(A; k=k, v0=X0, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose)
+            V, lambda, history = jdsym_block(A, X0; k=k, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose)
         end
         n_iter = size(history, 1)
         converged = n_iter < maxiter

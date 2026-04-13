@@ -12,6 +12,7 @@ function testMatrix(A, n, k, testName; test_tol=1e-5, iter_tol=1e-8, verbose=fal
     evecs = ea.vectors
     evals = evals[1:k]
     evecs = evecs[:, 1:k]
+    v0 = randn(eltype(A), n, k)
 
     # testing IRA
     @testset "$testName: testing IRA" begin
@@ -102,7 +103,7 @@ function testMatrix(A, n, k, testName; test_tol=1e-5, iter_tol=1e-8, verbose=fal
 
     # testing block randomized JD
     @testset "$testName: testing randJD_block" begin
-        V_rjdb, lambda_rjdb, history_rjdb = jdsym_rand_block(A; k=k, tol=iter_tol, maxit=maxiter, disp=verbose)
+        V_rjdb, lambda_rjdb, history_rjdb = jdsym_rand_block(A, v0; k=k, tol=iter_tol, maxit=maxiter, disp=verbose)
 
         rjdb_passed = maximum(abs.(evals .- lambda_rjdb)) < test_tol
         if !rjdb_passed
@@ -119,7 +120,7 @@ function testMatrix(A, n, k, testName; test_tol=1e-5, iter_tol=1e-8, verbose=fal
 
     # testing standard block JD (translation of QE cjdsym)
     @testset "$testName: testing jdsym_block" begin
-        V_jdb, lambda_jdb, _ = jdsym_block(A; k=k, tol=iter_tol, maxit=maxiter, disp=verbose)
+        V_jdb, lambda_jdb, _ = jdsym_block(A, v0; k=k, tol=iter_tol, maxit=maxiter, disp=verbose)
 
         jdb_passed = maximum(abs.(evals .- lambda_jdb)) < test_tol
         if !jdb_passed

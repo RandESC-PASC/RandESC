@@ -41,7 +41,9 @@ println("size of A: ", n)
 # and now the interface with
 
 Random.seed!(98423598)
-lambda_inter, X_inter, residual_norms_inter, n_iter_inter, converged_inter, n_matvecs_inter  = randESCSolver(A, n, k; method="LOBPCG", useRandomization=false, cleanEigenvectors=false, maxiter=300, tol=1e-8, verbose=true)
+X0 = randn(eltype(A), n, k)
+lambda_inter, X_inter, residual_norms_inter, n_iter_inter, converged_inter, n_matvecs_inter  = 
+    randESCSolver(A, X0, n, k; method="LOBPCG", useRandomization=false, cleanEigenvectors=false, maxiter=300, tol=1e-8, verbose=true)
 
 # Test JD method
 println("\n=== Testing Jacobi-Davidson ===")
@@ -58,8 +60,9 @@ println("randJD number of matrix-vector products: ", Int(history_rjd[end, 3]))
 
 # Test JD through interface
 println("\n=== Testing JD through interface ===")
-result_jd = randESCSolver(A, n, k; method="JD", useRandomization=false, maxiter=300, tol=1e-8, verbose=true)
-result_rjd = randESCSolver(A, n, k; method="JD", useRandomization=true, cleanEigenvectors=true, maxiter=300, tol=1e-8, verbose=true)
+X0 = randn(eltype(A), n, k)
+result_jd = randESCSolver(A, X0, n, k; method="JD", useRandomization=false, maxiter=300, tol=1e-8, verbose=true)
+result_rjd = randESCSolver(A, X0, n, k; method="JD", useRandomization=true, cleanEigenvectors=true, maxiter=300, tol=1e-8, verbose=true)
 
 # print comparison of eigenvalues from rand_ira, and randESCSolver with method="lobpcg"
 # println("\n=== Eigenvalue Comparison ===")
@@ -80,13 +83,15 @@ println(result_rjd.λ)
 
 # Test block randomized JD method
 println("\n=== Testing Block Randomized Jacobi-Davidson ===")
-V_rjdb, lambda_rjdb, history_rjdb = jdsym_rand_block(A; k=k, tol=1e-8, maxit=300, disp=true)
+X0 = randn(eltype(A), n, k)
+V_rjdb, lambda_rjdb, history_rjdb = jdsym_rand_block(A, X0; k=k, tol=1e-8, maxit=300, disp=true)
 println("randJD_block converged in $(size(history_rjdb, 1)) iterations")
 println("randJD_block number of matrix-vector products: ", Int(history_rjdb[end, 3]))
 
 # Test block JD through interface
 println("\n=== Testing Block JD through interface ===")
-result_rjdb = randESCSolver(A, n, k; method="JD_BLOCK", maxiter=300, tol=1e-8, verbose=true)
+X0 = randn(eltype(A), n, k)
+result_rjdb = randESCSolver(A, X0, n, k; method="JD_BLOCK", maxiter=300, tol=1e-8, verbose=true)
 
 println("\nEigenvalues from randJD_block:")
 println(lambda_rjdb)
