@@ -37,7 +37,7 @@ to jmin=2*(k+nbuff) vectors when full, and grows up to jmax=4*(k+nbuff).
 `(X, lambda, history)` where X is nxk, lambda is length k,
 and history is nitx3 with columns [max_rnorm, iter, nmv].
 """
-@timing "jdsym_rand_block" function jdsym_rand_block(A, v0::AbstractArray;
+@views @timing "jdsym_rand_block" function jdsym_rand_block(A, v0::AbstractArray;
                           k::Int=5,
                           tol::Float64=1e-8,
                           maxit::Int=200,
@@ -69,31 +69,29 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
     # ── Workspace ─────────────────────────────────────────────────────────
     @timing "jdsym_rand_block: allocation" begin
-        # Active subspace: columns 1:j live in the _a buffers.
-        # Restart/rotation uses mul! into _b then pointer swap (zero allocation).
-        V_a  = zeros(T, n, jmax);  V_b  = zeros(T, n, jmax)
-        SV_a = zeros(T, s, jmax);  SV_b = zeros(T, s, jmax)
-        W_a  = zeros(T, n, jmax);  W_b  = zeros(T, n, jmax)
-        SW_a = zeros(T, s, jmax);  SW_b = zeros(T, s, jmax)
-        # Projected matrix Mc[1:j, 1:j] = (ΘV)'(ΘAV) — pre-allocated at full size
-        # like Hc in jdsym_block; updated incrementally in _jdrb_expand!
-        Mc      = zeros(T, jmax, jmax)
+        # Active subspace: columns 1:j live in the the following buffers.
+        V  = zeros(T, n, jmax)
+        SV = zeros(T, s, jmax)
+        W  = zeros(T, n, jmax)
+        SW = zeros(T, s, jmax)
+        # Work buffers for various allocation free operations:
+        n_buffer = zeros(T, n, jmax)
+        s_buffer = zeros(T, s, jmax)
         # Ritz vectors and residuals for active pairs (like ub/rb in jdsym_block)
         # ub is also reused as T_corr_buf during expand (never live at the same time)
         ub      = zeros(T, n, kb)
         rb      = zeros(T, n, kb)
-        rnorms  = zeros(Float64, kb)
-        theta_b = zeros(Float64, kb)   # Ritz values for active pairs
         # Sketched Ritz vectors for Rayleigh quotient; reused as ST_corr_buf/SV_scratch
         # during expand (never live at the same time as the Rayleigh quotient computation)
         SX_rq   = zeros(T, s, kb)   # reused as ST_corr_buf in expand
         SW_rq   = zeros(T, s, kb)   # reused as SV_scratch in expand
-        # H_buf: projection coefficients in theta_orth_block_against! (jmax×kb)
-        H_buf   = zeros(T, jmax, kb)
-        v_work  = zeros(T, n)
-        sv_work = zeros(T, s)
-        h_work  = zeros(T, kb)
     end
+
+    # Other arrays used in the solver, allocated on the fly (small compared to the above):
+    # Mc: projected matrix, j x j, Mc = (ΘV)'(ΘAV)
+    # theta_b: Rayleigh quotients for active Ritz pairs, length kb
+    # U: Ritz vectors of the projected problem, j x j
+    # ew: Ritz values of the projected problem, length j, Real vector
 
     nconv    = 0
     nmv      = 0
@@ -104,50 +102,44 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     j = min(kb, n)
     @timing "jdsym_rand_block: init" begin
         nc = min(size(v0, 2), j)
-        @views V_a[:, 1:nc] .= v0[:, 1:nc]
+        V[:, 1:nc] .= v0[:, 1:nc]
         if nc < j
-            randn!(view(V_a, :, nc+1:j))   # in-place, no temp allocation
+            randn!(TaskLocalRNG(), V[:, nc+1:j])   # in-place, no temp allocation
         end
         # Θ-orthonormalize in-place into V_a/SV_a using pre-allocated scratch.
         # V_a[:,1:j] is both input and output — safe because column i is consumed
         # into v_work before column ncols≤i is overwritten.
         # SW_rq (s×kb) used as SV_buf scratch; not yet populated.
-        j = theta_orth_block!(view(V_a, :, 1:j), view(SV_a, :, 1:j),
-                              view(V_a, :, 1:j), Theta, orth_method,
-                              SW_rq, v_work, sv_work, h_work)
+        j = theta_orth_block!(V[:, 1:j], SV[:, 1:j], V[:, 1:j],
+                              Theta, orth_method,
+                              SW_rq)
     end
     @timing "jdsym_rand_block: matvec" begin
-        mul!(view(W_a, :, 1:j), A, view(V_a, :, 1:j))
+        mul!(W[:, 1:j], A, V[:, 1:j])
         nmv += j
     end
     @timing "jdsym_rand_block: sketch" begin
-        mul!(view(SW_a, :, 1:j), Theta, view(W_a, :, 1:j))
+        mul!(SW[:, 1:j], Theta, W[:, 1:j])
     end
-    # Mc[1:j, 1:j] = (ΘV)'(ΘAV), replaces Hc = V'AV
+    # Mc = (ΘV)'(ΘAV), replaces Hc = V'AV
     @timing "jdsym_rand_block: overlap" begin
-        mul!(view(Mc, 1:j, 1:j), view(SV_a, :, 1:j)', view(SW_a, :, 1:j))
+        Mc = SV[:, 1:j]' * SW[:, 1:j]
     end
 
-    # pre-declare ew so it is accessible for the post-loop finalize
-    ew = zeros(Float64, j)
+    # Initial Mc diagonalization (general eigen; only approx. Hermitian for sketching)
+    @timing "jdsym_rand_block: diag" begin
+        F    = eigen(Mc)
+        ew   = real.(F.values)
+        U    = F.vectors
+        perm = _jdrb_sort_perm(ew, sigma)
+        ew   = copy(ew[perm])     # Note: use copy to avoid accidental non-contiguous views
+        U    = copy(U[:, perm])
+    end
 
     # ── Main loop ──────────────────────────────────────────────────────────
     jd_iter = 0
     for iter in 1:maxit
         jd_iter = iter
-
-        V  = view(V_a,  :, 1:j);  SV = view(SV_a, :, 1:j)
-        W  = view(W_a,  :, 1:j);  SW = view(SW_a, :, 1:j)
-
-        # Diagonalize Mc[1:j,1:j] (general eigen; only approx. Hermitian for sketching)
-        @timing "jdsym_rand_block: diag" begin
-            F    = eigen(view(Mc, 1:j, 1:j))
-            ew   = real.(F.values)
-            U    = F.vectors
-            perm = _jdrb_sort_perm(ew, sigma)
-            ew   = ew[perm]
-            U    = U[:, perm]
-        end
 
         # Active pairs: nconv+1 .. nconv+nb  (k-nconv target + nbuff buffer)
         nb = max(min(k - nconv + nbuff, j - nconv), 1)
@@ -156,58 +148,50 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         if j + nb >= jmax
             @timing "jdsym_rand_block: restart" begin
                 nk    = min(jmin, j)
-                j_old = j
                 # QR-orthonormalize: U columns from general eigen not guaranteed unitary
+                # Use work buffers to avoid extra allocations
                 Q_rst = Matrix(qr(U[:, 1:nk]).Q)[:, 1:nk]
-                mul!(view(V_b,  :, 1:nk), V,  Q_rst)
-                mul!(view(SV_b, :, 1:nk), SV, Q_rst)
-                mul!(view(W_b,  :, 1:nk), W,  Q_rst)
-                mul!(view(SW_b, :, 1:nk), SW, Q_rst)
-                V_a, V_b   = V_b,  V_a
-                SV_a, SV_b = SV_b, SV_a
-                W_a, W_b   = W_b,  W_a
-                SW_a, SW_b = SW_b, SW_a
+                mul!(n_buffer[:, 1:nk], V[:, 1:j],  Q_rst)
+                V[:, 1:nk] .= n_buffer[:, 1:nk]
+                mul!(s_buffer[:, 1:nk], SV[:, 1:j], Q_rst)
+                SV[:, 1:nk] .= s_buffer[:, 1:nk]
+                mul!(n_buffer[:, 1:nk], W[:, 1:j],  Q_rst)
+                W[:, 1:nk] .= n_buffer[:, 1:nk]
+                mul!(s_buffer[:, 1:nk], SW[:, 1:j], Q_rst)
+                SW[:, 1:nk] .= s_buffer[:, 1:nk]
                 j  = nk
-                V  = view(V_a,  :, 1:j);  SV = view(SV_a, :, 1:j)
-                W  = view(W_a,  :, 1:j);  SW = view(SW_a, :, 1:j)
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
                 # Rotate Mc to the new basis (like jd_block's Vc'*Hc*Vc, but without the
                 # unitary simplification — Q_rst is only approx. unitary for non-Hermitian Mc)
-                Mc_tmp = Q_rst' * view(Mc, 1:j_old, 1:j_old) * Q_rst   # nk×nk
-                Mc[1:jmax, 1:jmax] .= zero(T)
-                Mc[1:nk, 1:nk] .= Mc_tmp
+                Mc = Q_rst' * Mc * Q_rst   # nk×nk
                 # Re-diagonalize after restart (like jd_block's eigen(Hermitian(Hc[1:j,1:j])))
-                F_rst = eigen(view(Mc, 1:j, 1:j))
+                F_rst = eigen(Mc)
                 ew    = real.(F_rst.values)
                 U     = F_rst.vectors
                 perm  = _jdrb_sort_perm(ew, sigma)
-                ew    = ew[perm];  U = U[:, perm]
+                ew    = copy(ew[perm]);  U = copy(U[:, perm])
                 disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
             end
         end
 
         # Compute residuals for active pairs nconv+1..nconv+nb (BLAS-3, like jdsym_block)
         @timing "jdsym_rand_block: residual" begin
-            Y_nb = @view U[:, nconv+1:nconv+nb]
-            mul!(view(ub, :, 1:nb), V, Y_nb)
-            mul!(view(rb, :, 1:nb), W, Y_nb)
+            Y_nb = view(U, :, nconv+1:nconv+nb)
+            mul!(ub[:, 1:nb], V[:, 1:j], Y_nb)
+            mul!(rb[:, 1:nb], W[:, 1:j], Y_nb)
             # Sketched Rayleigh quotients: more reliable than real.(ew) for non-Hermitian Mc
-            mul!(view(SX_rq, :, 1:nb), SV, Y_nb)
-            mul!(view(SW_rq, :, 1:nb), SW, Y_nb)
-            for ib in 1:nb
-                theta_b[ib] = real(dot(view(SX_rq, :, ib), view(SW_rq, :, ib)) /
-                                   dot(view(SX_rq, :, ib), view(SX_rq, :, ib)))
-            end
+            mul!(SX_rq[:, 1:nb], SV[:, 1:j], Y_nb)
+            mul!(SW_rq[:, 1:nb], SW[:, 1:j], Y_nb)
+            theta_b = real(columnwise_dots(SX_rq[:, 1:nb], SW_rq[:, 1:nb]) ./
+                           columnwise_dots(SX_rq[:, 1:nb], SX_rq[:, 1:nb]))
             # r = AX - X*diag(theta), in-place (replaces jd_block's rb .-= ub .* ew')
             @views rb[:, 1:nb] .-= ub[:, 1:nb] .* theta_b[1:nb]'
         end
 
         # Sketch residuals for Θ-norm computation — reuse sv_work to avoid per-column alloc
         @timing "jdsym_rand_block: sketch" begin
-            for ib in 1:nb
-                mul!(sv_work, Theta, view(rb, :, ib))
-                rnorms[ib] = norm(sv_work)
-            end
+            mul!(SW_rq[:, 1:nb], Theta, rb[:, 1:nb])   # reuse SW_rq as tmp buffer
+            rnorms = columnwise_norms(SW_rq[:, 1:nb])
         end
 
         # Convergence check on active target pairs (skip first iteration, like jdsym_block)
@@ -215,12 +199,12 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
             nb_target = min(k - nconv, nb)
 
             hist_row += 1
-            history[hist_row, :] .= (maximum(view(rnorms, 1:nb_target)), iter, nmv)
+            history[hist_row, :] .= (maximum(rnorms[1:nb_target]), iter, nmv)
 
             if disp
                 @printf("jdsym_rand_block it=%4d  nconv=%d/%d  j=%d  nb=%d  |r|=%.2e..%.2e\n",
                         iter, nconv, k, j, nb,
-                        minimum(view(rnorms, 1:nb_target)), maximum(view(rnorms, 1:nb_target)))
+                        minimum(rnorms[1:nb_target]), maximum(rnorms[1:nb_target]))
             end
 
             nconv_new = 0
@@ -239,10 +223,8 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 # Shift remaining active residuals/Ritz-vectors to front (like jdsym_block)
                 nb -= nconv_new
                 if nb > 0
-                    for ib in 1:nb
-                        @views rb[:, ib] .= rb[:, nconv_new + ib]
-                        @views ub[:, ib] .= ub[:, nconv_new + ib]
-                    end
+                    rb[:, 1:nb] .= rb[:, nconv_new + 1:nconv_new + nb]
+                    ub[:, 1:nb] .= ub[:, nconv_new + 1:nconv_new + nb]
                 else
                     continue
                 end
@@ -252,19 +234,29 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # Apply preconditioner
         @timing "jdsym_rand_block: correction" begin
             if !isnothing(M)
-                !isnothing(precond_preparator) && precond_preparator(M, view(ub, :, 1:nb))
-                @views ldiv!(ub[:, 1:nb], M, rb[:, 1:nb])
-                @views rb[:, 1:nb] .= ub[:, 1:nb]
+                !isnothing(precond_preparator) && precond_preparator(M, ub[:, 1:nb])
+                ldiv!(ub[:, 1:nb], M, rb[:, 1:nb])
+                rb[:, 1:nb] .= ub[:, 1:nb]
             end
         end
 
-        # Expand subspace: Θ-orthogonalize corrections against V, update Mc in-place.
+        # Expand subspace: Θ-orthogonalize corrections against V, return new expanded Mc.
         # Mirrors _jdb_expand! but with sketched orthogonalization and Mc instead of Hc.
         # ub=T_corr_buf, SX_rq=ST_corr_buf, SW_rq=SV_scratch — merged buffers, not live here
-        nact = _jdrb_expand!(V_a, SV_a, W_a, SW_a, Mc, rb, j, nb, jmax, A, Theta, orth_method,
-                             ub, SX_rq, SW_rq, H_buf, v_work, sv_work, h_work)
+        Mc, nact = _jdrb_expand!(V, SV, W, SW, Mc, rb, j, nb, jmax, A, Theta, orth_method,
+                                 ub, SX_rq, SW_rq)
         nmv += nact
         j   += nact
+
+        # Diagonalize expanded Mc (general eigen; only approx. Hermitian for sketching)
+        @timing "jdsym_rand_block: diag" begin
+            F    = eigen(Mc)
+            ew   = real.(F.values)
+            U    = F.vectors
+            perm = _jdrb_sort_perm(ew, sigma)
+            ew   = copy(ew[perm])
+            U    = copy(U[:, perm])
+        end
     end
 
     disp && @printf("jdsym_rand_block: done. nconv=%d/%d  iter=%d  nmv=%d\n", nconv, k, jd_iter, nmv)
@@ -275,19 +267,20 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
     # Final Ritz extraction and post-processing.
     # V is Θ-orthonormal (not standard orthonormal) and U from general eigen is non-unitary,
-    # so V*U[:,1:k] is not orthogonal. We inline sketched_to_fully, reusing V_b[:,1:k] and
-    # W_b[:,1:k] (idle after main loop) for X_ritz and W_ritz, then dividing in-place with
-    # rdiv! to avoid 4 additional n×k allocations. Only the final n×k output must be allocated.
+    # so V*U[:,1:k] is not orthogonal. We inline sketched_to_fully, and reused work buffers.
+    # Only the final n×k output must be allocated.
     @timing "jdsym_rand_block: finalize" begin
-        F_fin  = eigen(view(Mc, 1:j, 1:j))
+        F_fin  = eigen(Mc)
         ew_fin = real.(F_fin.values)
         U_fin  = F_fin.vectors
         perm_f = _jdrb_sort_perm(ew_fin, sigma)
-        U_fin  = U_fin[:, perm_f[1:k]]             # j×k, small
-        Xritz  = view(V_b, :, 1:k)                 # reuse V_b as scratch for Ritz vectors
-        Writz  = view(W_b, :, 1:k)                 # reuse W_b as scratch for A*Ritz
-        mul!(Xritz, view(V_a, :, 1:j), U_fin)
-        mul!(Writz, view(W_a, :, 1:j), U_fin)
+        U_fin  = copy(U_fin[:, perm_f[1:k]])             # j×k, small
+        mul!(n_buffer[:, 1:k], V[:, 1:j], U_fin)
+        V[:, 1:k] .= n_buffer[:, 1:k]
+        mul!(n_buffer[:, 1:k], W[:, 1:j], U_fin)
+        W[:, 1:k] .= n_buffer[:, 1:k]
+        Xritz = view(V, :, 1:k)
+        Writz = view(W, :, 1:k)
         # Cholesky-orthonormalize Xritz in-place: Xritz → Xritz / R, Writz → Writz / R
         K = Xritz' * Xritz                         # k×k, small
         R = cholesky(Hermitian(K)).U
@@ -299,8 +292,8 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         X      = Xritz * Fk.vectors
         lambda = Fk.values
         perm_s = _jdrb_sort_perm(lambda, sigma)
-        X      = X[:, perm_s]
-        lambda = lambda[perm_s]
+        X      = copy(X[:, perm_s])
+        lambda = copy(lambda[perm_s])
     end
 
     return X, lambda, history[1:hist_row, :]
@@ -312,64 +305,63 @@ end
 """
 Expand search subspace with up to `nb` correction vectors from `rb[:,1:nb]`.
 
-Mirrors `_jdb_expand!` from jdsym_block, but uses Θ-orthogonalization instead of MGS,
-and updates Mc (pre-allocated jmax×jmax, replaces Hc) in-place incrementally.
+Mirrors `_jdb_expand!` from jdsym_block, but uses Θ-orthogonalization instead of MGS.
 
 Phase 1: Θ-orthogonalize all nb corrections against V[:,1:j].
 Phase 2: Θ-orthogonalize among the nb new vectors; normalize; accept.
-Then compute A * new columns, sketch, and update Mc[:,j+1:j+nact] and Mc[j+1:j+nact,:].
+Then compute A * new columns, sketch, and expands Mc[:,j+1:j+nact] and Mc[j+1:j+nact,:].
 
-Returns the number of accepted vectors `nact`.
+Returns the expanded Mc and the number of accepted vectors `nact`.
 """
-function _jdrb_expand!(V_a, SV_a, W_a, SW_a, Mc, rb, j, nb, jmax, A, Theta, orth_method,
-                       T_corr_buf, ST_corr_buf, SV_scratch, H_buf, v_work, sv_work, h_work)
+@views function _jdrb_expand!(V, SV, W, SW, Mc, rb, j, nb, jmax, A, Theta, orth_method,
+                       T_corr_buf, ST_corr_buf, SV_scratch)
     # T_corr_buf  = ub   (n×kb, reused from Ritz-vector buffer — not live during expand)
     # ST_corr_buf = SX_rq (s×kb, reused from sketched-Ritz buffer — not live during expand)
     # SV_scratch  = SW_rq (s×kb, reused from sketched-AV buffer  — not live during expand)
-    V  = view(V_a,  :, 1:j)
-    SV = view(SV_a, :, 1:j)
 
     # Phase 1: Θ-orthogonalize all nb corrections against V[:,1:j] — in-place, no alloc
     @timing "jdsym_rand_block: ortho" begin
         rbb = view(rb, :, 1:nb)
-        theta_orth_block_against!(rbb, V, SV, Theta, orth_method, SV_scratch, H_buf)
+        theta_orth_block_against!(rbb, V[:, 1:j], SV[:, 1:j], Theta, orth_method, SV_scratch)
     end
 
     # Phase 2: Θ-orthonormalize among the nb corrections into pre-allocated buffers
     @timing "jdsym_rand_block: ortho" begin
-        nact = theta_orth_block!(T_corr_buf, ST_corr_buf, view(rb, :, 1:nb), Theta,
-                                 orth_method, SV_scratch, v_work, sv_work, h_work)
+        nact = theta_orth_block!(T_corr_buf, ST_corr_buf, rb[:, 1:nb], Theta,
+                                 orth_method, SV_scratch)
     end
 
-    nact == 0 && return 0
+    nact == 0 && return Mc, 0
     nact = min(nact, jmax - j)
-    nact == 0 && return 0
+    nact == 0 && return Mc, 0
 
     T_corr  = view(T_corr_buf,  :, 1:nact)
     ST_corr = view(ST_corr_buf, :, 1:nact)
 
     # Compute A * new basis vectors and their sketches
-    @timing "jdsym_rand_block: matvec" mul!(view(W_a, :, j+1:j+nact), A, T_corr)
+    @timing "jdsym_rand_block: matvec" mul!(W[:, j+1:j+nact], A, T_corr)
     @timing "jdsym_rand_block: sketch" begin
-        mul!(view(SW_a, :, j+1:j+nact), Theta, view(W_a, :, j+1:j+nact))
-        SV_a[:, j+1:j+nact] .= ST_corr
+        mul!(SW[:, j+1:j+nact], Theta, W[:, j+1:j+nact])
+        SV[:, j+1:j+nact] .= ST_corr
     end
 
-    # Update Mc in-place (mirrors jdsym_block's Hc column+row update, BLAS-3).
+    # Expand Mc (mirrors jdsym_block's Hc column+row update, BLAS-3).
     @timing "jdsym_rand_block: overlap" begin
-        SW_new = view(SW_a, :, j+1:j+nact)
-        SW_old = view(SW_a, :, 1:j)
-        mul!(view(Mc, 1:j,          j+1:j+nact), SV',      SW_new)
-        mul!(view(Mc, j+1:j+nact,   1:j),        ST_corr', SW_old)
-        mul!(view(Mc, j+1:j+nact,   j+1:j+nact), ST_corr', SW_new)
+        SW_new = view(SW, :, j+1:j+nact)
+        SW_old = view(SW, :, 1:j)
+        Mexp = similar(Mc, j+nact, j+nact)
+        Mexp[1:j, 1:j] .= Mc
+        mul!(Mexp[1:j,        j+1:j+nact], SV[:, 1:j]',      SW_new)
+        mul!(Mexp[j+1:j+nact, 1:j],        ST_corr', SW_old)
+        mul!(Mexp[j+1:j+nact, j+1:j+nact], ST_corr', SW_new)
     end
 
     # Write T_corr into V buffer
     @timing "jdsym_rand_block: expand" begin
-        V_a[:, j+1:j+nact] .= T_corr
+        V[:, j+1:j+nact] .= T_corr
     end
 
-    return nact
+    return Mexp, nact
 end
 
 

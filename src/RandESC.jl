@@ -57,6 +57,16 @@ module RandESC
         return v
     end
 
+    # Calculate the norms of the columns of an array
+    function columnwise_norms(X::AbstractArray)
+        vec(sqrt.(sum(abs2, X; dims=1)))
+    end
+
+    # Calculate the dot poroducts of the columns of two arrays
+    function columnwise_dots(A::AbstractArray, B::AbstractArray)
+        vec(sum(conj(A) .* B; dims=1))
+    end
+
     function sort_which(theta::AbstractVector, which::AbstractString)
         W = uppercase(which)
         if W == "LM"
