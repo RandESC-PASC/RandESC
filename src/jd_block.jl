@@ -42,8 +42,9 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     T = eltype(v0)
 
     # ── Workspace ─────────────────────────────────────────────────────────
+    # Note: inherit architecture from input v0 (CPU, NVIDIA GPU, AMD GPU, etc.).
+    #       The resulting code is vendor agnostic.
     @timing "jdsym_block: allocation" begin
-        #TODO: How do we know GPU arch? Best is to infer from v0, but if nothing?
         V      = similar(v0, n, kmax)    # search space basis (includes soft-locked)
         W      = similar(v0, n, kmax)    # A * V
         rb     = similar(v0, n, kb)      # residuals / corrections
@@ -62,7 +63,6 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     hist_row = 0
 
     # ── Initialize subspace ───────────────────────────────────────────────
-    # TODO: for now, assumem v0 is available
     j = min(kb, n)
     nc = min(size(v0, 2), j)
     V[:, 1:nc] .= v0[:, 1:nc]
@@ -234,9 +234,6 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
         end
 
         # Phase 2: sequential orthogonalization among the nb new vectors
-        # TODO: phase 2 is slow on the GPU because of the sequencial nature of it
-        #       would QR or SVD be faster? Would then need to make sure it is numerically stable
-        #       What about cholesky too? Should probably test and consult the other guys
         for ib in 1:nb
             j + nact >= kmax && break   # subspace full
 
@@ -258,15 +255,6 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
             nact += 1
             V[:, j + nact] .= rb[:, ib]
         end
-        ### QR test: seems to be significantly faster, to check, also for large systems with many bands
-        #nact = nb
-        #Q = qr(rb[:, 1:nb]).Q
-        #V[:, j+1:j+nact] .= oftype(V, Q) #TODO: deal with numerical rank issues?, avoid allocations?
-
-        ### SVD test
-        #nact = nb
-        #U, S, Vt = svd(rb[:, 1:nb])
-        #V[:, j+1:j+nact] .= U
     end
 
     nact == 0 && return Hc, 0
