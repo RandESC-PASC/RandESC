@@ -2,7 +2,7 @@ using LinearAlgebra
 using Printf
 
 """
-    jdsym_block(A; k=5, kwargs...)
+    jdsym_block(A, v0; k=5, kwargs...)
 
 Davidson eigensolver for symmetric/Hermitian matrices (smallest eigenvalues).
 Soft-locking: converged Ritz vectors stay in V; corrections are generated only

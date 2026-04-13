@@ -3,7 +3,7 @@ using Printf
 
 
 """
-    jdsym_rand_block(A; k=5, kwargs...)
+    jdsym_rand_block(A, v0; k=5, kwargs...)
 
 Sketched Jacobi-Davidson eigensolver for symmetric/Hermitian matrices.
 Structure mirrors `jdsym_block` exactly; the only differences are:
