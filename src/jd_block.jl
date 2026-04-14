@@ -272,8 +272,3 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
 
     return Hexp, nact
 end
-
-# Calculate the norms of the columns of an array
-function columnwise_norms(X::AbstractArray)
-    vec(sqrt.(sum(abs2, X; dims=1)))
-end
