@@ -42,7 +42,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                           M=nothing,
                           precond_preparator=nothing,
                           disp::Bool=false,
-                          sketch_type::String="sparsestack",
+                          sketch_type::String="complex_gaussian", #TODO: tmp, for GPU testing
                           sketch_size::Int=-1,
                           orth_method::Symbol=:rgs)
 
@@ -62,26 +62,26 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
     T = complex(eltype(v0))
 
-    Theta = sketch(n, s, sketch_type)
+    Theta = sketch(n, s, sketch_type; template=v0)
 
     # ── Workspace ─────────────────────────────────────────────────────────
     @timing "jd_sketched: allocation" begin
         # Active subspace: columns 1:j live in the the following buffers.
-        V  = zeros(T, n, jmax)
-        SV = zeros(T, s, jmax)
-        W  = zeros(T, n, jmax)
-        SW = zeros(T, s, jmax)
+        V  = similar(v0, n, jmax)
+        SV = similar(v0, s, jmax)
+        W  = similar(v0, n, jmax)
+        SW = similar(v0, s, jmax)
         # Work buffers for various allocation free operations:
-        n_buffer = zeros(T, n, jmax)
-        s_buffer = zeros(T, s, jmax)
-        # Ritz vectors and residuals for active pairs (like ub/rb in jd)
+        n_buffer = similar(v0, n, jmax)
+        s_buffer = similar(v0, s, jmax)
+        # Ritz vectors and residuals for active pairs (like ub/rb in jdsym_block)
         # ub is also reused as T_corr_buf during expand (never live at the same time)
-        ub      = zeros(T, n, kb)
-        rb      = zeros(T, n, kb)
+        ub      = similar(v0, n, kb)
+        rb      = similar(v0, n, kb)
         # Sketched Ritz vectors for Rayleigh quotient; reused as ST_corr_buf/SV_scratch
         # during expand (never live at the same time as the Rayleigh quotient computation)
-        SX_rq   = zeros(T, s, kb)   # reused as ST_corr_buf in expand
-        SW_rq   = zeros(T, s, kb)   # reused as SV_scratch in expand
+        SX_rq   = similar(v0, s, kb)   # reused as ST_corr_buf in expand
+        SW_rq   = similar(v0, s, kb)   # reused as SV_scratch in expand
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):

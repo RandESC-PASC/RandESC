@@ -36,17 +36,21 @@ Return a callable `SS` that maps `X` (size n×p) to an s×p sketch, following MA
 
 If `seed` is provided, a fresh RNG is created with that seed (like MATLAB's `rng(seed)`).
 """
-function sketch(n::Integer, s::Integer, type::AbstractString; seed::Union{Nothing,Integer}=nothing)
+function sketch(n::Integer, s::Integer, type::AbstractString; seed::Union{Nothing,Integer}=nothing, template=nothing)
     rng = isnothing(seed) ? Random.default_rng() : MersenneTwister(seed)
     n = Int(n); s = Int(s)
 
+    # TODO: GPU porting, start with only MatrixSketchOp, because it should be easy. Then, once
+    #       the solver works, we can try and look into the SRTT
+    #       Once everything works, make sure docstrings and comments are up to date
+
     t = lowercase(type)
     if t == "real_gaussian"
-        S = randn(rng, s, n) / sqrt(s)
+        S = to_device(randn(rng, s, n) / sqrt(s), template)
         return MatrixSketchOp(S)
 
     elseif t == "complex_gaussian"
-        S = randn(rng, s, n) / sqrt(2s) .+ im * randn(rng, s, n) / sqrt(2s)
+        S = to_device(randn(rng, s, n) / sqrt(2s) .+ im * randn(rng, s, n) / sqrt(2s), template)
         return MatrixSketchOp(S)
 
     elseif t == "complex_srtt"

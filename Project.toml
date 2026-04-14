@@ -4,6 +4,7 @@ version = "0.1.0"
 
 [deps]
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -17,6 +18,7 @@ NVTX = "5da4648a-3479-48b8-97b9-01cb529c0a1f"
 RandESCNVTXExt = "NVTX"
 
 [compat]
+GPUArraysCore = "0.1, 0.2"
 LinearAlgebra = "1.11.0"
 NVTX = "1"
 Printf = "1.11.0"
