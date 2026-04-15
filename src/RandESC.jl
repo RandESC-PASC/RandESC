@@ -12,5 +12,4 @@ module RandESC
     include("jd_sketched.jl")
     include("jd.jl")
     include("interface.jl")
-
 end

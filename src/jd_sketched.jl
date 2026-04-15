@@ -42,7 +42,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                           M=nothing,
                           precond_preparator=nothing,
                           disp::Bool=false,
-                          sketch_type::String="complex_gaussian", #TODO: tmp, for GPU testing
+                          sketch_type::String="sparsestack",
                           sketch_size::Int=-1,
                           orth_method::Symbol=:rgs)
 
@@ -147,7 +147,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 nk    = min(jmin, j)
                 # QR-orthonormalize: U columns from general eigen not guaranteed unitary
                 # Use work buffers to avoid extra allocations
-                Q_rst = Matrix(qr(U[:, 1:nk]).Q)[:, 1:nk]
+                Q_rst = oftype(V, qr(U[:, 1:nk]).Q)
                 mul!(n_buffer[:, 1:nk], V[:, 1:j],  Q_rst)
                 V[:, 1:nk] .= n_buffer[:, 1:nk]
                 mul!(s_buffer[:, 1:nk], SV[:, 1:j], Q_rst)
@@ -188,7 +188,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # Sketch residuals for Θ-norm computation — reuse sv_work to avoid per-column alloc
         @timing "jd_sketched: sketch" begin
             mul!(SW_rq[:, 1:nb], Theta, rb[:, 1:nb])   # reuse SW_rq as tmp buffer
-            rnorms = columnwise_norms(SW_rq[:, 1:nb])
+            rnorms = Array(columnwise_norms(SW_rq[:, 1:nb]))
         end
 
         # Convergence check on active target pairs (skip first iteration, like jd)

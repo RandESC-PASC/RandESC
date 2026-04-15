@@ -43,14 +43,16 @@ function sketch(n::Integer, s::Integer, type::AbstractString; seed::Union{Nothin
     # TODO: GPU porting, start with only MatrixSketchOp, because it should be easy. Then, once
     #       the solver works, we can try and look into the SRTT
     #       Once everything works, make sure docstrings and comments are up to date
+    # TODO: need to pass the types in a nicer way, probably parametrically?
 
     t = lowercase(type)
     if t == "real_gaussian"
-        S = to_device(randn(rng, s, n) / sqrt(s), template)
+        S = random_matrix(Float64, s, n, template; seed=rng) ./ sqrt(s) # TODO: type should be inferred
         return MatrixSketchOp(S)
 
     elseif t == "complex_gaussian"
-        S = to_device(randn(rng, s, n) / sqrt(2s) .+ im * randn(rng, s, n) / sqrt(2s), template)
+        #TODO: type should be inferred
+        S = random_matrix(ComplexF64, s, n, template; seed=rng) ./ sqrt(2s)
         return MatrixSketchOp(S)
 
     elseif t == "complex_srtt"
@@ -69,7 +71,7 @@ function sketch(n::Integer, s::Integer, type::AbstractString; seed::Union{Nothin
 
     elseif t == "sparsestack"
         ζ = 4
-        return MatrixSketchOp(sparsestack(s, n, ζ; rng))
+        return MatrixSketchOp(sparsestack(s, n, ζ; rng, template))
 
     else
         throw(ArgumentError("Unknown sketch.type \"$type\""))
@@ -143,10 +145,11 @@ using the blocked one-per-block scheme (MEX `sparseStackl.c`):
 
 This mirrors the MEX behavior closely and constructs CSC arrays directly.
 """
-function sparsestack(d::Integer, m::Integer, ζ::Integer; rng=Random.default_rng())
+function sparsestack(d::Integer, m::Integer, ζ::Integer; 
+                     rng=Random.default_rng(), template=nothing)
     dI = Int(d); mI = Int(m); ζI = Int(ζ)
     if dI == 0 || mI == 0 || ζI == 0
-        return spzeros(dI, mI)
+        return spzeros(dI, mI) #TODO: return spzeors on approriate arch
     end
     ζI = min(ζI, dI)
 
@@ -158,53 +161,29 @@ function sparsestack(d::Integer, m::Integer, ζ::Integer; rng=Random.default_rng
 
     # Partition rows: d = q*ζ + r, first r blocks of size q+1, rest q
     q, r = divrem(dI, ζI)
-    sizes  = Vector{Int}(undef, ζI)
-    starts = Vector{Int}(undef, ζI)
-    @inbounds for j in 0:ζI-1
-        if j < r
-            sizes[j+1]  = q + 1
-            starts[j+1] = j * (q + 1)
-        else
-            sizes[j+1]  = q
-            starts[j+1] = r * (q + 1) + (j - r) * q
-        end
-    end
-
-    # Preallocate CSC arrays
-    colptr = Vector{Int}(undef, mI + 1)
-    rowval = Vector{Int}(undef, nnz)
-    nzval  = Vector{Float64}(undef, nnz)
+    #TODO: tiny arrays, might be simpler to build on CPU and move to GPU
+    js = to_device(collect(0:ζI-1), template)
+    sizes = map(j -> ifelse(j < r, q + 1, q), js)
+    starts = map(j -> ifelse(j < r,
+                             j * (q + 1),
+                             r * (q + 1) + (j - r) * q), js)
 
     # Column pointers (1-based)
-    colptr[1] = 1
-    @inbounds for col in 1:mI
-        colptr[col + 1] = col * ζI + 1
+    indices = to_device(collect(1:mI+1), template)
+    colptr = map(col -> (col - 1) * ζI + 1, indices)
+
+    indices = to_device(collect(1:nnz), template) # compound indices
+    rowval = map(indices) do idx
+        j = (idx - 1) % ζI + 1 # idx = (col - 1) * ζI + j
+        # unbiased offset in [0, sizes[j)-1]
+        off = rand(rng, 0:(sizes[j] - 1)) #TODO: might not run on GPU
+        starts[j] + off + 1 # to 1-based
     end
 
     a = 1 / sqrt(Float64(ζI))     # magnitude
-    sign_buf::UInt64 = 0x00
-    bits_left::Int   = 0
+    #TODO: are initial random properties kept (weird random word)?
+    signs = map(i -> ifelse(rand(Bool), 1, -1), indices)
+    nzval = signs .* a #TODO: save an allocation by merging kernels?
 
-    # Fill columns: each column occupies rowval/nzval indices p0+1 : p0+ζI
-    @inbounds for col in 1:mI
-        p0 = (col - 1) * ζI
-        for j in 1:ζI
-            # unbiased offset in [0, sizes[j)-1]
-            off = rand(rng, 0:(sizes[j] - 1))
-            rowval[p0 + j] = starts[j] + off + 1   # to 1-based
-
-            # reuse bits from a 64-bit random word for ± sign
-            if bits_left == 0
-                sign_buf = rand(rng, UInt64)
-                bits_left = 64
-            end
-            s = if (sign_buf & 0x1) == 0x1 1.0 else -1.0 end
-            sign_buf >>= 1
-            bits_left -= 1
-
-            nzval[p0 + j] = s * a
-        end
-    end
-
-    return SparseMatrixCSC(dI, mI, colptr, rowval, nzval)
+    return sparse_matrix(dI, mI, colptr, rowval, nzval)
 end
