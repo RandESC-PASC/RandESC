@@ -19,12 +19,8 @@ Tests generate random symmetric matrices (n=50, k=7) and verify all solvers agai
 - `src/RandESC.jl` — module definition, exports, utilities
 - `src/interface.jl` — unified `randESCSolver()` entry point. provide a unified interface with acess to all solvers implemented in this package
 - `src/sketch.jl` — randomized embedding/sketching operators (Gaussian, SRTT, sparsesign)
-- `src/IRA.jl` / `src/RIRA.jl` — Implicitly Restarted Arnoldi (standard / randomized) DEPRECATED
-- `src/LOBPCG.jl` / `src/LOBPCG_sketch.jl` — LOBPCG variants (with locking, soft locking, sketched)
-- `src/jd.jl` / `src/jd_rand.jl` — Jacobi-Davidson (standard / randomized)
-- `src/jd_block.jl` - blocked jacobi davidson implementation with soft locking that works very well.
-- `src/jd_rand_block.jl` — blocked jacobi davidson with sketched (Θ-norm) orthogonalization; mirrors `jd_block.jl` but uses RGS instead of MGS.
-- `src/sketched_to_fully.jl` — post-processing to recover clean eigenvectors from sketched results
+- `src/jd.jl` — blocked Jacobi-Davidson with soft locking; recommended default solver.
+- `src/jd_sketched.jl` — blocked Jacobi-Davidson with sketched (Θ-norm) orthogonalization; mirrors `jd.jl` but uses RGS instead of MGS.
 - `src/randomization_utils.jl` utils for randomization, most useful for jacobi davidson flavours
 - `latex/presentation.tex` a tex file containing theory for eigensolvers and randomization. the theory of jacobi davidson and randomized jacobi davidson ist explained in detail in here
 - `test/tests.jl` — test suite using `@testset`
@@ -53,10 +49,9 @@ Tests generate random symmetric matrices (n=50, k=7) and verify all solvers agai
 
 ## Preferred Solvers
 
-- **`jdsym_block`** — recommended default for most problems. Blocked Jacobi-Davidson with soft locking and standard MGS orthogonalization.
-- **`jdsym_rand_block`** — recommended when orthogonalization is the bottleneck (large `n`). Same algorithm but with sketched (Θ-norm) RGS orthogonalization.
-- All other solvers (`ira`, `rand_ira`, `lobpcg_*`, `jdsym`, `jdsym_rand`) are either deprecated or superseded by the block variants above.
+- **`jd`** — recommended default for most problems. Blocked Jacobi-Davidson with soft locking and standard MGS orthogonalization.
+- **`jd_sketched`** — recommended when orthogonalization is the bottleneck (large `n`). Same algorithm but with sketched (Θ-norm) RGS orthogonalization.
 
 ## Exported API
 
-`ira`, `rand_ira`, `lobpcg`, `lobpcg_lock`, `lobpcg_softlock`, `lobpcg_sketch_lock`, `jdsym`, `jdsym_rand`, `jdsym_block`, `jdsym_rand_block`, `sketched_to_fully`, `randESCSolver`
+`jd`, `jd_sketched`, `randESCSolver`
