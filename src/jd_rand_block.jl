@@ -24,8 +24,6 @@ to jmin=2*(k+nbuff) vectors when full, and grows up to jmax=4*(k+nbuff).
 # Keyword Arguments
 - `tol=1e-8`: Residual Θ-norm convergence threshold
 - `maxit=200`: Maximum iterations
-- `sigma=:SR`: Target: `:SR` smallest real, `:LR` largest real,
-               `:SM` smallest magnitude, `:LM` largest magnitude
 - `M=nothing`: Preconditioner, applied as `M \\ r`
 - `precond_preparator=nothing`: Callback `f(M, X)` to refresh preconditioner
 - `disp=false`: Print iteration info
@@ -41,7 +39,6 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                           k::Int=5,
                           tol::Float64=1e-8,
                           maxit::Int=200,
-                          sigma::Symbol=:SR,
                           M=nothing,
                           precond_preparator=nothing,
                           disp::Bool=false,
@@ -131,7 +128,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         F    = eigen(Mc)
         ew   = real.(F.values)
         U    = F.vectors
-        perm = _jdrb_sort_perm(ew, sigma)
+        perm = sortperm(ew)
         ew   = copy(ew[perm])     # Note: use copy to avoid accidental non-contiguous views
         U    = copy(U[:, perm])
     end
@@ -168,7 +165,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 F_rst = eigen(Mc)
                 ew    = real.(F_rst.values)
                 U     = F_rst.vectors
-                perm  = _jdrb_sort_perm(ew, sigma)
+                perm  = sortperm(ew)
                 ew    = copy(ew[perm]);  U = copy(U[:, perm])
                 disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
             end
@@ -253,7 +250,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
             F    = eigen(Mc)
             ew   = real.(F.values)
             U    = F.vectors
-            perm = _jdrb_sort_perm(ew, sigma)
+            perm = sortperm(ew)
             ew   = copy(ew[perm])
             U    = copy(U[:, perm])
         end
@@ -273,7 +270,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         F_fin  = eigen(Mc)
         ew_fin = real.(F_fin.values)
         U_fin  = F_fin.vectors
-        perm_f = _jdrb_sort_perm(ew_fin, sigma)
+        perm_f = sortperm(ew_fin)
         U_fin  = copy(U_fin[:, perm_f[1:k]])             # j×k, small
         mul!(n_buffer[:, 1:k], V[:, 1:j], U_fin)
         V[:, 1:k] .= n_buffer[:, 1:k]
@@ -291,7 +288,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # Final output: only this n×k allocation is unavoidable
         X      = Xritz * Fk.vectors
         lambda = Fk.values
-        perm_s = _jdrb_sort_perm(lambda, sigma)
+        perm_s = sortperm(lambda)
         X      = copy(X[:, perm_s])
         lambda = copy(lambda[perm_s])
     end
@@ -362,18 +359,4 @@ Returns the expanded Mc and the number of accepted vectors `nact`.
     end
 
     return Mexp, nact
-end
-
-
-"""Sort permutation for eigenvalues by target `sigma`."""
-function _jdrb_sort_perm(ew::AbstractVector, sigma::Symbol)
-    if sigma == :LM
-        return sortperm(abs.(ew), rev=true)
-    elseif sigma == :SM
-        return sortperm(abs.(ew))
-    elseif sigma == :LR
-        return sortperm(ew, rev=true)
-    else   # :SR (default)
-        return sortperm(ew)
-    end
 end
