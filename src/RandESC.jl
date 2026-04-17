@@ -1,6 +1,7 @@
 module RandESC
 
     using TimerOutputs
+    import TimerOutputs: reset_timer!
 
     """TimerOutput object storing RandESC internal timings."""
     const timer = TimerOutput()
@@ -54,7 +55,7 @@ module RandESC
         vec(sqrt.(sum(abs2, X; dims=1)))
     end
 
-    # Calculate the dot poroducts of the columns of two arrays
+    # Calculate the dot products of the columns of two arrays
     function columnwise_dots(A::AbstractArray, B::AbstractArray)
         vec(sum(conj(A) .* B; dims=1))
     end

@@ -30,7 +30,7 @@ to jmin=2*(k+nbuff) vectors when full, and grows up to jmax=4*(k+nbuff).
 - `precond_preparator=nothing`: Callback `f(M, X)` to refresh preconditioner
 - `disp=false`: Print iteration info
 - `sketch_type="sparsestack"`: Sketch operator type (see sketch.jl)
-- `sketch_size=-1`: Sketch dimension s (default: `max(6*jmax, 6*k)`)
+- `sketch_size=-1`: Sketch dimension s (default: `max(5*jmax, 5*k)`)
 - `orth_method=:rgs`: Θ-orthogonalization method (`:rgs`, `:rcgs`, `:rcgs2`)
 
 # Returns

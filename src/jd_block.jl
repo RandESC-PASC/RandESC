@@ -54,7 +54,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
     # Hc: projected Hamiltonian, j x j T Hermitian matrix
-    # Vc: Ritz vercors of the projected problem, j x j T matrix
+    # Vc: Ritz vectors of the projected problem, j x j T matrix
     # ew: Ritz values of the projected problem, length j Real vector
 
     nconv    = 0
@@ -98,7 +98,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                 Hc = Hermitian(Diagonal(T.(ew[1:jmin])))
                 j = jmin
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
-                # Because Hc is diagonal, eigenvalues and eigevectors are trivial
+                # Because Hc is diagonal, eigenvalues and eigenvectors are trivial
                 ew = ew[1:jmin]
                 Vc = similar(V, jmin, jmin)  # identity matrix. mul! with GPU arrays
                 fill!(Vc, zero(T))           # do not like I, so explicit matrix
