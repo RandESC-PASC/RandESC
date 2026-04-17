@@ -24,15 +24,8 @@ This has to be done from inside the source directory of this repository, otherwi
 | `src/RandESC.jl` | Module entry point: exports, includes, and shared utilities |
 | `src/interface.jl` | Unified `randESCSolver()` entry point providing access to all solvers |
 | `src/sketch.jl` | Randomized embedding/sketching operators: Gaussian, SRTT (FFT/DCT-based), sparsesign, sparsestack |
-| `src/jd_block.jl` | **Recommended.** Blocked Jacobi-Davidson with soft locking for symmetric/Hermitian matrices. Best general-purpose solver. |
-| `src/jd_rand_block.jl` | **Recommended.** Blocked Jacobi-Davidson with sketched (Θ-norm) orthogonalization (Balabanov-Grigori RGS). Efficient for large problems where orthogonalization is a bottleneck. |
-| `src/jd.jl` | Standard (scalar) Jacobi-Davidson solver for symmetric matrices |
-| `src/jd_rand.jl` | Randomized (sketched) scalar Jacobi-Davidson solver |
-| `src/LOBPCG.jl` | LOBPCG variants: standard, with locking, and soft locking |
-| `src/LOBPCG_sketch.jl` | Sketched LOBPCG with Θ-orthonormal basis |
-| `src/IRA.jl` | Implicitly Restarted Arnoldi (deprecated) |
-| `src/RIRA.jl` | Randomized Implicitly Restarted Arnoldi (deprecated) |
-| `src/sketched_to_fully.jl` | Post-processing to recover clean eigenvectors from sketched results (not used anymore) |
+| `src/jd_block.jl` | Blocked Jacobi-Davidson with soft locking for symmetric/Hermitian matrices. Best general-purpose solver. |
+| `src/jd_rand_block.jl` | Blocked Jacobi-Davidson with sketched (Θ-norm) orthogonalization (Balabanov-Grigori RGS). |
 | `src/randomization_utils.jl` | Shared utilities for randomized solvers (sketch application, RGS orthogonalization) |
 
 ## Examples

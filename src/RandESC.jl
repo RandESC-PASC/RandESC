@@ -15,7 +15,6 @@ module RandESC
         if blocks isa Expr
             blocks  # function definition: timer_expr_func returns a single Expr
         else
-            # block/expression: timer_expr returns (before, after); reassemble with try/finally
             Expr(:block,
                 blocks[1],
                 Expr(:tryfinally,
@@ -27,19 +26,12 @@ module RandESC
     end
 
     # list all functions that should be accessible from outside
-    export rand_ira, ira, lobpcg, sketched_to_fully, randESCSolver, lobpcg_softlock, lobpcg_lock, lobpcg_sketch_lock, jdsym, jdsym_rand, jdsym_rand_block, jdsym_block
+    export randESCSolver, jdsym_rand_block, jdsym_block
     export timer, reset_timer!
 
     # include all source files from this module
     include("sketch.jl")
-    include("sketched_to_fully.jl")
-    include("IRA.jl")
-    include("RIRA.jl")
-    include("LOBPCG.jl")
-    include("LOBPCG_sketch.jl")
-    include("jd.jl")
     include("randomization_utils.jl")
-    include("jd_rand.jl")
     include("jd_rand_block.jl")
     include("jd_block.jl")
 
