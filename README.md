@@ -24,13 +24,13 @@ This has to be done from inside the source directory of this repository, otherwi
 | `src/RandESC.jl` | Module entry point: exports, includes, and shared utilities |
 | `src/interface.jl` | Unified `randESCSolver()` entry point providing access to all solvers |
 | `src/sketch.jl` | Randomized embedding/sketching operators: Gaussian, SRTT (FFT/DCT-based), sparsesign, sparsestack |
-| `src/jd_block.jl` | Blocked Jacobi-Davidson with soft locking for symmetric/Hermitian matrices. Best general-purpose solver. |
-| `src/jd_rand_block.jl` | Blocked Jacobi-Davidson with sketched (Θ-norm) orthogonalization (Balabanov-Grigori RGS). |
+| `src/jd.jl` | Blocked Jacobi-Davidson with soft locking. Best general-purpose solver. |
+| `src/jd_sketched.jl` | Blocked Jacobi-Davidson with sketched (Θ-norm) orthogonalization (Balabanov-Grigori RGS). |
 | `src/randomization_utils.jl` | Shared utilities for randomized solvers (sketch application, RGS orthogonalization) |
 
 ## Examples
 
 | Path | Description |
 |------|-------------|
-| `example/example.jl` | Basic usage: constructs a random Hermitian matrix and runs solvers |
+| `example/dense_hermitian.jl` | Basic usage: constructs a random Hermitian matrix and runs solvers |
 | `example/DFTK_solver/runDFTK.jl` | Integration with [DFTK.jl](https://dftk.org): plugs RandESC solvers into a DFT self-consistent field calculation as a custom eigensolver |
