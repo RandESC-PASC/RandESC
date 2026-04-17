@@ -19,7 +19,13 @@ end
 
 function RandESC.sparse_matrix(m::Int, n::Int, colptr::ROCVector{<:Integer},
                                rowval::ROCVector{<:Integer}, nzval::ROCVector)
-    return ROCSparseMatrixCSC(colptr, rowval, nzval, m, n)
+    return ROCSparseMatrixCSC(colptr, rowval, nzval, (m, n))
+end
+
+function RandESC.sparse_matrix(I::ROCVector{<:Integer}, J::ROCVector{<:Integer},
+                               V::ROCVector, m::Int, n::Int)
+    COO = ROCSparseMatrixCOO(I, J, V, (m, n))
+    return ROCSparseMatrixCSC(COO)
 end
 
 end # module

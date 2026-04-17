@@ -9,7 +9,6 @@ function columnwise_dots(A::AbstractArray, B::AbstractArray)
 end
 
 #TODO: docstrings
-# Calculate the norms of the columns of an array
 function columnwise_norms(X::AbstractArray)
     vec(sqrt.(sum(abs2, X; dims=1)))
 end
@@ -26,10 +25,29 @@ function to_device(array::Array, template::AbstractGPUArray)
     return dest
 end
 
-function to_device(array::Array, template::Array)
+function to_device(array::Array, template::Union{Nothing,Array})
     return array
 end
 
-function to_device(array::AbstractArray, template=nothing)
+function random_matrix(T::Type, m::Int, n::Int, template::Union{Array,Nothing}; seed=Random.default_rng())
+    return randn(seed, T, m, n)
+end
+
+# Moves an array from the GPU to the CPU
+function to_cpu(array::AbstractGPUArray)
+    return Array(array)
+end
+
+function to_cpu(array::Array)
     return array
+end
+
+function sparse_matrix_csc(m::Int, n::Int, colptr::Vector{<:Integer},
+                           rowval::Vector{<:Integer}, nzval::Vector)
+    return SparseMatrixCSC(m, n, colptr, rowval, nzval)
+end
+
+function sparse_matrix_csc(I::Vector{<:Integer}, J::Vector{<:Integer},
+                           V::Vector, m::Int, n::Int)
+    return sparse(I, J, V, m, n) # defaults to SparseMatrixCSC on the CPU
 end

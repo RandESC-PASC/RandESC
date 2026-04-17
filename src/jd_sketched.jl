@@ -42,7 +42,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                           M=nothing,
                           precond_preparator=nothing,
                           disp::Bool=false,
-                          sketch_type::String="sparsestack",
+                          sketch_type::String="sparsesign",
                           sketch_size::Int=-1,
                           orth_method::Symbol=:rgs)
 

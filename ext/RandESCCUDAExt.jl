@@ -12,7 +12,14 @@ end
 
 function RandESC.sparse_matrix(m::Int, n::Int, colptr::CuVector{<:Integer},
                                rowval::CuVector{<:Integer}, nzval::CuVector)
-    return CuSparseMatrixCSC(colptr, rowval, nzval, m, n)
+    return CuSparseMatrixCSC(colptr, rowval, nzval, (m, n))
+end
+
+
+function RandESC.sparse_matrix(I::CuVector{<:Integer}, J::CuVector{<:Integer},
+                               V::CuVector, m::Int, n::Int)
+    COO = CuSparseMatrixCOO(I, J, V, (m, n))
+    return CuSparseMatrixCSC(COO)
 end
 
 end # module

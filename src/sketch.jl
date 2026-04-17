@@ -108,28 +108,37 @@ Build a `d × m` sparse matrix with exactly `ζ` nonzeros per column:
 - Nonzeros are iid ±1/√ζ (Rademacher).
 
 """
-function sparsesign(d::Integer, m::Integer, ζ::Integer; rng=Random.default_rng())
-    d = Int(d); m = Int(m); ζ = Int(min(ζ, d))
+function sparsesign(d::Integer, m::Integer, ζ::Integer;
+                    rng=Random.default_rng(), template=nothing)
     @assert d ≥ 1 && m ≥ 1 && ζ ≥ 1 "d, m, ζ must be positive and ζ ≤ d"
 
     nnz = m * ζ
-    I = Vector{Int}(undef, nnz)
-    J = Vector{Int}(undef, nnz)
-    V = Vector{Float64}(undef, nnz)
-    v = 1.0 / sqrt(ζ)
 
-    idx = 1
-    @inbounds for j in 1:m
-        rows = randperm(rng, d)[1:ζ]                 # distinct rows
-        signs = rand(rng, (-1.0, 1.0), ζ)            # ±1
-        for t in 1:ζ
-            I[idx] = rows[t]
-            J[idx] = j
-            V[idx] = signs[t] * v
-            idx += 1
-        end
+    indices = to_device(collect(1:nnz), template)
+    J = map(idx -> cld(idx, ζ), indices)
+
+    #I_tmp = Array{Int}(undef, ζ, m)
+    #for j in 1:m
+    #    I_tmp[:, j] = randperm(rng, d)[1:ζ]
+    #end
+    #I = reshape(to_device(I_tmp, template), nnz)
+
+    # TODO: it is quite hard to shuffle d rows by d rows on the GPU, the above is CPU only
+    #       Below is a GPU hack: we generate a d x m array of random numbers, and sortperm the cols
+    #       We need to find out which is more expensive on the GPU, and the CPU: might be different
+    keys = random_matrix(Float32, d, m, template; seed=rng)
+    perms = view(sortperm(keys; dims=1), 1:ζ, :)
+    I = map(indices) do idx
+        t = (idx - 1) % ζ + 1
+        j = cld(idx, ζ)
+        perms[t, j] - (j - 1) * d
     end
-    return sparse(I, J, V, d, m)
+
+    v = ComplexF64(1.0) / sqrt(ComplexF64(ζ)) # TODO: for proper mul! on GPUs
+    signs = map(i -> ifelse(rand(Bool), 1, -1), indices) #TODO: how important is it to use rng?
+    V = signs .* v #TODO: save an allocation by merging kernels?
+
+    return sparse_matrix_csc(I, J, V, d, m)
 end
 
 """
@@ -147,43 +156,42 @@ This mirrors the MEX behavior closely and constructs CSC arrays directly.
 """
 function sparsestack(d::Integer, m::Integer, ζ::Integer; 
                      rng=Random.default_rng(), template=nothing)
-    dI = Int(d); mI = Int(m); ζI = Int(ζ)
-    if dI == 0 || mI == 0 || ζI == 0
-        return spzeros(dI, mI) #TODO: return spzeors on approriate arch
+    if d == 0 || m == 0 || ζ == 0
+        return spzeros(d, m) #TODO: return spzeors on approriate arch
     end
-    ζI = min(ζI, dI)
+    ζ = min(ζ, d)
 
     # guard overflow in nnz = m*ζ
-    if mI > typemax(Int) ÷ ζI
+    if m > typemax(Int) ÷ ζ
         throw(OverflowError("m*ζ overflows Int"))
     end
-    nnz = mI * ζI
+    nnz = m * ζ
 
     # Partition rows: d = q*ζ + r, first r blocks of size q+1, rest q
-    q, r = divrem(dI, ζI)
+    q, r = divrem(d, ζ)
     #TODO: tiny arrays, might be simpler to build on CPU and move to GPU
-    js = to_device(collect(0:ζI-1), template)
+    js = to_device(collect(0:ζ-1), template)
     sizes = map(j -> ifelse(j < r, q + 1, q), js)
     starts = map(j -> ifelse(j < r,
                              j * (q + 1),
                              r * (q + 1) + (j - r) * q), js)
 
     # Column pointers (1-based)
-    indices = to_device(collect(1:mI+1), template)
-    colptr = map(col -> (col - 1) * ζI + 1, indices)
+    indices = to_device(collect(1:m+1), template)
+    colptr = map(col -> (col - 1) * ζ + 1, indices)
 
     indices = to_device(collect(1:nnz), template) # compound indices
     rowval = map(indices) do idx
-        j = (idx - 1) % ζI + 1 # idx = (col - 1) * ζI + j
+        j = (idx - 1) % ζ + 1 # idx = (col - 1) * ζ + j
         # unbiased offset in [0, sizes[j)-1]
-        off = rand(rng, 0:(sizes[j] - 1)) #TODO: might not run on GPU
+        off = rand(0:(sizes[j] - 1)) #TODO: cannot pass rng to kernel. If crucial, then needs to be pre-generated
         starts[j] + off + 1 # to 1-based
     end
 
-    a = 1 / sqrt(Float64(ζI))     # magnitude
+    a = 1 / sqrt(ComplexF64(ζ))     # magnitude #TODO: need a complex matrix for proper CuBLAS mul!, we really need type consistency
     #TODO: are initial random properties kept (weird random word)?
     signs = map(i -> ifelse(rand(Bool), 1, -1), indices)
     nzval = signs .* a #TODO: save an allocation by merging kernels?
 
-    return sparse_matrix(dI, mI, colptr, rowval, nzval)
+    return sparse_matrix_csc(d, m, colptr, rowval, nzval)
 end
