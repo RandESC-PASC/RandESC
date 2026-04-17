@@ -2,7 +2,7 @@ using LinearAlgebra
 using Printf
 
 """
-    jdsym_block(A, v0; k=5, kwargs...)
+    jd(A, v0; k=5, kwargs...)
 
 Davidson eigensolver for symmetric/Hermitian matrices (smallest eigenvalues).
 Soft-locking: converged Ritz vectors stay in V; corrections are generated only
@@ -22,7 +22,7 @@ Arguments:
 Returns (X, lambda, history) where X is n x k, lambda is length k,
 and history is nit x 3 with columns [max_rnorm, iter, nmv].
 """
-@views @timing "jdsym_block" function jdsym_block(A, v0::AbstractArray;
+@views @timing "jd" function jd(A, v0::AbstractArray;
                      k::Int=5,
                      tol::Float64=1e-8,
                      maxit::Int=100,
@@ -44,7 +44,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     # ── Workspace ─────────────────────────────────────────────────────────
     # Note: inherit architecture from input v0 (CPU, NVIDIA GPU, AMD GPU, etc.).
     #       The resulting code is vendor agnostic.
-    @timing "jdsym_block: allocation" begin
+    @timing "jd: allocation" begin
         V      = similar(v0, n, kmax)    # search space basis (includes soft-locked)
         W      = similar(v0, n, kmax)    # A * V
         rb     = similar(v0, n, kb)      # residuals / corrections
@@ -70,13 +70,13 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         randn!(TaskLocalRNG(), V[:, nc+1:j])
     end
 
-    @timing "jdsym_block: ortho" _jdb_mgs2!(V, j, two_pass_orth)
-    @timing "jdsym_block: matvec" mul!(W[:, 1:j], A, V[:, 1:j])
+    @timing "jd: ortho" _jdb_mgs2!(V, j, two_pass_orth)
+    @timing "jd: matvec" mul!(W[:, 1:j], A, V[:, 1:j])
     nmv += j
-    @timing "jdsym_block: overlap" Hc = Hermitian(V[:, 1:j]' * W[:, 1:j])
+    @timing "jd: overlap" Hc = Hermitian(V[:, 1:j]' * W[:, 1:j])
 
     # Initial full subspace diagonalization
-    @timing "jdsym_block: diag" begin
+    @timing "jd: diag" begin
         ew, Vc = eigen(Hc)
     end
 
@@ -90,7 +90,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
 
         # Restart: keep kb Ritz vectors (soft-locked stay in V)
         if j + nb >= kmax
-            @timing "jdsym_block: restart" begin
+            @timing "jd: restart" begin
                 mul!(buffer[:, 1:jmin], V[:, 1:j], Vc[1:j, 1:jmin])
                 V[:, 1:jmin] .= buffer[:, 1:jmin]
                 mul!(buffer[:, 1:jmin], W[:, 1:j], Vc[1:j, 1:jmin])
@@ -108,7 +108,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         end
 
         # Compute residuals for active pairs nconv+1..nconv+nb (blocked BLAS-3)
-        @timing "jdsym_block: residual" begin
+        @timing "jd: residual" begin
             mul!(ub[:, 1:nb], V[:, 1:j], Vc[1:j, nconv+1:nconv+nb])
             mul!(rb[:, 1:nb], W[:, 1:j], Vc[1:j, nconv+1:nconv+nb])
             rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv+1:nconv+nb]'
@@ -128,14 +128,14 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         history[hist_row, :] .= (maximum(rnorms[1:nb_target]), iter, nmv)
 
         if disp
-            @printf("jdsym_block it=%4d  nconv=%d/%d  j=%d  nb=%d  |r|=%.2e..%.2e\n",
+            @printf("jd it=%4d  nconv=%d/%d  j=%d  nb=%d  |r|=%.2e..%.2e\n",
                     iter, nconv, k, j, nb,
                     minimum(rnorms[1:nb_target]), maximum(rnorms[1:nb_target]))
         end
 
         # Lock newly converged pairs (Ritz vectors stay in V via soft-locking)
         if nconv_new > 0
-            @timing "jdsym_block: lock" begin
+            @timing "jd: lock" begin
                 nconv += nconv_new
                 nconv >= k && break
                 # Shift remaining active residuals to front
@@ -150,7 +150,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         end
 
         # Apply preconditioner
-        @timing "jdsym_block: correction" begin
+        @timing "jd: correction" begin
             if !isnothing(M)
                 !isnothing(precond_preparator) && precond_preparator(M, ub[:, 1:nb])
                 ldiv!(ub[:, 1:nb], M, rb[:, 1:nb])
@@ -164,15 +164,15 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         j += nact
 
         # Diagonalize over full subspace (soft-locked pairs stay in V)
-        @timing "jdsym_block: diag" begin
+        @timing "jd: diag" begin
             ew, Vc = eigen(Hc)
         end
     end
 
-    disp && @printf("jdsym_block: done. nconv=%d/%d  iter=%d  nmv=%d\n", nconv, k, jd_iter, nmv)
+    disp && @printf("jd: done. nconv=%d/%d  iter=%d  nmv=%d\n", nconv, k, jd_iter, nmv)
 
     if nconv < k
-        @warn "jdsym_block did not converge within $maxit iterations."
+        @warn "jd did not converge within $maxit iterations."
     end
 
     # Use final Ritz values — consistent with the eigenvectors computed below
@@ -222,7 +222,7 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
                       two_pass::Bool=true)
     nact = 0
 
-    @timing "jdsym_block: ortho" begin
+    @timing "jd: ortho" begin
         # Phase 1: orthogonalize all nb corrections against existing V[:,1:j]
         let Vj = view(V, :, 1:j), rbv = view(rb, :, 1:nb)
             c1v = Vj' *rbv
@@ -260,10 +260,10 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
     nact == 0 && return Hc, 0
 
     # Compute A * new basis vectors
-    @timing "jdsym_block: matvec" mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
+    @timing "jd: matvec" mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
 
     # Update projected Hamiltonian (full column block, BLAS-3)
-    @timing "jdsym_block: overlap" begin
+    @timing "jd: overlap" begin
         Hexp = similar(Hc, j+nact, j+nact)
         Hexp[1:j, 1:j] .= Hc
         mul!(Hexp[1:j+nact, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])

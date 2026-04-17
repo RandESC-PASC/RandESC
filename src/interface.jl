@@ -35,15 +35,15 @@ function randESCSolver(A, X0::AbstractArray, n::Integer, k::Integer; preconditio
     end
 
     if useRandomization
-        V, lambda, history = jdsym_rand_block(A, X0; k=k, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose, orth_method=:rgs)
+        V, lambda, history = jd_sketched(A, X0; k=k, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose, orth_method=:rgs)
     else
-        V, lambda, history = jdsym_block(A, X0; k=k, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose)
+        V, lambda, history = jd(A, X0; k=k, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose)
     end
     n_iter = size(history, 1)
     converged = n_iter < maxiter
     n_matvec = isempty(history) ? 0 : Int(history[end, 3])
     if !converged
-        @warn "jdsym_block did not converge within $maxiter iterations."
+        @warn "jd did not converge within $maxiter iterations."
     end
     residual_norms = isempty(history) ? Float64[] : history[:, 1]
     return (λ=lambda, X=V, residual_norms=residual_norms, n_iter=n_iter, converged=converged, n_matvec=n_matvec)
