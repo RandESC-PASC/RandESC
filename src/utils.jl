@@ -43,11 +43,12 @@ function to_cpu(array::Array)
 end
 
 function sparse_matrix_csc(m::Int, n::Int, colptr::Vector{<:Integer},
-                           rowval::Vector{<:Integer}, nzval::Vector)
+                           rowval::Vector{<:Integer}, nzval::Vector,
+                           template::Union{Array,Nothing})
     return SparseMatrixCSC(m, n, colptr, rowval, nzval)
 end
 
 function sparse_matrix_csc(I::Vector{<:Integer}, J::Vector{<:Integer},
-                           V::Vector, m::Int, n::Int)
+                           V::Vector, m::Int, n::Int, template::Union{Array,Nothing})
     return sparse(I, J, V, m, n) # defaults to SparseMatrixCSC on the CPU
 end

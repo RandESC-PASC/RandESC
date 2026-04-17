@@ -42,7 +42,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                           M=nothing,
                           precond_preparator=nothing,
                           disp::Bool=false,
-                          sketch_type::String="sparsesign",
+                          sketch_type::String="sparsestack",
                           sketch_size::Int=-1,
                           orth_method::Symbol=:rgs)
 
@@ -68,9 +68,9 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     @timing "jd_sketched: allocation" begin
         # Active subspace: columns 1:j live in the the following buffers.
         V  = similar(v0, n, jmax)
-        SV = similar(v0, s, jmax)
         W  = similar(v0, n, jmax)
-        SW = similar(v0, s, jmax)
+        SV = similar(v0, s, jmax); SV .= zero(T)  # arrays potentially holding result of a sparse matrix
+        SW = similar(v0, s, jmax); SW .= zero(T)  # multiplication must be initialized to zero for safety
         # Work buffers for various allocation free operations:
         n_buffer = similar(v0, n, jmax)
         s_buffer = similar(v0, s, jmax)
@@ -80,8 +80,8 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         rb      = similar(v0, n, kb)
         # Sketched Ritz vectors for Rayleigh quotient; reused as ST_corr_buf/SV_scratch
         # during expand (never live at the same time as the Rayleigh quotient computation)
-        SX_rq   = similar(v0, s, kb)   # reused as ST_corr_buf in expand
-        SW_rq   = similar(v0, s, kb)   # reused as SV_scratch in expand
+        SX_rq   = similar(v0, s, kb); SX_rq .= zero(T)   # reused as ST_corr_buf in expand
+        SW_rq   = similar(v0, s, kb); SW_rq .= zero(T)   # reused as SV_scratch in expand
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
@@ -374,4 +374,21 @@ Returns the expanded Mc and the number of accepted vectors `nact`.
     end
 
     return Mexp, nact
+<<<<<<< HEAD:src/jd_sketched.jl
+=======
+end
+
+
+"""Sort permutation for eigenvalues by target `sigma`."""
+function _jdrb_sort_perm(ew::AbstractVector, sigma::Symbol)
+    if sigma == :LM
+        return sortperm(abs.(ew), rev=true)
+    elseif sigma == :SM
+        return sortperm(abs.(ew))
+    elseif sigma == :LR
+        return sortperm(ew, rev=true)
+    else   # :SR (default)
+        return sortperm(ew)
+    end
+>>>>>>> 4976c36 (Fixup):src/jd_rand_block.jl
 end

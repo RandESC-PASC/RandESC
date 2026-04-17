@@ -5,27 +5,40 @@ using AMDGPU
 using RandESC
 using Random
 using AMDGPU.rocSPARSE
+using SparseArrays
 
 # AMDGPU does not support non-Hermitian matrix diagonalization. Need to move to
-# the CPU and back
-function LinearAlgebra.eigen(A::ROCArray)
-    F = eigen(Array(A))
-    return ROCArray(F.values), ROCArray(F.vectors)
+# the CPU and back. For Julia's multiple dispatch to work, we need to be more
+# specialized than rocSOLVER, hence the explicit loop over types (rather than an
+# union). Explicitly symmetric/Hermitian matrices will not be dispatched here.
+for T in [Float32, Float64, ComplexF32, ComplexF64]
+    @eval begin
+        function LinearAlgebra.eigen(A::ROCMatrix{$T})
+            F = eigen(Array(A))
+            return (; values = ROCArray(F.values), vectors = ROCArray(F.vectors))
+        end
+    end
 end
 
-function RandESC.random_matrix(T::Type, m::Int, n::Int, template::ROCArray; seed=Random.default_rng())
-    return AMDGPU.randn(seed, T, m, n)
+function RandESC.random_matrix(T::Type{<:Real}, m::Int, n::Int, template::ROCArray)
+    #TODO: can we pass a RNG ?
+    return AMDGPU.randn(T, m, n)
 end
 
-function RandESC.sparse_matrix(m::Int, n::Int, colptr::ROCVector{<:Integer},
-                               rowval::ROCVector{<:Integer}, nzval::ROCVector)
+# AMDGPU does not support random complex matrix generation
+function RandESC.random_matrix(T::Type{<:Complex}, m::Int, n::Int, template::ROCArray)
+    return AMDGPU.randn(real(T), m, n) .+ im .* AMDGPU.randn(real(T), m, n)
+end
+
+function RandESC.sparse_matrix_csc(m::Int, n::Int, colptr::ROCVector{<:Integer},
+                                   rowval::ROCVector{<:Integer}, nzval::ROCVector,
+                                   template::ROCArray)
     return ROCSparseMatrixCSC(colptr, rowval, nzval, (m, n))
 end
 
-function RandESC.sparse_matrix(I::ROCVector{<:Integer}, J::ROCVector{<:Integer},
-                               V::ROCVector, m::Int, n::Int)
-    COO = ROCSparseMatrixCOO(I, J, V, (m, n))
-    return ROCSparseMatrixCSC(COO)
+function RandESC.sparse_matrix_csc(I::Vector{<:Integer}, J::Vector{<:Integer},
+                                   V::Vector, m::Int, n::Int, template::ROCArray)
+    return ROCSparseMatrixCSC(sparse(I, J, V, m, n)) # construct on CPU and move to GPU
 end
 
 end # module

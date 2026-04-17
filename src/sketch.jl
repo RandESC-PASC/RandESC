@@ -47,12 +47,12 @@ function sketch(n::Integer, s::Integer, type::AbstractString; seed::Union{Nothin
 
     t = lowercase(type)
     if t == "real_gaussian"
-        S = random_matrix(Float64, s, n, template; seed=rng) ./ sqrt(s) # TODO: type should be inferred
+        S = random_matrix(Float64, s, n, template) ./ sqrt(s) # TODO: type should be inferred
         return MatrixSketchOp(S)
 
     elseif t == "complex_gaussian"
         #TODO: type should be inferred
-        S = random_matrix(ComplexF64, s, n, template; seed=rng) ./ sqrt(2s)
+        S = random_matrix(ComplexF64, s, n, template) ./ sqrt(2s)
         return MatrixSketchOp(S)
 
     elseif t == "complex_srtt"
@@ -67,7 +67,7 @@ function sketch(n::Integer, s::Integer, type::AbstractString; seed::Union{Nothin
 
     elseif t == "sparsesign"
         ζ = 8
-        return MatrixSketchOp(sparsesign(s, n, ζ; rng))
+        return MatrixSketchOp(sparsesign(s, n, ζ; rng, template))
 
     elseif t == "sparsestack"
         ζ = 4
@@ -112,33 +112,35 @@ function sparsesign(d::Integer, m::Integer, ζ::Integer;
                     rng=Random.default_rng(), template=nothing)
     @assert d ≥ 1 && m ≥ 1 && ζ ≥ 1 "d, m, ζ must be positive and ζ ≤ d"
 
-    nnz = m * ζ
-
-    indices = to_device(collect(1:nnz), template)
-    J = map(idx -> cld(idx, ζ), indices)
-
-    #I_tmp = Array{Int}(undef, ζ, m)
-    #for j in 1:m
-    #    I_tmp[:, j] = randperm(rng, d)[1:ζ]
-    #end
-    #I = reshape(to_device(I_tmp, template), nnz)
-
-    # TODO: it is quite hard to shuffle d rows by d rows on the GPU, the above is CPU only
-    #       Below is a GPU hack: we generate a d x m array of random numbers, and sortperm the cols
-    #       We need to find out which is more expensive on the GPU, and the CPU: might be different
-    keys = random_matrix(Float32, d, m, template; seed=rng)
-    perms = view(sortperm(keys; dims=1), 1:ζ, :)
-    I = map(indices) do idx
-        t = (idx - 1) % ζ + 1
-        j = cld(idx, ζ)
-        perms[t, j] - (j - 1) * d
+    # Note: this code can be slightly optimized to run on the GPU, but even then it 
+    #       remains slow. The process of generating a random permutation of rows for
+    #       each column is inherently super expensive. We could be a lot more efficient
+    #       if we simply picked random integers in [1, d] (small risk of suplicates).
+    #       Would that be legal though?
+    if template isa AbstractGPUArray
+        @warn("sparsesign sketching does not run optimally on the GPU, "*
+              "consider switching to sparsestack for better performance.")
     end
 
-    v = ComplexF64(1.0) / sqrt(ComplexF64(ζ)) # TODO: for proper mul! on GPUs
-    signs = map(i -> ifelse(rand(Bool), 1, -1), indices) #TODO: how important is it to use rng?
-    V = signs .* v #TODO: save an allocation by merging kernels?
+    nnz = m * ζ
+    I = Vector{Int}(undef, nnz)
+    J = Vector{Int}(undef, nnz)
+    V = Vector{ComplexF64}(undef, nnz)
+    v = 1.0 / sqrt(ζ)
 
-    return sparse_matrix_csc(I, J, V, d, m)
+    idx = 1
+    @inbounds for j in 1:m
+        rows = randperm(rng, d)[1:ζ]                 # distinct rows
+        signs = rand(rng, (-1.0, 1.0), ζ)            # ±1
+        for t in 1:ζ
+            I[idx] = rows[t]
+            J[idx] = j
+            V[idx] = signs[t] * v
+            idx += 1
+        end
+    end
+
+    return sparse_matrix_csc(I, J, V, d, m, template)
 end
 
 """
@@ -193,5 +195,5 @@ function sparsestack(d::Integer, m::Integer, ζ::Integer;
     signs = map(i -> ifelse(rand(Bool), 1, -1), indices)
     nzval = signs .* a #TODO: save an allocation by merging kernels?
 
-    return sparse_matrix_csc(d, m, colptr, rowval, nzval)
+    return sparse_matrix_csc(d, m, colptr, rowval, nzval, template)
 end
