@@ -24,7 +24,7 @@ This has to be done from inside the source directory of this repository, otherwi
 | `src/RandESC.jl` | Module entry point: exports, includes, and shared utilities |
 | `src/interface.jl` | Unified `randESCSolver()` entry point providing access to all solvers |
 | `src/sketch.jl` | Randomized embedding/sketching operators: Gaussian, SRTT (FFT/DCT-based), sparsesign, sparsestack |
-| `src/jd.jl` | Blocked Jacobi-Davidson with soft locking. Best general-purpose solver. |
+| `src/jd.jl` | Blocked Jacobi-Davidson with soft locking. |
 | `src/jd_sketched.jl` | Blocked Jacobi-Davidson with sketched (Θ-norm) orthogonalization (Balabanov-Grigori RGS). |
 | `src/randomization_utils.jl` | Shared utilities for randomized solvers (sketch application, RGS orthogonalization) |
 
