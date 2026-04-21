@@ -15,18 +15,18 @@ function testMatrix(A, n, k, testName; test_tol=1e-5, iter_tol=1e-8, verbose=fal
     v0 = randn(eltype(A), n, k)
 
     # testing block randomized JD
-    @testset "$testName: testing randJD_block" begin
+    @testset "$testName: testing jd_sketched" begin
         V_rjdb, lambda_rjdb, history_rjdb = jd_sketched(A, v0; k=k, tol=iter_tol, maxit=maxiter, disp=verbose)
 
         rjdb_passed = maximum(abs.(evals .- lambda_rjdb)) < test_tol
         if !rjdb_passed
-            @warn "$testName: randJD_block eigenvalues did not match! Max abs error: $(maximum(abs.(evals .- lambda_rjdb)))"
+            @warn "$testName: jd_sketched eigenvalues did not match! Max abs error: $(maximum(abs.(evals .- lambda_rjdb)))"
         end
         @test rjdb_passed
         gram_rjdb = V_rjdb' * V_rjdb
         rjdb_orth_passed = maximum(abs.(gram_rjdb - I)) < test_tol
         if !rjdb_orth_passed
-            @warn "$testName: randJD_block eigenvectors are not orthogonal! Max abs error: $(maximum(abs.(gram_rjdb - I)))"
+            @warn "$testName: jd_sketched eigenvectors are not orthogonal! Max abs error: $(maximum(abs.(gram_rjdb - I)))"
         end
         @test rjdb_orth_passed
     end
