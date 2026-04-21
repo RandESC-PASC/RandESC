@@ -6,8 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Minimal permissions — allows workflows to run safely from fork PRs
+permissions:
+  contents: read
+
 jobs:
-  test:
+  unit-tests:
     runs-on: ubuntu-latest
 
     steps:
@@ -18,5 +22,28 @@ jobs:
         with:
           version: '1'
 
-      - name: Run tests
+      - name: Cache Julia packages
+        uses: julia-actions/cache@v2
+
+      - name: Run unit tests
         run: julia --project=. -e 'using Pkg; Pkg.test()'
+
+  dftk-integration:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+
+      - name: Cache Julia packages
+        uses: julia-actions/cache@v2
+
+      - name: Instantiate example project
+        run: julia --project=example -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run DFTK silicon integration test
+        run: julia --project=example test/dftk_silicon_test.jl
