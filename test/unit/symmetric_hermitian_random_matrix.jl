@@ -3,6 +3,16 @@ using RandESC
 using Random
 using LinearAlgebra
 
+# Check that each returned eigenpair (lambda[i], V[:,i]) satisfies the eigenvalue equation
+# ‖A*v - λ*v‖ / ‖v‖ < res_tol.
+function testResiduals(A, lambda, V, res_tol)
+    k = length(lambda)
+    for i in 1:k
+        v = V[:, i]
+        rnorm = norm(A * v - lambda[i] * v) / norm(v)
+        @test rnorm < res_tol
+    end
+end
 
 
 function testMatrix(A, n, k, testName; test_tol=1e-5, iter_tol=1e-8, verbose=false, maxiter=1000)
@@ -14,10 +24,15 @@ function testMatrix(A, n, k, testName; test_tol=1e-5, iter_tol=1e-8, verbose=fal
     evecs = evecs[:, 1:k]
     v0 = randn(eltype(A), n, k)
 
+    expected_vec_type = eltype(A)
+    expected_val_type = real(eltype(A))
+
     # testing block randomized JD
     @testset "$testName: testing jd_sketched" begin
         V_rjdb, lambda_rjdb, history_rjdb = jd_sketched(A, v0; k=k, tol=iter_tol, maxit=maxiter, disp=verbose)
 
+        @test eltype(V_rjdb) == expected_vec_type
+        @test eltype(lambda_rjdb) == expected_val_type
         rjdb_passed = maximum(abs.(evals .- lambda_rjdb)) < test_tol
         if !rjdb_passed
             @warn "$testName: jd_sketched eigenvalues did not match! Max abs error: $(maximum(abs.(evals .- lambda_rjdb)))"
@@ -29,12 +44,16 @@ function testMatrix(A, n, k, testName; test_tol=1e-5, iter_tol=1e-8, verbose=fal
             @warn "$testName: jd_sketched eigenvectors are not orthogonal! Max abs error: $(maximum(abs.(gram_rjdb - I)))"
         end
         @test rjdb_orth_passed
+        # jd_sketched converges in sketch norm; full residual may exceed iter_tol by a factor of ~2
+        testResiduals(A, lambda_rjdb, V_rjdb, 2. * iter_tol)
     end
 
     # testing standard block JD
     @testset "$testName: testing jd" begin
         V_jdb, lambda_jdb, _ = jd(A, v0; k=k, tol=iter_tol, maxit=maxiter, disp=verbose)
 
+        @test eltype(V_jdb) == expected_vec_type
+        @test eltype(lambda_jdb) == expected_val_type
         jdb_passed = maximum(abs.(evals .- lambda_jdb)) < test_tol
         if !jdb_passed
             @warn "$testName: jd eigenvalues did not match! Max abs error: $(maximum(abs.(evals .- lambda_jdb)))"
@@ -46,6 +65,7 @@ function testMatrix(A, n, k, testName; test_tol=1e-5, iter_tol=1e-8, verbose=fal
             @warn "$testName: jd eigenvectors are not orthogonal! Max abs error: $(maximum(abs.(gram_jdb - I)))"
         end
         @test jdb_orth_passed
+        testResiduals(A, lambda_jdb, V_jdb, iter_tol)
     end
 end
 
