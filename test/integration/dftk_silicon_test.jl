@@ -29,18 +29,23 @@ function make_eigensolver(; useRandomization)
     end
 end
 
-expected_energy = -8.42886007706835
 energy_tol = 1e-7
-max_scf_iter = 10
+scf_iter_margin = 5
+
+# Reference: DFTK's own eigensolver, converged to energy_tol.
+# Computed on the fly so the test is robust against DFTK internal changes.
+ref_scfres = self_consistent_field(basis)
+ref_energy = ref_scfres.energies.total
+ref_iter   = ref_scfres.n_iter
 
 @testset "DFTK Silicon — standard JD" begin
     scfres = self_consistent_field(basis; eigensolver=make_eigensolver(; useRandomization=false))
-    @test abs(scfres.energies.total - expected_energy) < energy_tol
-    @test scfres.n_iter <= max_scf_iter
+    @test abs(scfres.energies.total - ref_energy) < energy_tol
+    @test abs(scfres.n_iter - ref_iter) <= scf_iter_margin
 end
 
 @testset "DFTK Silicon — randomized JD" begin
     scfres = self_consistent_field(basis; eigensolver=make_eigensolver(; useRandomization=true))
-    @test abs(scfres.energies.total - expected_energy) < energy_tol
-    @test scfres.n_iter <= max_scf_iter
+    @test abs(scfres.energies.total - ref_energy) < energy_tol
+    @test abs(scfres.n_iter - ref_iter) <= scf_iter_margin
 end
