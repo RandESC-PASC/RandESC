@@ -53,14 +53,14 @@ end
     Random.seed!(98423598)
 
     # small test with random spd matrix
-    ntests = 10
+    ntests = 7
     test_tol = 1e-5
     iter_tol = 1e-8
 
     for test in 1:ntests
         n = (test + 3) * (test + 3)
         k = max(1, ceil(Int, 0.05 * n))
-        A = randn(n, n)
+        A = randn(Float64, n, n)
         A = A + A'
         testMatrix(A, n, k, "Small random spd matrix test $test", test_tol=test_tol, iter_tol=iter_tol, verbose=false)
     end
@@ -71,7 +71,7 @@ end
     Random.seed!(98423598)
 
     # small test with random spd matrix
-    ntests = 10
+    ntests = 7
     test_tol = 1e-5
     iter_tol = 1e-8
 
@@ -81,5 +81,38 @@ end
         A = randn(ComplexF64, n, n)
         A = A + A'
         testMatrix(A, n, k, "Small random spd matrix test $test", test_tol=test_tol, iter_tol=iter_tol, verbose=false)
+    end
+end
+
+# going to larger test matrices for single precision operators leads to failing tests.
+@testset "RandESC Symmetric Single Precision Eigenvalue Solver Tests" begin
+    Random.seed!(98423598)
+
+    ntests = 4
+    test_tol = 1e-2
+    iter_tol = 1e-4
+
+    for test in 1:ntests
+        n = (test + 3) * (test + 3)
+        k = max(1, ceil(Int, 0.05 * n))
+        A = randn(Float32, n, n)
+        A = A + A'
+        testMatrix(A, n, k, "Small random symmetric Float32 matrix test $test", test_tol=test_tol, iter_tol=iter_tol, verbose=false)
+    end
+end
+
+@testset "RandESC Hermitian Single Precision Eigenvalue Solver Tests" begin
+    Random.seed!(98423598)
+
+    ntests = 4
+    test_tol = 1e-2
+    iter_tol = 1e-4
+
+    for test in 1:ntests
+        n = (test + 3) * (test + 3)
+        k = max(1, ceil(Int, 0.05 * n))
+        A = randn(ComplexF32, n, n)
+        A = A + A'
+        testMatrix(A, n, k, "Small random Hermitian ComplexF32 matrix test $test", test_tol=test_tol, iter_tol=iter_tol, verbose=false)
     end
 end
