@@ -1,3 +1,4 @@
+using Test
 using DFTK
 using PseudoPotentialData
 using RandESC
@@ -29,25 +30,17 @@ function make_eigensolver(; useRandomization)
 end
 
 expected_energy = -8.42886007706835
-energy_tol = 1e-5
+energy_tol = 1e-7
 max_scf_iter = 10
 
-println("=== Standard block Jacobi-Davidson ===")
-scfres_jd = self_consistent_field(basis; eigensolver=make_eigensolver(; useRandomization=false))
-println(scfres_jd.energies)
+@testset "DFTK Silicon — standard JD" begin
+    scfres = self_consistent_field(basis; eigensolver=make_eigensolver(; useRandomization=false))
+    @test abs(scfres.energies.total - expected_energy) < energy_tol
+    @test scfres.n_iter <= max_scf_iter
+end
 
-energy_jd = scfres_jd.energies.total
-iter_jd   = scfres_jd.n_iter
-@assert abs(energy_jd - expected_energy) < energy_tol "JD total energy $energy_jd differs from expected $expected_energy by $(abs(energy_jd - expected_energy))"
-@assert iter_jd <= max_scf_iter "JD used $iter_jd SCF iterations, expected <= $max_scf_iter"
-println("JD: energy=$energy_jd, n_iter=$iter_jd — PASSED")
-
-println("\n=== Randomized block Jacobi-Davidson ===")
-scfres_rjd = self_consistent_field(basis; eigensolver=make_eigensolver(; useRandomization=true))
-println(scfres_rjd.energies)
-
-energy_rjd = scfres_rjd.energies.total
-iter_rjd   = scfres_rjd.n_iter
-@assert abs(energy_rjd - expected_energy) < energy_tol "RJD total energy $energy_rjd differs from expected $expected_energy by $(abs(energy_rjd - expected_energy))"
-@assert iter_rjd <= max_scf_iter "RJD used $iter_rjd SCF iterations, expected <= $max_scf_iter"
-println("RJD: energy=$energy_rjd, n_iter=$iter_rjd — PASSED")
+@testset "DFTK Silicon — randomized JD" begin
+    scfres = self_consistent_field(basis; eigensolver=make_eigensolver(; useRandomization=true))
+    @test abs(scfres.energies.total - expected_energy) < energy_tol
+    @test scfres.n_iter <= max_scf_iter
+end

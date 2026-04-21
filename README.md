@@ -9,13 +9,18 @@ julia> import Pkg
 julia> Pkg.develop(path="/path/to/RandESC/)
 ```
 
-Run tests:
-```
+**Unit tests** (fast, no external dependencies):
+```bash
 julia --project=. -e 'using Pkg; Pkg.test()'
-# or
-julia --project=. test/runtests.jl
 ```
-This has to be done from inside the source directory of this repository, otherwise the path must be specified in the option `--project=`
+
+**Integration tests** (requires DFTK; runs a full Silicon SCF calculation):
+```bash
+julia --project=example -e 'using Pkg; Pkg.instantiate()'  # first time only
+julia --project=example test/integration/dftk_silicon_test.jl
+```
+
+Both commands must be run from the repository root.
 
 ## Source Files
 

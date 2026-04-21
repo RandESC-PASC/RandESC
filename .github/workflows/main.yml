@@ -46,4 +46,4 @@ jobs:
         run: julia --project=example -e 'using Pkg; Pkg.instantiate()'
 
       - name: Run DFTK silicon integration test
-        run: julia --project=example test/dftk_silicon_test.jl
+        run: julia --project=example test/integration/dftk_silicon_test.jl
