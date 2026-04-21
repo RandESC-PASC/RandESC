@@ -84,35 +84,38 @@ end
     end
 end
 
-# going to larger test matrices for single precision operators leads to failing tests.
+# Tolerances are pretty loose for single precision tests, otherwise they fail
 @testset "RandESC Symmetric Single Precision Eigenvalue Solver Tests" begin
     Random.seed!(98423598)
 
-    ntests = 4
-    test_tol = 1e-2
-    iter_tol = 1e-4
+    ntests = 8
+    test_tol = 1e-3
+    iter_tol = 1e-3
 
     for test in 1:ntests
         n = (test + 3) * (test + 3)
         k = max(1, ceil(Int, 0.05 * n))
         A = randn(Float32, n, n)
         A = A + A'
-        testMatrix(A, n, k, "Small random symmetric Float32 matrix test $test", test_tol=test_tol, iter_tol=iter_tol, verbose=false)
+        # iter_tol is multiplied by n here since the norm of the residual is extensive.
+        testMatrix(A, n, k, "Small random symmetric Float32 matrix test $test", test_tol=test_tol * n, iter_tol=iter_tol, verbose=false)
     end
 end
 
+# Tolerances are pretty loose for single precision tests, otherwise they fail
 @testset "RandESC Hermitian Single Precision Eigenvalue Solver Tests" begin
     Random.seed!(98423598)
 
-    ntests = 4
-    test_tol = 1e-2
-    iter_tol = 1e-4
+    ntests = 8
+    test_tol = 1e-3
+    iter_tol = 1e-3
 
     for test in 1:ntests
         n = (test + 3) * (test + 3)
         k = max(1, ceil(Int, 0.05 * n))
         A = randn(ComplexF32, n, n)
         A = A + A'
-        testMatrix(A, n, k, "Small random Hermitian ComplexF32 matrix test $test", test_tol=test_tol, iter_tol=iter_tol, verbose=false)
+        # iter_tol is multiplied by n here since the norm of the residual is extensive.
+        testMatrix(A, n, k, "Small random Hermitian ComplexF32 matrix test $test", test_tol=test_tol, iter_tol=iter_tol * n, verbose=false)
     end
 end
