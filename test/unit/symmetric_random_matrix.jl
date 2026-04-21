@@ -49,19 +49,36 @@ function testMatrix(A, n, k, testName; test_tol=1e-5, iter_tol=1e-8, verbose=fal
     end
 end
 
-@testset "RandESC Eigenvalue Solver Tests" begin
+@testset "RandESC Symmetric Eigenvalue Solver Tests" begin
     Random.seed!(98423598)
 
     # small test with random spd matrix
-    n = 50
-    k = 7
-
     ntests = 10
     test_tol = 1e-5
     iter_tol = 1e-8
 
     for test in 1:ntests
+        n = (test + 3) * (test + 3)
+        k = max(1, ceil(Int, 0.05 * n))
         A = randn(n, n)
+        A = A + A'
+        testMatrix(A, n, k, "Small random spd matrix test $test", test_tol=test_tol, iter_tol=iter_tol, verbose=false)
+    end
+end
+
+
+@testset "RandESC Hermitian Eigenvalue Solver Tests" begin
+    Random.seed!(98423598)
+
+    # small test with random spd matrix
+    ntests = 10
+    test_tol = 1e-5
+    iter_tol = 1e-8
+
+    for test in 1:ntests
+        n = (test + 3) * (test + 3)
+        k = max(1, ceil(Int, 0.05 * n))
+        A = randn(ComplexF64, n, n)
         A = A + A'
         testMatrix(A, n, k, "Small random spd matrix test $test", test_tol=test_tol, iter_tol=iter_tol, verbose=false)
     end

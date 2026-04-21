@@ -1,1 +1,1 @@
-include("unit/tests.jl")
+include("unit/symmetric_random_matrix.jl")
