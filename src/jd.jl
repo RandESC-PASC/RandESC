@@ -18,6 +18,7 @@ Arguments:
 - M: preconditioner, applied as M \\ r (optional)
 - precond_preparator: callback f(M, X) to refresh preconditioner (optional)
 - disp: print iteration info
+- orth_method: orthogonalization method (:mgs, :mgs2, :qr)
 
 Returns (X, lambda, history) where X is n x k, lambda is length k,
 and history is nit x 3 with columns [max_rnorm, iter, nmv].
@@ -28,7 +29,8 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                      maxit::Int=100,
                      M=nothing,
                      precond_preparator=nothing,
-                     disp::Bool=false)
+                     disp::Bool=false,
+                     orth_method::Symbol=:qr)
 
     n = size(A, 1)
     k = min(k, n)
@@ -36,8 +38,6 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     kb = min(k + nbuff, n) # block size
     jmin = min(n, 2 * (k + nbuff)) # search space size after restart
     kmax = min(n, 4kb) # maximal search space dimension
-
-    two_pass_orth = false # if true, orthogonalization is more accurate (and more expensive)
 
     T = eltype(v0)
 
@@ -70,7 +70,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         randn!(TaskLocalRNG(), V[:, nc+1:j])
     end
 
-    @timing "jd: ortho" _jdb_mgs2!(V, j, two_pass_orth)
+    @timing "jd: ortho" _jd_ortho!(V, j, orth_method)
     @timing "jd: matvec" mul!(W[:, 1:j], A, V[:, 1:j])
     nmv += j
     @timing "jd: overlap" Hc = Hermitian(V[:, 1:j]' * W[:, 1:j])
@@ -159,7 +159,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         end
 
         # Expand subspace, new expanded Hc comes out
-        Hc, nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, two_pass_orth)
+        Hc, nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, orth_method)
         nmv += nact
         j += nact
 
@@ -187,7 +187,23 @@ end
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
-"""Double-pass MGS orthonormalization of V[:,1:m] in-place."""
+"""
+Orthonormalize V[:,1:m] in-place using the chosen method.
+  :mgs  — single-pass modified Gram-Schmidt
+  :mgs2 — double-pass modified Gram-Schmidt (more accurate, more expensive)
+  :qr   — Householder QR (batch; near-zero columns are zeroed out)
+"""
+function _jd_ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol)
+    if orth_method == :qr
+        F = qr(view(V, :, 1:m))
+        V[:, 1:m] .= Matrix(F.Q) .* (abs.(diag(F.R)) .>= 1e-14)'
+    else
+        _jdb_mgs2!(V, m, orth_method == :mgs2)
+    end
+end
+
+
+"""MGS orthonormalization of V[:,1:m] in-place."""
 function _jdb_mgs2!(V::AbstractMatrix, m::Int, two_pass::Bool=true)
     for i in 1:m
         if i > 1
@@ -211,7 +227,7 @@ end
 Expand search subspace with up to `nb` correction vectors from `rb[:,1:nb]`.
 
 Phase 1 (BLAS-3): orthogonalize all nb vectors at once against V[:,1:j].
-Phase 2 (sequential): orthogonalize among the nb new vectors, normalize, accept.
+Phase 2: orthonormalize the nb candidates among themselves via `orth_method`, accept non-degenerate columns.
 Then compute A * new columns and returns the expanded projected Hamiltonian Hexp.
 
 Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vectors `nact`.
@@ -219,42 +235,25 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
 @views function _jdb_expand!(V::AbstractMatrix, W::AbstractMatrix,
                       Hc::AbstractMatrix, rb::AbstractMatrix,
                       j::Int, nb::Int, kmax::Int, A,
-                      two_pass::Bool=true)
+                      orth_method::Symbol=:mgs)
     nact = 0
 
     @timing "jd: ortho" begin
         # Phase 1: orthogonalize all nb corrections against existing V[:,1:j]
         let Vj = view(V, :, 1:j), rbv = view(rb, :, 1:nb)
-            c1v = Vj' *rbv
+            c1v = Vj' * rbv
             mul!(rbv, Vj, c1v, -1, 1)
-            if two_pass
+            if orth_method == :mgs2
                 mul!(c1v, Vj', rbv)
                 mul!(rbv, Vj, c1v, -1, 1)
             end
         end
 
-        # Phase 2: sequential orthogonalization among the nb new vectors
-        for ib in 1:nb
-            j + nact >= kmax && break   # subspace full
-
-            if nact > 0
-                let Vnew = view(V, :, j+1:j+nact), rbib = view(rb, :, ib)
-                    c2v = Vnew' * rbib
-                    mul!(rbib, Vnew, c2v, -1, 1)
-                    if two_pass
-                        mul!(c2v, Vnew', rbib)
-                        mul!(rbib, Vnew, c2v, -1, 1)
-                    end
-                end
-            end
-
-            nv = norm(view(rb, :, ib))
-            nv < 1e-14 && continue      # numerically zero, skip
-
-            rb[:, ib] ./= nv
-            nact += 1
-            V[:, j + nact] .= rb[:, ib]
-        end
+        # Phase 2: orthonormalize the nb candidates among themselves, accept non-zero columns afterwards
+        _jd_ortho!(rb, nb, orth_method)
+        corrections = view(rb, :, findall(ib -> norm(view(rb, :, ib)) >= 1e-14, 1:nb))
+        nact = min(size(corrections, 2), kmax - j)
+        nact > 0 && (V[:, j+1:j+nact] .= corrections[:, 1:nact])
     end
 
     nact == 0 && return Hc, 0
