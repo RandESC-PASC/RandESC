@@ -14,12 +14,12 @@ Run all tests (unit + integration):
 julia --project=. -e 'using Pkg; Pkg.test("RandESC")'
 ```
 
-Run only unit tests (fast, no external dependencies):
+Run only unit tests (no external dependencies):
 ```bash
 julia --project=. -e 'using Pkg; Pkg.test("RandESC"; test_args=["unit"])'
 ```
 
-Run only integration tests (requires DFTK; runs a full Silicon SCF calculation):
+Run only integration tests (requires DFTK; Silicon SCF calculation):
 ```bash
 julia --project=. -e 'using Pkg; Pkg.test("RandESC"; test_args=["integration"])'
 ```
