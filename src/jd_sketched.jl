@@ -374,21 +374,4 @@ Returns the expanded Mc and the number of accepted vectors `nact`.
     end
 
     return Mexp, nact
-<<<<<<< HEAD:src/jd_sketched.jl
-=======
-end
-
-
-"""Sort permutation for eigenvalues by target `sigma`."""
-function _jdrb_sort_perm(ew::AbstractVector, sigma::Symbol)
-    if sigma == :LM
-        return sortperm(abs.(ew), rev=true)
-    elseif sigma == :SM
-        return sortperm(abs.(ew))
-    elseif sigma == :LR
-        return sortperm(ew, rev=true)
-    else   # :SR (default)
-        return sortperm(ew)
-    end
->>>>>>> 4976c36 (Fixup):src/jd_rand_block.jl
 end

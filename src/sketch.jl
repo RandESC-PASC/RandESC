@@ -1,5 +1,5 @@
 # sketch.jl
-using Random, LinearAlgebra, SparseArrays, FFTW
+using Random, LinearAlgebra, SparseArrays
 
 # ── Sketch operator types ──────────────────────────────────────────────────
 # Wrapping the sketch matrix in a struct lets us define mul!(Y, Theta, X),
@@ -12,8 +12,8 @@ end
 LinearAlgebra.mul!(Y::AbstractVecOrMat, op::MatrixSketchOp, X::AbstractVecOrMat) = mul!(Y, op.S, X)
 
 struct SRTTSketchOp
-    diag_sign::Vector
-    IX::Vector{Int}
+    diag_sign::AbstractVector
+    IX::AbstractVector{Int}
     field::Symbol
     scale::Float64
 end
@@ -56,13 +56,14 @@ function sketch(n::Integer, s::Integer, type::AbstractString; seed::Union{Nothin
         return MatrixSketchOp(S)
 
     elseif t == "complex_srtt"
-        IX = randperm(rng, n)[1:s]
-        diag_sign = exp.(im .* (2π) .* rand(rng, n))
+        IX = to_device(randperm(rng, n)[1:s], template)
+        diag_sign = exp.(im .* (2π) .* random_vector(Float64, n, template))
         return SRTTSketchOp(diag_sign, IX, :complex, sqrt(n/s))
 
     elseif t == "real_srtt"
-        IX = randperm(rng, n)[1:s]
-        diag_sign = rand(rng, (-1.0, 1.0), n)
+        IX = to_device(randperm(rng, n)[1:s], template)
+        diag_sign = similar(template, Float64, n)
+        map!(i -> ifelse(rand(Bool), 1.0, -1.0), diag_sign, diag_sign)
         return SRTTSketchOp(diag_sign, IX, :real, sqrt(n/s))
 
     elseif t == "sparsesign"
@@ -88,13 +89,13 @@ function SRTT(diag_sign::AbstractVector, IX::AbstractVector{<:Integer},
     Xscaled = diag_sign .* X
 
     if field === :complex
-        Y = fft(Xscaled, 1)
-    elseif field === :real
-        Y = FFTW.dct(Xscaled, 1)  # DCT-II along rows
+        Y = fft(Xscaled, 1) # TODO: a possible optimization would be to create plans ahead of time,
+    elseif field === :real  #       store them in the Op, and use padding
+        Y = dct2(Xscaled, 1) # DCT-II along rows
     else
         throw(ArgumentError("field must be :complex or :real"))
     end
-    return @view Y[IX, :]
+    return Y[IX, :]
 end
 
 # -------------------------------------------------------------------------
