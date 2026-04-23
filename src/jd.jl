@@ -205,13 +205,29 @@ function _jd_ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
 end
 
 """Householder QR orthonormalization of V[:,1:m] in-place. Compacts linearly independent
-columns to the front and returns their count. buf must be n×≥m scratch space."""
+columns to the front and returns their count."""
+@views function _jd_qr!(V::Matrix, m::Int, buf::AbstractMatrix)
+    tau    = view(buf, 1:m, 1)
+    r_diag = view(buf, 1:m, 2)
+    LAPACK.geqrf!(V[:, 1:m], tau)
+    r_diag .= abs.(V[diagind(V)[1:m]])
+    LAPACK.orgqr!(V[:, 1:m], tau, m)
+    nact = 0
+    for i in 1:m
+        if real(r_diag[i]) >= 1e-14
+            nact += 1
+            V[:, nact] .= V[:, i]
+        end
+    end
+    return nact
+end
+
 @views function _jd_qr!(V::AbstractMatrix, m::Int, buf::AbstractMatrix)
     buf[:, 1:m] .= V[:, 1:m]                # copy; qr! overwrites input
     F = qr!(buf[:, 1:m])                    # in-place QR, no internal copy
     fill!(V[:, 1:m], zero(eltype(V)))
     V[diagind(V)[1:m]] .= one(eltype(V))    # identity in V[:,1:m]
-    lmul!(F.Q, V[:, 1:m])                   # V[:,1:m] ← Q, no allocation, very hacky stuff to avoid allocation
+    lmul!(F.Q, V[:, 1:m])                   # V[:,1:m] ← Q, no allocation
     good = abs.(diag(F.R)) .>= 1e-14
     nact = 0
     for i in 1:m
