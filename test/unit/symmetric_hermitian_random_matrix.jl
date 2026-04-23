@@ -7,7 +7,7 @@ using LinearAlgebra
 # is incompatible regardless of input type. complex_srtt (FFT-based) works for both.
 function sketch_types_for(T::Type)
     if T <: Real
-        return ["real_gaussian", "complex_srtt", "sparsesign", "sparsestack"]
+        return ["real_gaussian", "real_srtt", "sparsesign", "sparsestack"]
     else
         return ["complex_gaussian", "complex_srtt", "sparsesign", "sparsestack"]
     end
