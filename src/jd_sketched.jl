@@ -264,8 +264,8 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
     # Final Ritz extraction and post-processing.
     # V is Θ-orthonormal (not standard orthonormal) and U from general eigen is non-unitary,
-    # so V*U[:,1:k] is not orthogonal. We inline sketched_to_fully, and reused work buffers.
-    # Only the final n×k output must be allocated.
+    # so V*U[:,1:k] is not orthogonal.
+    # Perform one final, full ritz step to get the best approximation from the converged search space.
     @timing "jd_sketched: finalize" begin
         F_fin  = eigen(Mc)
         ew_fin = real.(F_fin.values)
@@ -285,11 +285,26 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         rdiv!(Writz, R)   # Writz = AVn, in-place
         # Small k×k projected eigenproblem
         Fk = eigen(Hermitian(Xritz' * Writz))
-        # Final output: only this n×k allocation is unavoidable
-        X      = Xritz * Fk.vectors
+        # Final output: only this n×k allocation is unavoidable.
+        # Convert back to input type: real inputs give real outputs (imaginary parts are ~0).
+        X_full = Xritz * Fk.vectors
         lambda = Fk.values
         perm_s = sortperm(lambda)
-        X      = copy(X[:, perm_s])
+        X_sorted = X_full[:, perm_s]
+        if eltype(v0) <: Real
+            # Eigenvectors computed in complex arithmetic carry an arbitrary scalar phase
+            # e^(iφ) per column. Remove it so that real.() discards only imaginary noise.
+            # maybe the phase can already be removed in the projected eigenvalue problem that is
+            # solved a couple of lines above.
+            for j in axes(X_sorted, 2)
+                col = view(X_sorted, :, j)
+                _, idx = findmax(abs, col)
+                col ./= col[idx] / abs(col[idx])
+            end
+            X = real.(X_sorted)
+        else
+            X = copy(X_sorted)
+        end
         lambda = copy(lambda[perm_s])
     end
 
