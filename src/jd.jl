@@ -206,7 +206,7 @@ end
 
 """Householder QR orthonormalization of V[:,1:m] in-place. Compacts linearly independent
 columns to the front and returns their count."""
-@views function _jd_qr!(V::Matrix, m::Int, buf::AbstractMatrix)
+@views function _jd_qr!(V::Matrix, m::Int, buf::Matrix)
     tau    = view(buf, 1:m, 1)
     LAPACK.geqrf!(V[:, 1:m], tau)
     good = abs.(V[diagind(V)[1:m]]) .>= 1e-14
