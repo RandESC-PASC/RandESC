@@ -24,6 +24,9 @@ can then open the file with
 To get a statsitical summary instead of a timeline, you can run
 
     nsys stats --report nvtx_sum report1.nsys-rep
+
+Final note: both the CUDA and NVTX packages are required for this example, but they are not
+included in the local project environment (too heavy). You will need to add them on your own.
 """
 
 randomize = false         # whether we profile randomized or standard JD
