@@ -25,3 +25,12 @@ Runs a DFT self-consistent field calculation for a Silicon unit cell using [DFTK
 ```bash
 julia --project=. dftk_silicon.jl
 ```
+
+### `cuda_profiling.jl`
+
+Creates a profile of a RandESC solver of choice on NVIDIA GPUs. More detailed instructions are
+available in the file itself.
+
+```bash
+nsys launch julia cuda_profiling.jl
+```
