@@ -189,47 +189,52 @@ end
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 """
-Orthonormalize V[:,1:m] in-place using the chosen method.
+Orthonormalize V[:,1:m] in-place using the chosen method. Linearly dependent columns
+are removed: independent columns are compacted to V[:,1:nact]. Returns nact.
   :mgs  — single-pass modified Gram-Schmidt
   :mgs2 — double-pass modified Gram-Schmidt (more accurate, more expensive)
-  :qr   — Householder QR (batch; near-zero columns are zeroed out)
+  :qr   — Householder QR (batch)
 buf (nx≥m) is a workspace for :qr; ignored otherwise.
 """
 function _jd_ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
                     buf::AbstractMatrix=similar(V, size(V, 1), m))
     if orth_method == :qr
-        _jd_qr!(V, m, buf)
+        return _jd_qr!(V, m, buf)
     else
-        _jdb_mgs2!(V, m, orth_method == :mgs2)
+        return _jdb_mgs2!(V, m, orth_method == :mgs2)
     end
 end
 
-"""Householder QR orthonormalization of V[:,1:m] in-place. buf must be n×≥m scratch space."""
+"""Householder QR orthonormalization of V[:,1:m] in-place. Compacts linearly independent
+columns to the front and returns their count. buf must be n×≥m scratch space."""
 @views function _jd_qr!(V::AbstractMatrix, m::Int, buf::AbstractMatrix)
     buf[:, 1:m] .= V[:, 1:m]                            # copy; qr! overwrites input
     F = qr!(buf[:, 1:m])                                 # in-place QR, no internal copy
     fill!(V[:, 1:m], zero(eltype(V)))
     V[diagind(V)[1:m]] .= one(eltype(V))                 # thin identity in V[:,1:m]
     lmul!(F.Q, V[:, 1:m])                                # V[:,1:m] ← Q, no allocation
-    V[:, 1:m] .*= (abs.(diag(F.R)) .>= 1e-14)'          # zero out breakdown columns
-    # breakdownbools = abs.(diag(F.R)) .> 1e-14
-    # n_nonzero = sum(breakdownbools)
-    # for i in 1:m
-    #     if breakdownbools[i]
-    #         V[:, i] .= F.Q[:, i]
-    #     else
-    #         V[:, i] .= 0.0
-    #     end
-    # end
+    good = abs.(diag(F.R)) .>= 1e-14
+    nact = 0
+    for i in 1:m
+        if good[i]
+            nact += 1
+            if nact != i # avoid self copies
+                V[:, nact] .= V[:, i]
+            end
+        end
+    end
+    return nact
 end
 
 
-"""MGS orthonormalization of V[:,1:m] in-place."""
+"""MGS orthonormalization of V[:,1:m] in-place. Compacts linearly independent columns
+to the front and returns their count."""
 function _jdb_mgs2!(V::AbstractMatrix, m::Int, two_pass::Bool=true)
+    nact = 0
     for i in 1:m
-        if i > 1
-            vi = view(V, :, i)
-            Vp = view(V, :, 1:i-1)
+        vi = view(V, :, i)
+        if nact > 0
+            Vp = view(V, :, 1:nact)
             ci = Vp' * vi
             mul!(vi, Vp, ci, -1, 1)
             if two_pass
@@ -237,9 +242,16 @@ function _jdb_mgs2!(V::AbstractMatrix, m::Int, two_pass::Bool=true)
                 mul!(vi, Vp, ci, -1, 1)
             end
         end
-        nv = norm(view(V, :, i))
-        nv > 1e-14 && (view(V, :, i) ./= nv)
+        nv = norm(vi)
+        if nv > 1e-14
+            vi ./= nv
+            nact += 1
+            if nact != i # avoid self copies
+                V[:, nact] .= vi
+            end
+        end
     end
+    return nact
 end
 
 
@@ -271,11 +283,12 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
             end
         end
 
-        # Phase 2: orthonormalize the nb candidates among themselves, accept non-zero columns afterwards
-        _jd_ortho!(rb, nb, orth_method, buf)
-        corrections = view(rb, :, findall(ib -> norm(view(rb, :, ib)) >= 1e-14, 1:nb))
-        nact = min(size(corrections, 2), kmax - j)
-        nact > 0 && (V[:, j+1:j+nact] .= corrections[:, 1:nact])
+        # Phase 2: orthonormalize nb candidates among themselves; dependent columns are dropped
+        nact_rb = _jd_ortho!(rb, nb, orth_method, buf)
+        nact = min(nact_rb, kmax - j)
+        if nact > 0
+            V[:, j+1:j+nact] .= rb[:, 1:nact]
+        end
     end
 
     nact == 0 && return Hc, 0
