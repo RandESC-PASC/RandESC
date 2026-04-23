@@ -50,7 +50,6 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         rb     = similar(v0, n, kb)      # residuals / corrections
         ub     = similar(v0, n, kb)      # Ritz vectors for active pairs
         buffer = similar(v0, n, jmin)    # Pre-allocated work array
-        qr_buf = similar(v0, n, kb)      # QR workspace (avoids Matrix(F.Q) allocation)
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
@@ -208,11 +207,11 @@ end
 """Householder QR orthonormalization of V[:,1:m] in-place. Compacts linearly independent
 columns to the front and returns their count. buf must be n×≥m scratch space."""
 @views function _jd_qr!(V::AbstractMatrix, m::Int, buf::AbstractMatrix)
-    buf[:, 1:m] .= V[:, 1:m]                            # copy; qr! overwrites input
-    F = qr!(buf[:, 1:m])                                 # in-place QR, no internal copy
+    buf[:, 1:m] .= V[:, 1:m]                # copy; qr! overwrites input
+    F = qr!(buf[:, 1:m])                    # in-place QR, no internal copy
     fill!(V[:, 1:m], zero(eltype(V)))
-    V[diagind(V)[1:m]] .= one(eltype(V))                 # thin identity in V[:,1:m]
-    lmul!(F.Q, V[:, 1:m])                                # V[:,1:m] ← Q, no allocation
+    V[diagind(V)[1:m]] .= one(eltype(V))    # identity in V[:,1:m]
+    lmul!(F.Q, V[:, 1:m])                   # V[:,1:m] ← Q, no allocation, very hacky stuff to avoid allocation
     good = abs.(diag(F.R)) .>= 1e-14
     nact = 0
     for i in 1:m
