@@ -14,6 +14,7 @@ function sketch_types_for(T::Type)
 end
 
 const ORTH_METHODS = [:rgs, :rcgs, :rcgs2]
+const JD_ORTH_METHODS = [:mgs, :mgs2, :qr]
 
 # Check that each returned eigenpair (lambda[i], V[:,i]) satisfies the eigenvalue equation
 # ‖A*v - λ*v‖ / ‖v‖ < res_tol.
@@ -78,6 +79,28 @@ function testMatrix(A, n, k, testName; test_tol=1e-5, iter_tol=1e-8, verbose=fal
         end
         @test jdb_orth_passed
         testResiduals(A, lambda_jdb, V_jdb, iter_tol)
+    end
+end
+
+function testJdOptions(A, n, k, testName; test_tol=1e-5, iter_tol=1e-8, verbose=false, maxiter=1000)
+    ea = eigen(A)
+    evals = ea.values[1:k]
+    v0 = randn(eltype(A), n, k)
+
+    expected_vec_type = eltype(A)
+    expected_val_type = real(eltype(A))
+
+    for orth_method in JD_ORTH_METHODS
+        @testset "$testName: jd(orth_method=$orth_method)" begin
+            V, lambda, _ = jd(A, v0; k=k, tol=iter_tol, maxit=maxiter, disp=verbose,
+                              orth_method=orth_method)
+            @test eltype(V) == expected_vec_type
+            @test eltype(lambda) == expected_val_type
+            @test maximum(abs.(evals .- lambda)) < test_tol
+            gram = V' * V
+            @test maximum(abs.(gram - I)) < test_tol
+            testResiduals(A, lambda, V, iter_tol)
+        end
     end
 end
 
@@ -176,8 +199,36 @@ end
     end
 end
 
-# Test all sketch_type and orth_method combinations for jd_sketched, for each input type.
+# Test all orth_method options for jd, for each input type.
 # Uses a single fixed matrix per type to keep runtime reasonable.
+@testset "RandESC jd Options — Float64" begin
+    Random.seed!(11111)
+    n, k = 200, 5
+    A = randn(Float64, n, n); A = A + A'
+    testJdOptions(A, n, k, "Float64"; test_tol=1e-5, iter_tol=1e-8)
+end
+
+@testset "RandESC jd Options — ComplexF64" begin
+    Random.seed!(22222)
+    n, k = 200, 4
+    A = randn(ComplexF64, n, n); A = A + A'
+    testJdOptions(A, n, k, "ComplexF64"; test_tol=1e-5, iter_tol=1e-8)
+end
+
+@testset "RandESC jd Options — Float32" begin
+    Random.seed!(33333)
+    n, k = 200, 4
+    A = randn(Float32, n, n); A = A + A'
+    testJdOptions(A, n, k, "Float32"; test_tol=1e-2, iter_tol=1e-3)
+end
+
+@testset "RandESC jd Options — ComplexF32" begin
+    Random.seed!(44444)
+    n, k = 200, 4
+    A = randn(ComplexF32, n, n); A = A + A'
+    testJdOptions(A, n, k, "ComplexF32"; test_tol=1e-2, iter_tol=1e-3)
+end
+
 @testset "RandESC jd_sketched Options — Float64" begin
     Random.seed!(11111)
     n, k = 200, 5
