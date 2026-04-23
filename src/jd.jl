@@ -50,6 +50,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         rb     = similar(v0, n, kb)      # residuals / corrections
         ub     = similar(v0, n, kb)      # Ritz vectors for active pairs
         buffer = similar(v0, n, jmin)    # Pre-allocated work array
+        qr_buf = similar(v0, n, kb)      # QR workspace (avoids Matrix(F.Q) allocation)
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
@@ -70,7 +71,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         randn!(TaskLocalRNG(), V[:, nc+1:j])
     end
 
-    @timing "jd: ortho" _jd_ortho!(V, j, orth_method)
+    @timing "jd: ortho" _jd_ortho!(V, j, orth_method, buffer)
     @timing "jd: matvec" mul!(W[:, 1:j], A, V[:, 1:j])
     nmv += j
     @timing "jd: overlap" Hc = Hermitian(V[:, 1:j]' * W[:, 1:j])
@@ -159,7 +160,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         end
 
         # Expand subspace, new expanded Hc comes out
-        Hc, nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, orth_method)
+        Hc, nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, orth_method, ub)
         nmv += nact
         j += nact
 
@@ -192,14 +193,34 @@ Orthonormalize V[:,1:m] in-place using the chosen method.
   :mgs  — single-pass modified Gram-Schmidt
   :mgs2 — double-pass modified Gram-Schmidt (more accurate, more expensive)
   :qr   — Householder QR (batch; near-zero columns are zeroed out)
+buf (nx≥m) is a workspace for :qr; ignored otherwise.
 """
-function _jd_ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol)
+function _jd_ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
+                    buf::AbstractMatrix=similar(V, size(V, 1), m))
     if orth_method == :qr
-        F = qr(view(V, :, 1:m))
-        V[:, 1:m] .= Matrix(F.Q) .* (abs.(diag(F.R)) .>= 1e-14)'
+        _jd_qr!(V, m, buf)
     else
         _jdb_mgs2!(V, m, orth_method == :mgs2)
     end
+end
+
+"""Householder QR orthonormalization of V[:,1:m] in-place. buf must be n×≥m scratch space."""
+@views function _jd_qr!(V::AbstractMatrix, m::Int, buf::AbstractMatrix)
+    buf[:, 1:m] .= V[:, 1:m]                            # copy; qr! overwrites input
+    F = qr!(buf[:, 1:m])                                 # in-place QR, no internal copy
+    fill!(V[:, 1:m], zero(eltype(V)))
+    V[diagind(V)[1:m]] .= one(eltype(V))                 # thin identity in V[:,1:m]
+    lmul!(F.Q, V[:, 1:m])                                # V[:,1:m] ← Q, no allocation
+    V[:, 1:m] .*= (abs.(diag(F.R)) .>= 1e-14)'          # zero out breakdown columns
+    # breakdownbools = abs.(diag(F.R)) .> 1e-14
+    # n_nonzero = sum(breakdownbools)
+    # for i in 1:m
+    #     if breakdownbools[i]
+    #         V[:, i] .= F.Q[:, i]
+    #     else
+    #         V[:, i] .= 0.0
+    #     end
+    # end
 end
 
 
@@ -235,7 +256,8 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
 @views function _jdb_expand!(V::AbstractMatrix, W::AbstractMatrix,
                       Hc::AbstractMatrix, rb::AbstractMatrix,
                       j::Int, nb::Int, kmax::Int, A,
-                      orth_method::Symbol=:mgs)
+                      orth_method::Symbol=:mgs,
+                      buf::AbstractMatrix=similar(V, size(V, 1), nb))
     nact = 0
 
     @timing "jd: ortho" begin
@@ -250,7 +272,7 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
         end
 
         # Phase 2: orthonormalize the nb candidates among themselves, accept non-zero columns afterwards
-        _jd_ortho!(rb, nb, orth_method)
+        _jd_ortho!(rb, nb, orth_method, buf)
         corrections = view(rb, :, findall(ib -> norm(view(rb, :, ib)) >= 1e-14, 1:nb))
         nact = min(size(corrections, 2), kmax - j)
         nact > 0 && (V[:, j+1:j+nact] .= corrections[:, 1:nact])
