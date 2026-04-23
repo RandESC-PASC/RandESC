@@ -84,7 +84,7 @@ function SRTT(diag_sign::AbstractVector, IX::AbstractVector{<:Integer},
     if field === :complex
         Y = fft(Xscaled, 1)
     elseif field === :real
-        Y = FFTW.dct(Xscaled, 2; dims=1)  # DCT-II along rows
+        Y = FFTW.dct(Xscaled, 1)  # DCT-II along rows
     else
         throw(ArgumentError("field must be :complex or :real"))
     end
