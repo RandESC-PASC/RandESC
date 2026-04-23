@@ -208,16 +208,12 @@ end
 columns to the front and returns their count."""
 @views function _jd_qr!(V::Matrix, m::Int, buf::AbstractMatrix)
     tau    = view(buf, 1:m, 1)
-    r_diag = view(buf, 1:m, 2)
     LAPACK.geqrf!(V[:, 1:m], tau)
-    r_diag .= abs.(V[diagind(V)[1:m]])
+    good = abs.(V[diagind(V)[1:m]]) .>= 1e-14
+    nact = sum(good)
     LAPACK.orgqr!(V[:, 1:m], tau, m)
-    nact = 0
-    for i in 1:m
-        if real(r_diag[i]) >= 1e-14
-            nact += 1
-            V[:, nact] .= V[:, i]
-        end
+    if nact < m
+       V[:, 1:nact] .= V[:, good] 
     end
     return nact
 end
@@ -228,15 +224,10 @@ end
     fill!(V[:, 1:m], zero(eltype(V)))
     V[diagind(V)[1:m]] .= one(eltype(V))    # identity in V[:,1:m]
     lmul!(F.Q, V[:, 1:m])                   # V[:,1:m] ← Q, no allocation
-    good = abs.(diag(F.R)) .>= 1e-14
-    nact = 0
-    for i in 1:m
-        if good[i]
-            nact += 1
-            if nact != i # avoid self copies
-                V[:, nact] .= V[:, i]
-            end
-        end
+    good = findall(abs.(diag(F.R)) .>= 1e-14)
+    nact = length(good)
+    if nact < m
+        V[:, 1:nact] .= V[:, good]
     end
     return nact
 end
