@@ -209,8 +209,8 @@ columns to the front and returns their count."""
 @views function _jd_qr!(V::Matrix, m::Int, buf::Matrix)
     tau    = view(buf, 1:m, 1)
     LAPACK.geqrf!(V[:, 1:m], tau)
-    good = abs.(V[diagind(V)[1:m]]) .>= 1e-14
-    nact = sum(good)
+    good = findall(abs.(V[diagind(V)[1:m]]) .>= 1e-14)
+    nact = length(good)
     LAPACK.orgqr!(V[:, 1:m], tau, m)
     if nact < m
        V[:, 1:nact] .= V[:, good] 
