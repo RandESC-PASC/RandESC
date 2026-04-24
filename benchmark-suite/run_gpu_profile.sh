@@ -21,7 +21,7 @@ ECUT=30
 KGRID="2,2,2"
 SCF_MAXITER=10
 OUTPUT="results"
-THREADS=4
+THREADS=1
 STRUCTURE=""
 
 while [[ $# -gt 0 ]]; do

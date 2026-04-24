@@ -39,7 +39,7 @@ SYSTEM="$(basename "${STRUCTURE%.*}")"
 nsys launch \
     julia \
         --project="$SCRIPT_DIR" \
-        --threads="${SLURM_CPUS_PER_TASK:-4}" \
+        --threads=1 \
         "$SCRIPT_DIR/run_gpu_profile.jl" \
         "$STRUCTURE" \
         --solver "$SOLVER" \
