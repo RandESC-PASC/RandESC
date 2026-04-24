@@ -36,7 +36,9 @@ SYSTEM="$(basename "${STRUCTURE%.*}")"
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 
-nsys launch \
+nsys profile \
+    --capture-range=cudaProfilerApi \
+    --output report \
     julia \
         --project="$SCRIPT_DIR" \
         --threads=1 \

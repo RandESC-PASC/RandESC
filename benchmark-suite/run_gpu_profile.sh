@@ -50,7 +50,9 @@ echo "========================================"
 echo "GPU profiling: $SYSTEM / $SOLVER"
 echo "========================================"
 
-nsys launch \
+nsys profile \
+    --capture-range=cudaProfilerApi \
+    --output report \
     julia \
         --project="$SCRIPT_DIR" \
         --threads="$THREADS" \

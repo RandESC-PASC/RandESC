@@ -121,7 +121,7 @@ function run_gpu_profile(opts)
         "timestamp"    => string(now()),
         "julia_version" => string(VERSION),
     )
-    report_candidates = filter(f -> occursin(r"^report\d+\.(nsys-rep|qdstrm)$", f), readdir("."))
+    report_candidates = filter(f -> occursin(r"^report\d*\.(nsys-rep|qdstrm)$", f), readdir("."))
     report_file = isempty(report_candidates) ? "report1.nsys-rep" :
                   sort(report_candidates, by=f -> mtime(f))[end]
     meta["report_file"] = report_file
