@@ -23,7 +23,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 OUTPUT="results"
 ECUT=40
-KGRID="1,1,1"
+KGRID="2,2,2"
 SOLVERS="lobpcg,jd,jd_sketched"
 JULIA_THREADS=2
 FFTW_THREADS=2

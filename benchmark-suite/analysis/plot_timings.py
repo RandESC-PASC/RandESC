@@ -3,13 +3,11 @@
 Plot benchmark timing comparisons across solvers.
 
 Usage:
-    python plot_timings.py --results <results_dir> [--output <plot.pdf>] [--system <name>]
+    python plot_timings.py --results <results_dir> [--output <dir|file>] [--system <name>]
 
-For each system found in results_dir, produces a grouped bar chart comparing
-wall_time_s, eigensolver_time_s, matvec_time_s, ortho_time_s, and rr_time_s
-across solvers.
-
-Multiple systems are plotted on separate figures. Pass --system to restrict to one.
+Produces two figures per system:
+  - Bar chart comparing all timing fields across solvers
+  - Pie charts showing the wall-time breakdown per solver
 """
 
 import argparse
@@ -27,11 +25,15 @@ TIMING_FIELDS = [
     ("matvec_time_s",      "Matvec"),
     ("ortho_time_s",       "Ortho"),
     ("rr_time_s",          "Rayleigh-Ritz"),
+    ("residual_time_s",    "Residual"),
 ]
 
 SOLVER_ORDER  = ["lobpcg", "jd", "jd_sketched"]
 SOLVER_LABELS = {"lobpcg": "LOBPCG", "jd": "JD", "jd_sketched": "JD (sketched)"}
-COLORS        = ["#4c72b0", "#dd8452", "#55a868"]
+SOLVER_COLORS = ["#4c72b0", "#dd8452", "#55a868"]
+
+PIE_LABELS = ["Matvec", "Ortho", "Rayleigh-Ritz", "Residual", "Other eigensolver"]
+PIE_COLORS = ["#e07070", "#70a0e0", "#70c870", "#a070c8", "#c8a870"]
 
 
 def load_results(results_dir: Path, system_filter: str | None) -> dict[str, dict[str, dict]]:
@@ -48,26 +50,46 @@ def load_results(results_dir: Path, system_filter: str | None) -> dict[str, dict
     return dict(data)
 
 
-def plot_system(system: str, solver_data: dict[str, dict], output_path: Path | None):
+def make_output_path(output_arg: Path | None, system: str, n_systems: int, suffix: str) -> Path | None:
+    if output_arg is None:
+        return None
+    if output_arg.is_dir() or (n_systems > 1 and output_arg.suffix == ""):
+        output_arg.mkdir(parents=True, exist_ok=True)
+        return output_arg / f"{system}_{suffix}.pdf"
+    stem = output_arg.stem
+    ext  = output_arg.suffix or ".pdf"
+    return output_arg.parent / f"{stem}_{system}_{suffix}{ext}"
+
+
+def solver_info_line(solver: str, r: dict) -> str:
+    parts = [SOLVER_LABELS.get(solver, solver)]
+    if r.get("n_matvec")  is not None: parts.append(f"matvec={r['n_matvec']}")
+    if r.get("n_scf_iter") is not None: parts.append(f"SCF iter={r['n_scf_iter']}")
+    parts.append("converged" if r.get("converged") else "NOT CONVERGED")
+    return "  |  ".join(parts)
+
+
+# ── Bar chart ─────────────────────────────────────────────────────────────────
+
+def plot_bar(system: str, solver_data: dict[str, dict], output_path: Path | None):
     solvers = [s for s in SOLVER_ORDER if s in solver_data]
     if not solvers:
-        print(f"[SKIP] {system}: no recognised solvers found")
         return
 
-    fields   = [(k, label) for k, label in TIMING_FIELDS
-                if any(solver_data[s].get(k) for s in solvers)]
-    n_fields = len(fields)
+    fields    = [(k, label) for k, label in TIMING_FIELDS
+                 if any(solver_data[s].get(k) for s in solvers)]
+    n_fields  = len(fields)
     n_solvers = len(solvers)
+    x         = np.arange(n_fields)
+    width     = 0.8 / n_solvers
 
-    x      = np.arange(n_fields)
-    width  = 0.8 / n_solvers
     fig, ax = plt.subplots(figsize=(max(8, n_fields * 2), 5))
 
     for i, solver in enumerate(solvers):
-        vals = [solver_data[solver].get(k, 0) or 0 for k, _ in fields]
+        vals   = [solver_data[solver].get(k, 0) or 0 for k, _ in fields]
         offset = (i - n_solvers / 2 + 0.5) * width
-        bars = ax.bar(x + offset, vals, width, label=SOLVER_LABELS.get(solver, solver),
-                      color=COLORS[i % len(COLORS)], alpha=0.85)
+        bars   = ax.bar(x + offset, vals, width, label=SOLVER_LABELS.get(solver, solver),
+                        color=SOLVER_COLORS[i % len(SOLVER_COLORS)], alpha=0.85)
         for bar, v in zip(bars, vals):
             if v > 0:
                 ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() * 1.01,
@@ -83,65 +105,112 @@ def plot_system(system: str, solver_data: dict[str, dict], output_path: Path | N
     ax.grid(axis="y", which="minor", linestyle=":", alpha=0.2)
     ax.set_axisbelow(True)
 
-    # Annotate n_matvec and n_scf_iter in a small table below the legend
-    info_lines = []
-    for solver in solvers:
-        r = solver_data[solver]
-        n_mv  = r.get("n_matvec")
-        n_scf = r.get("n_scf_iter")
-        conv  = r.get("converged", "?")
-        parts = [SOLVER_LABELS.get(solver, solver)]
-        if n_mv  is not None: parts.append(f"matvec={n_mv}")
-        if n_scf is not None: parts.append(f"SCF iter={n_scf}")
-        parts.append("converged" if conv else "NOT CONVERGED")
-        info_lines.append("  |  ".join(parts))
-    fig.text(0.5, -0.04, "\n".join(info_lines), ha="center", va="top",
-             fontsize=8, family="monospace")
+    info = "\n".join(solver_info_line(s, solver_data[s]) for s in solvers)
+    fig.text(0.5, -0.04, info, ha="center", va="top", fontsize=8, family="monospace")
 
     fig.tight_layout()
+    _save_or_show(fig, output_path)
 
+
+# ── Pie charts ────────────────────────────────────────────────────────────────
+
+def _pie_slices(r: dict) -> tuple[list[float], list[str]]:
+    """Break eigensolver_time_s into components."""
+    eig      = r.get("eigensolver_time_s", 0) or 0
+    mv       = r.get("matvec_time_s", 0) or 0
+    ortho    = r.get("ortho_time_s", 0) or 0
+    rr       = r.get("rr_time_s", 0) or 0
+    residual = r.get("residual_time_s", 0) or 0
+
+    other_eig = max(eig - mv - ortho - rr - residual, 0)
+
+    vals   = [mv, ortho, rr, residual, other_eig]
+    labels = PIE_LABELS
+    # Filter zero slices
+    pairs  = [(v, l) for v, l in zip(vals, labels) if v > 0]
+    if not pairs:
+        return [], []
+    vals, labels = zip(*pairs)
+    return list(vals), list(labels)
+
+
+def plot_pie(system: str, solver_data: dict[str, dict], output_path: Path | None):
+    solvers = [s for s in SOLVER_ORDER if s in solver_data]
+    if not solvers:
+        return
+
+    fig, axes = plt.subplots(1, len(solvers),
+                              figsize=(4.5 * len(solvers), 5))
+    if len(solvers) == 1:
+        axes = [axes]
+
+    color_map = {label: color for label, color in zip(PIE_LABELS, PIE_COLORS)}
+
+    for ax, solver in zip(axes, solvers):
+        r          = solver_data[solver]
+        vals, lbls = _pie_slices(r)
+        if not vals:
+            ax.set_visible(False)
+            continue
+
+        colors = [color_map.get(l, "#aaaaaa") for l in lbls]
+        _, _, autotexts = ax.pie(
+            vals, labels=None, colors=colors, autopct="%1.1f%%",
+            startangle=90, pctdistance=0.75,
+        )
+        for at in autotexts:
+            at.set_fontsize(8)
+
+        eig = r.get("eigensolver_time_s", 0) or 0
+        ax.set_title(f"{SOLVER_LABELS.get(solver, solver)}\n({eig:.1f}s eigensolver)", fontsize=10)
+
+    # Shared legend using all possible labels
+    handles = [plt.Rectangle((0, 0), 1, 1, color=color_map[l]) for l in PIE_LABELS]
+    fig.legend(handles, PIE_LABELS, loc="lower center", ncol=len(PIE_LABELS),
+               fontsize=8, bbox_to_anchor=(0.5, -0.05))
+
+    fig.suptitle(f"Wall-time breakdown — {system}", fontsize=12)
+    fig.tight_layout()
+    _save_or_show(fig, output_path)
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _save_or_show(fig: plt.Figure, output_path: Path | None):
     if output_path:
         fig.savefig(output_path, bbox_inches="tight")
         print(f"Saved: {output_path}")
     else:
         plt.show()
-
     plt.close(fig)
 
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="Plot solver timing comparisons.")
     parser.add_argument("--results", required=True, help="Directory with result JSONs")
     parser.add_argument("--output",  default=None,
-                        help="Output file (PDF/PNG). If omitted, shows interactive plot. "
-                             "For multiple systems, use a directory path.")
+                        help="Output file or directory. Bar chart gets _bar suffix, "
+                             "pie chart gets _pie suffix. Omit for interactive display.")
     parser.add_argument("--system",  default=None, help="Restrict to one system name")
     args = parser.parse_args()
 
     results_dir = Path(args.results)
-    data = load_results(results_dir, args.system)
+    data        = load_results(results_dir, args.system)
 
     if not data:
         print("No data found.")
         return
 
     output_arg = Path(args.output) if args.output else None
+    n_systems  = len(data)
 
     for system, solver_data in sorted(data.items()):
-        if output_arg is not None:
-            if output_arg.is_dir() or (len(data) > 1 and output_arg.suffix == ""):
-                output_arg.mkdir(parents=True, exist_ok=True)
-                out = output_arg / f"{system}.pdf"
-            elif len(data) > 1:
-                stem   = output_arg.stem
-                suffix = output_arg.suffix
-                out    = output_arg.parent / f"{stem}_{system}{suffix}"
-            else:
-                out = output_arg
-        else:
-            out = None
-
-        plot_system(system, solver_data, out)
+        bar_out = make_output_path(output_arg, system, n_systems, "bar")
+        pie_out = make_output_path(output_arg, system, n_systems, "pie")
+        plot_bar(system, solver_data, bar_out)
+        plot_pie(system, solver_data, pie_out)
 
 
 if __name__ == "__main__":

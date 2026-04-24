@@ -102,6 +102,7 @@ function extract_timings(solver, dftk_t, randesc_t)
             ortho_time_s       = ns_to_s(get_timer_ns(dftk_t, scf, "LOBPCG", "ortho!") +
                                          get_timer_ns(dftk_t, scf, "LOBPCG", "ortho! X vs Y")),
             rr_time_s          = ns_to_s(get_timer_ns(dftk_t, scf, "LOBPCG", "rayleigh_ritz")),
+            residual_time_s    = ns_to_s(get_timer_ns(dftk_t, scf, "LOBPCG", "Update residuals")),
         )
     else
         prefix = solver  # "jd" or "jd_sketched"
@@ -111,6 +112,7 @@ function extract_timings(solver, dftk_t, randesc_t)
             matvec_time_s      = ns_to_s(get_timer_ns(randesc_t, prefix, "$prefix: matvec")),
             ortho_time_s       = ns_to_s(get_timer_ns(randesc_t, prefix, "$prefix: ortho")),
             rr_time_s          = ns_to_s(get_timer_ns(randesc_t, prefix, "$prefix: diag")),
+            residual_time_s    = ns_to_s(get_timer_ns(randesc_t, prefix, "$prefix: residual")),
         )
     end
 end
@@ -192,6 +194,7 @@ function run_benchmark(opts)
             "matvec_time_s"      => timings.matvec_time_s,
             "ortho_time_s"       => timings.ortho_time_s,
             "rr_time_s"          => timings.rr_time_s,
+            "residual_time_s"    => timings.residual_time_s,
             "timestamp"          => string(now()),
             "julia_version"      => string(VERSION),
             "julia_threads"      => Threads.nthreads(),
