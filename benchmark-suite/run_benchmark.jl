@@ -174,6 +174,9 @@ function run_benchmark(opts)
             error("Unknown solver: $solver. Valid choices: lobpcg, jd, jd_sketched")
         end
 
+        println(DFTK.timer)
+        println(RandESC.timer)
+
         timings = extract_timings(solver, DFTK.timer, RandESC.timer)
 
         result = Dict{String,Any}(
