@@ -121,12 +121,19 @@ function run_gpu_profile(opts)
         "timestamp"    => string(now()),
         "julia_version" => string(VERSION),
     )
+    report_file = isfile("report1.nsys-rep") ? "report1.nsys-rep" : "report1.qdstrm"
+    meta["report_file"] = report_file
+
     meta_file = "$(system_name)_$(solver)_gpu_meta.json"
     open(meta_file, "w") do io; JSON3.pretty(io, meta); end
     println("Metadata written to $meta_file")
-    println("Profile data written to report1.nsys-rep")
+    println("Profile data written to $report_file")
+    if endswith(report_file, ".qdstrm")
+        println("Note: nsys importer not available on this host. Copy $report_file")
+        println("      to a machine with full nsys before running nsys_to_json.py.")
+    end
     println("\nTo produce the JSON timing report run:")
-    println("  python analysis/nsys_to_json.py --report report1.nsys-rep --meta $meta_file --output results/$(system_name)_$(solver)_gpu.json")
+    println("  python analysis/nsys_to_json.py --report $report_file --meta $meta_file --output results/$(system_name)_$(solver)_gpu.json")
 end
 
 run_gpu_profile(parse_args(ARGS))

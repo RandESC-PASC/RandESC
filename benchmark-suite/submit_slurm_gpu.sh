@@ -47,8 +47,10 @@ nsys launch \
         --kgrid "$KGRID" \
         --scf-maxiter "$SCF_MAXITER"
 
-echo "Converting nsys report to JSON..."
+META_FILE="${SYSTEM}_${SOLVER}_gpu_meta.json"
+REPORT="$(python3 -c "import json; print(json.load(open('$META_FILE'))['report_file'])")"
+echo "Converting $REPORT to JSON..."
 python "$SCRIPT_DIR/analysis/nsys_to_json.py" \
-    --report report1.nsys-rep \
-    --meta   "${SYSTEM}_${SOLVER}_gpu_meta.json" \
+    --report "$REPORT" \
+    --meta   "$META_FILE" \
     --output "results/${SYSTEM}_${SOLVER}_gpu.json"

@@ -62,7 +62,8 @@ nsys launch \
         --scf-maxiter "$SCF_MAXITER"
 
 echo ""
-echo "Converting nsys report to JSON..."
+REPORT="$(python3 -c "import json; print(json.load(open('$META_FILE'))['report_file'])")"
+echo "Converting $REPORT to JSON..."
 python "$SCRIPT_DIR/analysis/nsys_to_json.py" \
     --report "$REPORT" \
     --meta   "$META_FILE" \

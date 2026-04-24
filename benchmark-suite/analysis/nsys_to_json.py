@@ -50,6 +50,15 @@ JD_SKETCHED_RANGES = {
 
 
 def export_to_sqlite(report_path: Path, out_dir: Path) -> Path:
+    # .qdstrm needs to be imported first to produce .nsys-rep
+    if report_path.suffix == ".qdstrm":
+        nsys_rep = out_dir / (report_path.stem + ".nsys-rep")
+        subprocess.run(
+            ["nsys", "import", "--output", str(nsys_rep), str(report_path)],
+            check=True, capture_output=True,
+        )
+        report_path = nsys_rep
+
     sqlite_path = out_dir / (report_path.stem + ".sqlite")
     subprocess.run(
         ["nsys", "export", "--type", "sqlite",
