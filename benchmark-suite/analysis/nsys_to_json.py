@@ -50,14 +50,16 @@ JD_SKETCHED_RANGES = {
 
 
 def export_to_sqlite(report_path: Path, out_dir: Path) -> Path:
-    # .qdstrm needs to be imported first to produce .nsys-rep
     if report_path.suffix == ".qdstrm":
-        nsys_rep = out_dir / (report_path.stem + ".nsys-rep")
-        subprocess.run(
-            ["nsys", "import", "--output", str(nsys_rep), str(report_path)],
-            check=True, capture_output=True,
+        print(
+            f"ERROR: {report_path.name} is a raw capture file. The nsys importer is\n"
+            "not available on this host. Copy it to a machine with the full Nsight\n"
+            "Systems installation and run:\n"
+            f"  nsys export --type sqlite {report_path.stem}.nsys-rep\n"
+            "or just pass the converted .nsys-rep to this script.",
+            file=sys.stderr,
         )
-        report_path = nsys_rep
+        sys.exit(1)
 
     sqlite_path = out_dir / (report_path.stem + ".sqlite")
     subprocess.run(

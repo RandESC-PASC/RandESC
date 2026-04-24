@@ -63,10 +63,15 @@ nsys launch \
 
 echo ""
 REPORT="$(python3 -c "import json; print(json.load(open('$META_FILE'))['report_file'])")"
-echo "Converting $REPORT to JSON..."
-python "$SCRIPT_DIR/analysis/nsys_to_json.py" \
-    --report "$REPORT" \
-    --meta   "$META_FILE" \
-    --output "$JSON_OUT"
-
-echo "Done. JSON written to $JSON_OUT"
+if [[ "$REPORT" == *.qdstrm ]]; then
+    echo "nsys importer not available on this host."
+    echo "Copy $REPORT and $META_FILE to a machine with full Nsight Systems, then run:"
+    echo "  python analysis/nsys_to_json.py --report <converted>.nsys-rep --meta $META_FILE --output $JSON_OUT"
+else
+    echo "Converting $REPORT to JSON..."
+    python "$SCRIPT_DIR/analysis/nsys_to_json.py" \
+        --report "$REPORT" \
+        --meta   "$META_FILE" \
+        --output "$JSON_OUT"
+    echo "Done. JSON written to $JSON_OUT"
+fi

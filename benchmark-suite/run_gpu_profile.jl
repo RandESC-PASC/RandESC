@@ -121,7 +121,9 @@ function run_gpu_profile(opts)
         "timestamp"    => string(now()),
         "julia_version" => string(VERSION),
     )
-    report_file = isfile("report1.nsys-rep") ? "report1.nsys-rep" : "report1.qdstrm"
+    report_candidates = filter(f -> occursin(r"^report\d+\.(nsys-rep|qdstrm)$", f), readdir("."))
+    report_file = isempty(report_candidates) ? "report1.nsys-rep" :
+                  sort(report_candidates, by=f -> mtime(f))[end]
     meta["report_file"] = report_file
 
     meta_file = "$(system_name)_$(solver)_gpu_meta.json"
