@@ -101,41 +101,44 @@ function run_gpu_profile(opts)
     self_consistent_field(basis; maxiter=3, tol=1e-1, eigensolver=eig_solver)
     println("Warmup done.\n")
 
-    # Profiling run — data written to report1.nsys-rep
-    println("Profiling solver: $solver  (scf_maxiter=$scf_maxiter)")
-    scfres = CUDA.@profile external=true begin
-        self_consistent_field(basis; maxiter=scf_maxiter, tol=tol, eigensolver=eig_solver)
-    end
-
     system_name = splitext(basename(structure_file))[1]
-    meta = Dict{String,Any}(
-        "solver"       => solver,
-        "system"       => system_name,
-        "ecut"         => ecut,
-        "kgrid"        => kgrid,
-        "n_scf_iter"   => scfres.n_iter,
-        "converged"    => scfres.converged,
-        "n_matvec"     => scfres.n_matvec,
-        "architecture" => "gpu",
-        "cuda_device"  => CUDA.name(CUDA.device()),
-        "timestamp"    => string(now()),
-        "julia_version" => string(VERSION),
-    )
-    report_candidates = filter(f -> occursin(r"^report\d*\.(nsys-rep|qdstrm)$", f), readdir("."))
-    report_file = isempty(report_candidates) ? "report1.nsys-rep" :
-                  sort(report_candidates, by=f -> mtime(f))[end]
-    meta["report_file"] = report_file
+    meta_file   = "$(system_name)_$(solver)_gpu_meta.json"
 
-    meta_file = "$(system_name)_$(solver)_gpu_meta.json"
-    open(meta_file, "w") do io; JSON3.pretty(io, meta); end
-    println("Metadata written to $meta_file")
-    println("Profile data written to $report_file")
-    if endswith(report_file, ".qdstrm")
-        println("Note: nsys importer not available on this host. Copy $report_file")
-        println("      to a machine with full nsys before running nsys_to_json.py.")
+    # Profiling run — data written to report1.nsys-rep
+    # nsys sends SIGTERM immediately after the capture range ends, so all
+    # metadata writing must happen inside the @profile block before it closes.
+    println("Profiling solver: $solver  (scf_maxiter=$scf_maxiter)")
+    CUDA.@profile external=true begin
+        scfres = self_consistent_field(basis; maxiter=scf_maxiter, tol=tol, eigensolver=eig_solver)
+
+        report_candidates = filter(f -> occursin(r"^report\d*\.(nsys-rep|qdstrm)$", f), readdir("."))
+        report_file = isempty(report_candidates) ? "report1.nsys-rep" :
+                      sort(report_candidates, by=f -> mtime(f))[end]
+
+        meta = Dict{String,Any}(
+            "solver"        => solver,
+            "system"        => system_name,
+            "ecut"          => ecut,
+            "kgrid"         => kgrid,
+            "n_scf_iter"    => scfres.n_iter,
+            "converged"     => scfres.converged,
+            "n_matvec"      => scfres.n_matvec,
+            "architecture"  => "gpu",
+            "cuda_device"   => CUDA.name(CUDA.device()),
+            "timestamp"     => string(now()),
+            "julia_version" => string(VERSION),
+            "report_file"   => report_file,
+        )
+        open(meta_file, "w") do io; JSON3.pretty(io, meta); end
+        println("Metadata written to $meta_file")
+        println("Profile data written to $report_file")
+        if endswith(report_file, ".qdstrm")
+            println("Note: nsys importer not available on this host. Copy $report_file")
+            println("      to a machine with full nsys before running nsys_to_json.py.")
+        end
+        println("\nTo produce the JSON timing report run:")
+        println("  python analysis/nsys_to_json.py --report $report_file --meta $meta_file --output results/$(system_name)_$(solver)_gpu.json")
     end
-    println("\nTo produce the JSON timing report run:")
-    println("  python analysis/nsys_to_json.py --report $report_file --meta $meta_file --output results/$(system_name)_$(solver)_gpu.json")
 end
 
 run_gpu_profile(parse_args(ARGS))
