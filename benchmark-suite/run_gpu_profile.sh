@@ -53,8 +53,6 @@ echo "========================================"
 # nsys launch (unlike nsys profile) lets Julia exit naturally before writing
 # the report, so metadata can be written after the @profile block.
 nsys launch \
-    --force-overwrite true \
-    --output "${REPORT_STEM}" \
     julia \
         --project="$SCRIPT_DIR" \
         --threads="$THREADS" \
