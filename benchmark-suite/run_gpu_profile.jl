@@ -29,7 +29,7 @@ function parse_args(args)
         end
     end
     isnothing(opts["structure"]) && error("Usage: run_gpu_profile.jl <structure.extxyz> [options]")
-    opts["solver"] in ("jd", "jd_sketched") || error("solver must be jd or jd_sketched")
+    opts["solver"] in ("lobpcg", "jd", "jd_sketched") || error("solver must be lobpcg, jd, or jd_sketched")
     return opts
 end
 
@@ -63,13 +63,14 @@ function make_eigensolver(; useRandomization)
     end
 end
 
+eigensolver_kwargs = solver == "lobpcg" ? (;) :
+                     (eigensolver=make_eigensolver(; useRandomization=solver == "jd_sketched"),)
+
 println("Warming up...")
-self_consistent_field(basis; maxiter=3, tol=1e-1,
-                      eigensolver=make_eigensolver(; useRandomization=solver == "jd_sketched"))
+self_consistent_field(basis; maxiter=3, tol=1e-1, eigensolver_kwargs...)
 println("Warmup done.\n")
 
 println("Profiling solver: $solver  (scf_maxiter=$(opts["scf_maxiter"]))")
 CUDA.@profile external=true begin
-    self_consistent_field(basis; maxiter=opts["scf_maxiter"], tol=opts["tol"],
-                          eigensolver=make_eigensolver(; useRandomization=solver == "jd_sketched"))
+    self_consistent_field(basis; maxiter=opts["scf_maxiter"], tol=opts["tol"], eigensolver_kwargs...)
 end
