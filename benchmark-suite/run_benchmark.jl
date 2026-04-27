@@ -42,19 +42,6 @@ function parse_args(args)
     return opts
 end
 
-# ── Timer helpers ─────────────────────────────────────────────────────────────
-
-function get_timer_ns(to, keys...)
-    t = to
-    for k in keys
-        haskey(t.inner_timers, k) || return Int64(0)
-        t = t.inner_timers[k]
-    end
-    return t.accumulated_data.time
-end
-
-ns_to_s(ns) = ns * 1e-9
-
 # ── Structure loading ─────────────────────────────────────────────────────────
 
 function load_model(filename)
@@ -87,34 +74,6 @@ function make_eig_solver(use_randomization)
                              verbose=false)
     end
     return eig_solver
-end
-
-# ── Timing extraction ─────────────────────────────────────────────────────────
-
-function extract_timings(solver, dftk_t, randesc_t)
-    scf = "self_consistent_field"
-    hmul = "DftHamiltonian multiplication"
-
-    if solver == "lobpcg"
-        return (
-            eigensolver_time_s = ns_to_s(get_timer_ns(dftk_t, scf, "LOBPCG")),
-            matvec_time_s      = ns_to_s(get_timer_ns(dftk_t, scf, "LOBPCG", hmul)),
-            ortho_time_s       = ns_to_s(get_timer_ns(dftk_t, scf, "LOBPCG", "ortho!") +
-                                         get_timer_ns(dftk_t, scf, "LOBPCG", "ortho! X vs Y")),
-            rr_time_s          = ns_to_s(get_timer_ns(dftk_t, scf, "LOBPCG", "rayleigh_ritz")),
-            residual_time_s    = ns_to_s(get_timer_ns(dftk_t, scf, "LOBPCG", "Update residuals")),
-        )
-    else
-        prefix = solver  # "jd" or "jd_sketched"
-        # Sub-timers are nested under the outer "jd"/"jd_sketched" block
-        return (
-            eigensolver_time_s = ns_to_s(get_timer_ns(randesc_t, prefix)),
-            matvec_time_s      = ns_to_s(get_timer_ns(randesc_t, prefix, "$prefix: matvec")),
-            ortho_time_s       = ns_to_s(get_timer_ns(randesc_t, prefix, "$prefix: ortho")),
-            rr_time_s          = ns_to_s(get_timer_ns(randesc_t, prefix, "$prefix: diag")),
-            residual_time_s    = ns_to_s(get_timer_ns(randesc_t, prefix, "$prefix: residual")),
-        )
-    end
 end
 
 # ── Warmup ────────────────────────────────────────────────────────────────────
@@ -161,45 +120,29 @@ function run_benchmark(opts)
         println("=" ^ 60)
         println("Running solver: $solver")
 
-        DFTK.reset_timer!(DFTK.timer)
-        RandESC.reset_timer!(RandESC.timer)
-
         scfres = if solver == "lobpcg"
             self_consistent_field(basis; tol=tol)
         elseif solver == "jd"
-            self_consistent_field(basis; tol=tol,
-                                  eigensolver=make_eig_solver(false))
+            self_consistent_field(basis; tol=tol, eigensolver=make_eig_solver(false))
         elseif solver == "jd_sketched"
-            self_consistent_field(basis; tol=tol,
-                                  eigensolver=make_eig_solver(true))
+            self_consistent_field(basis; tol=tol, eigensolver=make_eig_solver(true))
         else
             error("Unknown solver: $solver. Valid choices: lobpcg, jd, jd_sketched")
         end
 
-        println(DFTK.timer)
-        println(RandESC.timer)
-
-        timings = extract_timings(solver, DFTK.timer, RandESC.timer)
-
         result = Dict{String,Any}(
-            "solver"             => solver,
-            "system"             => system_name,
-            "ecut"               => ecut,
-            "kgrid"              => kgrid,
-            "n_scf_iter"         => scfres.n_iter,
-            "converged"          => scfres.converged,
-            "n_matvec"           => scfres.n_matvec,
-            "wall_time_s"        => ns_to_s(get_timer_ns(DFTK.timer, "self_consistent_field")),
-            "eigensolver_time_s" => timings.eigensolver_time_s,
-            "matvec_time_s"      => timings.matvec_time_s,
-            "ortho_time_s"       => timings.ortho_time_s,
-            "rr_time_s"          => timings.rr_time_s,
-            "residual_time_s"    => timings.residual_time_s,
-            "timestamp"          => string(now()),
-            "julia_version"      => string(VERSION),
-            "julia_threads"      => Threads.nthreads(),
-            "fftw_threads"       => fftw_threads,
-            "blas_threads"       => blas_threads,
+            "solver"        => solver,
+            "system"        => system_name,
+            "ecut"          => ecut,
+            "kgrid"         => kgrid,
+            "n_scf_iter"    => scfres.n_iter,
+            "converged"     => scfres.converged,
+            "n_matvec"      => scfres.n_matvec,
+            "timestamp"     => string(now()),
+            "julia_version" => string(VERSION),
+            "julia_threads" => Threads.nthreads(),
+            "fftw_threads"  => fftw_threads,
+            "blas_threads"  => blas_threads,
         )
 
         outfile = joinpath(output_dir, "$(system_name)_$(solver).json")

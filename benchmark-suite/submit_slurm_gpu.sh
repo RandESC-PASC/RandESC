@@ -10,8 +10,8 @@
 #SBATCH --error=slurm-gpu-%j.err
 #
 # Produces <system>_<solver>_gpu.nsys-rep in the working directory.
-# View locally with: nsys-ui <report>.nsys-rep
-# Stats with:        nsys stats --report nvtx_sum <report>.nsys-rep
+# View locally:      nsys-ui <report>.nsys-rep
+# NVTX summary:      nsys stats --report nvtx_sum <report>.nsys-rep
 #
 # Submit with:
 #   sbatch submit_slurm_gpu.sh
@@ -20,28 +20,21 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# ── Configuration ─────────────────────────────────────────────────────────────
-
-STRUCTURE="../example/DFTK_solver/h3s.extxyz"
-SOLVER="jd"           # jd or jd_sketched
+STRUCTURE="../example/DFTK_solver/si.extxyz"
+SOLVER="jd"
 ECUT=30
 KGRID="2,2,2"
-SCF_MAXITER=10        # keep low to avoid huge nsys dumps
+SCF_MAXITER=10
 
-SYSTEM="$(basename "${STRUCTURE%.*}")"
-
-# ── Module / environment setup ────────────────────────────────────────────────
 # Uncomment and adapt for your cluster:
 # module load julia/1.11 cuda/12
 
-# ── Run ───────────────────────────────────────────────────────────────────────
-
-REPORT_STEM="${SYSTEM}_${SOLVER}_gpu"
-META_FILE="${REPORT_STEM}_meta.json"
+SYSTEM="$(basename "${STRUCTURE%.*}")"
+REPORT="${SYSTEM}_${SOLVER}_gpu"
 
 nsys launch \
     --force-overwrite true \
-    --output "${REPORT_STEM}" \
+    --output "$REPORT" \
     julia \
         --project="$SCRIPT_DIR" \
         --threads=1 \
@@ -52,19 +45,5 @@ nsys launch \
         --kgrid "$KGRID" \
         --scf-maxiter "$SCF_MAXITER"
 
-REPORT="${REPORT_STEM}.nsys-rep"
-if [[ -f "$REPORT" ]]; then
-    python3 - "$META_FILE" "$REPORT" <<'EOF'
-import sys, json
-meta_path, report = sys.argv[1], sys.argv[2]
-with open(meta_path) as f: meta = json.load(f)
-meta["report_file"] = report
-with open(meta_path, "w") as f: json.dump(meta, f, indent=2)
-EOF
-    echo "Converting $REPORT to JSON..."
-    python3 "$SCRIPT_DIR/analysis/nsys_to_json.py" \
-        --report "$REPORT" --meta "$META_FILE" --output "results/${REPORT_STEM}.json"
-else
-    echo "Report not found at $REPORT — nsys importer may be unavailable on this host."
-    echo "Copy the .qdstrm file from /tmp and $META_FILE to a machine with full Nsight Systems."
-fi
+echo "NVTX summary:"
+nsys stats --report nvtx_sum "${REPORT}.nsys-rep"

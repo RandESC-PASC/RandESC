@@ -3,8 +3,6 @@ using DFTK
 using PseudoPotentialData
 using RandESC
 using CUDA
-using JSON3
-using Dates
 using NVTX
 
 function parse_args(args)
@@ -35,9 +33,8 @@ function parse_args(args)
     return opts
 end
 
-opts        = parse_args(ARGS)
-solver      = opts["solver"]
-scf_maxiter = opts["scf_maxiter"]
+opts   = parse_args(ARGS)
+solver = opts["solver"]
 
 DFTK.setup_threading()
 println("CUDA device: $(CUDA.name(CUDA.device()))")
@@ -71,27 +68,8 @@ self_consistent_field(basis; maxiter=3, tol=1e-1,
                       eigensolver=make_eigensolver(; useRandomization=solver == "jd_sketched"))
 println("Warmup done.\n")
 
-println("Profiling solver: $solver  (scf_maxiter=$scf_maxiter)")
+println("Profiling solver: $solver  (scf_maxiter=$(opts["scf_maxiter"]))")
 CUDA.@profile external=true begin
-    scfres = self_consistent_field(basis; maxiter=scf_maxiter, tol=opts["tol"],
-                                   eigensolver=make_eigensolver(; useRandomization=solver == "jd_sketched"))
+    self_consistent_field(basis; maxiter=opts["scf_maxiter"], tol=opts["tol"],
+                          eigensolver=make_eigensolver(; useRandomization=solver == "jd_sketched"))
 end
-
-system_name = splitext(basename(opts["structure"]))[1]
-meta_file   = "$(system_name)_$(solver)_gpu_meta.json"
-open(meta_file, "w") do io
-    JSON3.pretty(io, Dict{String,Any}(
-        "solver"        => solver,
-        "system"        => system_name,
-        "ecut"          => opts["ecut"],
-        "kgrid"         => opts["kgrid"],
-        "n_scf_iter"    => scfres.n_iter,
-        "converged"     => scfres.converged,
-        "n_matvec"      => scfres.n_matvec,
-        "architecture"  => "gpu",
-        "cuda_device"   => CUDA.name(CUDA.device()),
-        "timestamp"     => string(now()),
-        "julia_version" => string(VERSION),
-    ))
-end
-println("Metadata written to $meta_file")
