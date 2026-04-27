@@ -53,7 +53,6 @@ echo "========================================"
 # nsys launch (unlike nsys profile) lets Julia exit naturally before writing
 # the report, so metadata can be written after the @profile block.
 nsys launch \
-    --capture-range=cudaProfilerApi \
     --force-overwrite true \
     --output "${REPORT_STEM}" \
     julia \

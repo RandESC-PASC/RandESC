@@ -40,7 +40,6 @@ REPORT_STEM="${SYSTEM}_${SOLVER}_gpu"
 META_FILE="${REPORT_STEM}_meta.json"
 
 nsys launch \
-    --capture-range=cudaProfilerApi \
     --force-overwrite true \
     --output "${REPORT_STEM}" \
     julia \
