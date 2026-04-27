@@ -29,12 +29,7 @@ SCF_MAXITER=10
 # Uncomment and adapt for your cluster:
 # module load julia/1.11 cuda/12
 
-SYSTEM="$(basename "${STRUCTURE%.*}")"
-REPORT="${SYSTEM}_${SOLVER}_gpu"
-
 nsys launch \
-    --force-overwrite true \
-    --output "$REPORT" \
     julia \
         --project="$SCRIPT_DIR" \
         --threads=1 \
@@ -46,4 +41,4 @@ nsys launch \
         --scf-maxiter "$SCF_MAXITER"
 
 echo "NVTX summary:"
-nsys stats --report nvtx_sum "${REPORT}.nsys-rep"
+nsys stats --report nvtx_sum report1.nsys-rep
