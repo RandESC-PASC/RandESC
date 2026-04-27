@@ -41,7 +41,7 @@ done
 
 SYSTEM="$(basename "${STRUCTURE%.*}")"
 META_FILE="${SYSTEM}_${SOLVER}_gpu_meta.json"
-REPORT="report1.nsys-rep"
+REPORT="${SYSTEM}_${SOLVER}_gpu.nsys-rep"
 JSON_OUT="$OUTPUT/${SYSTEM}_${SOLVER}_gpu.json"
 
 mkdir -p "$OUTPUT"
@@ -52,7 +52,8 @@ echo "========================================"
 
 nsys profile \
     --capture-range=cudaProfilerApi \
-    --output report \
+    --force-overwrite true \
+    --output "${REPORT%.nsys-rep}" \
     julia \
         --project="$SCRIPT_DIR" \
         --threads="$THREADS" \
@@ -61,7 +62,8 @@ nsys profile \
         --solver "$SOLVER" \
         --ecut "$ECUT" \
         --kgrid "$KGRID" \
-        --scf-maxiter "$SCF_MAXITER"
+        --scf-maxiter "$SCF_MAXITER" \
+        --report "$REPORT"
 
 echo ""
 REPORT="$(python3 -c "import json; print(json.load(open('$META_FILE'))['report_file'])")"

@@ -13,13 +13,14 @@ using NVTX
 
 function parse_args(args)
     opts = Dict{String,Any}(
-        "structure"  => nothing,
-        "solver"     => "jd",
-        "ecut"       => 30.0,
-        "kgrid"      => [2, 2, 2],
-        "maxiter"    => 100,
-        "tol"        => 1e-6,
+        "structure"   => nothing,
+        "solver"      => "jd",
+        "ecut"        => 30.0,
+        "kgrid"       => [2, 2, 2],
+        "maxiter"     => 100,
+        "tol"         => 1e-6,
         "scf_maxiter" => 10,  # keep low to avoid huge nsys dumps
+        "report"      => nothing,  # must match --output passed to nsys profile
     )
     i = 1
     while i <= length(args)
@@ -30,6 +31,7 @@ function parse_args(args)
         elseif a == "--maxiter"; opts["maxiter"]     = parse(Int, args[i+1]); i += 2
         elseif a == "--tol";     opts["tol"]         = parse(Float64, args[i+1]); i += 2
         elseif a == "--scf-maxiter"; opts["scf_maxiter"] = parse(Int, args[i+1]); i += 2
+        elseif a == "--report";  opts["report"]      = args[i+1]; i += 2
         elseif !startswith(a, "--") && isnothing(opts["structure"])
             opts["structure"] = a; i += 1
         else
@@ -103,17 +105,14 @@ function run_gpu_profile(opts)
 
     system_name = splitext(basename(structure_file))[1]
     meta_file   = "$(system_name)_$(solver)_gpu_meta.json"
+    report_file = something(opts["report"], "report.nsys-rep")
 
-    # Profiling run — data written to report1.nsys-rep
+    # Profiling run.
     # nsys sends SIGTERM immediately after the capture range ends, so all
     # metadata writing must happen inside the @profile block before it closes.
     println("Profiling solver: $solver  (scf_maxiter=$scf_maxiter)")
     CUDA.@profile external=true begin
         scfres = self_consistent_field(basis; maxiter=scf_maxiter, tol=tol, eigensolver=eig_solver)
-
-        report_candidates = filter(f -> occursin(r"^report\d*\.(nsys-rep|qdstrm)$", f), readdir("."))
-        report_file = isempty(report_candidates) ? "report1.nsys-rep" :
-                      sort(report_candidates, by=f -> mtime(f))[end]
 
         meta = Dict{String,Any}(
             "solver"        => solver,
@@ -131,11 +130,6 @@ function run_gpu_profile(opts)
         )
         open(meta_file, "w") do io; JSON3.pretty(io, meta); end
         println("Metadata written to $meta_file")
-        println("Profile data written to $report_file")
-        if endswith(report_file, ".qdstrm")
-            println("Note: nsys importer not available on this host. Copy $report_file")
-            println("      to a machine with full nsys before running nsys_to_json.py.")
-        end
         println("\nTo produce the JSON timing report run:")
         println("  python analysis/nsys_to_json.py --report $report_file --meta $meta_file --output results/$(system_name)_$(solver)_gpu.json")
     end
