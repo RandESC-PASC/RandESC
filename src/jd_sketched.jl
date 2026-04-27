@@ -62,7 +62,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
     T = complex(eltype(v0))
 
-    Theta = sketch(n, s, sketch_type; template=v0)
+    Theta = sketch(n, s, sketch_type, v0)
 
     # ── Workspace ─────────────────────────────────────────────────────────
     @timing "jd_sketched: allocation" begin

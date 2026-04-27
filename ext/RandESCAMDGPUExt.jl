@@ -22,7 +22,6 @@ for T in [Float32, Float64, ComplexF32, ComplexF64]
 end
 
 function RandESC.random_matrix(T::Type{<:Real}, m::Int, n::Int, template::ROCArray)
-    #TODO: can we pass a RNG ?
     return AMDGPU.randn(T, m, n)
 end
 
@@ -32,7 +31,6 @@ function RandESC.random_matrix(T::Type{<:Complex}, m::Int, n::Int, template::ROC
 end
 
 function RandESC.random_vector(T::Type, n::Int, template::ROCArray)
-    #TODO: can we pass a RNG ?
     return AMDGPU.randn(T, n)
 end
 

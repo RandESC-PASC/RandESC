@@ -11,8 +11,7 @@ function columnwise_dots(A::AbstractArray, B::AbstractArray)
     vec(sum(conj(A) .* B; dims=1))
 end
 
-#TODO: docstrings
-# Moves a CPU array to the same device as a template array (e.g. GPU array)
+"""Moves a CPU array to the same device as a template GPU array"""
 function to_device(array::Array, template::AbstractGPUArray)
     dest = similar(template, eltype(array), size(array))
     copyto!(dest, array)
@@ -23,15 +22,7 @@ function to_device(array::Array, template::Union{Nothing,Array})
     return array
 end
 
-function random_matrix(T::Type, m::Int, n::Int, template::Union{Array,Nothing}; seed=Random.default_rng())
-    return randn(seed, T, m, n)
-end
-
-function random_vector(T::Type, n::Int, template::Union{Array,Nothing}; seed=Random.default_rng())
-    return randn(seed, T, n)
-end
-
-# Moves an array from the GPU to the CPU
+"""Moves an array from the GPU to the CPU"""
 function to_cpu(array::AbstractGPUArray)
     return Array(array)
 end
@@ -40,17 +31,32 @@ function to_cpu(array::Array)
     return array
 end
 
+"""Generates a random matrix of a given type and size."""
+function random_matrix(T::Type, m::Int, n::Int, template::Union{Array,Nothing})
+    return randn(T, m, n)
+end
+
+"""Generates a random vector of a given type and size. An RNG can be optionally provided."""
+function random_vector(T::Type, n::Int, template::Union{Array,Nothing})
+    return randn(T, n)
+end
+
+"""Returns a CSC sparse matrix given its dimensions and the standard CSC format vectors. The sparse matrix
+   lives on the same device as the template array."""
 function sparse_matrix_csc(m::Int, n::Int, colptr::Vector{<:Integer},
                            rowval::Vector{<:Integer}, nzval::Vector,
                            template::Union{Array,Nothing})
     return SparseMatrixCSC(m, n, colptr, rowval, nzval)
 end
 
+"""Returns a CSC sparse matrix given its dimensions and the standard COO format vectors. The sparse matrix
+   lives on the same device as the template array."""
 function sparse_matrix_csc(I::Vector{<:Integer}, J::Vector{<:Integer},
                            V::Vector, m::Int, n::Int, template::Union{Array,Nothing})
     return sparse(I, J, V, m, n) # defaults to SparseMatrixCSC on the CPU
 end
 
+"""Performs a 2D discrete cosine transform (DCT type II) along the specified dimensions of the input array."""
 function dct2(X::AbstractArray, dims)
-    FFTW.dct(X, dims)  # DCT-II along specified dimensions
+    FFTW.dct(X, dims)
 end

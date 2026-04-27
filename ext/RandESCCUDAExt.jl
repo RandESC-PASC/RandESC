@@ -9,12 +9,10 @@ using SparseArrays
 using AbstractFFTs
 
 function RandESC.random_matrix(T::Type, m::Int, n::Int, template::CuArray)
-    #TODO: can we pass a RNG ?
     return CUDA.randn(T, m, n)
 end
 
 function RandESC.random_vector(T::Type, n::Int, template::CuArray)
-    #TODO: can we pass a RNG ?
     return CUDA.randn(T, n)
 end
 
