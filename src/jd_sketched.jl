@@ -67,21 +67,21 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     # ── Workspace ─────────────────────────────────────────────────────────
     @timing "jd_sketched: allocation" begin
         # Active subspace: columns 1:j live in the the following buffers.
-        V  = similar(v0, n, jmax)
-        W  = similar(v0, n, jmax)
-        SV = similar(v0, s, jmax); SV .= zero(T)  # arrays potentially holding result of a sparse matrix
-        SW = similar(v0, s, jmax); SW .= zero(T)  # multiplication must be initialized to zero for safety
+        V  = similar(v0, T, n, jmax)
+        W  = similar(v0, T, n, jmax)
+        SV = similar(v0, T, s, jmax); SV .= zero(T)  # arrays potentially holding result of a sparse matrix
+        SW = similar(v0, T, s, jmax); SW .= zero(T)  # multiplication must be initialized to zero for safety
         # Work buffers for various allocation free operations:
-        n_buffer = similar(v0, n, jmax)
-        s_buffer = similar(v0, s, jmax)
+        n_buffer = similar(v0, T, n, jmax)
+        s_buffer = similar(v0, T, s, jmax)
         # Ritz vectors and residuals for active pairs (like ub/rb in jdsym_block)
         # ub is also reused as T_corr_buf during expand (never live at the same time)
-        ub      = similar(v0, n, kb)
-        rb      = similar(v0, n, kb)
+        ub      = similar(v0, T, n, kb)
+        rb      = similar(v0, T, n, kb)
         # Sketched Ritz vectors for Rayleigh quotient; reused as ST_corr_buf/SV_scratch
         # during expand (never live at the same time as the Rayleigh quotient computation)
-        SX_rq   = similar(v0, s, kb); SX_rq .= zero(T)   # reused as ST_corr_buf in expand
-        SW_rq   = similar(v0, s, kb); SW_rq .= zero(T)   # reused as SV_scratch in expand
+        SX_rq   = similar(v0, T, s, kb); SX_rq .= zero(T)   # reused as ST_corr_buf in expand
+        SW_rq   = similar(v0, T, s, kb); SW_rq .= zero(T)   # reused as SV_scratch in expand
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
