@@ -36,9 +36,13 @@ SYSTEM="$(basename "${STRUCTURE%.*}")"
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 
+REPORT_STEM="${SYSTEM}_${SOLVER}_gpu"
+META_FILE="${REPORT_STEM}_meta.json"
+
 nsys profile \
     --capture-range=cudaProfilerApi \
-    --output report \
+    --force-overwrite true \
+    --output "${REPORT_STEM}" \
     julia \
         --project="$SCRIPT_DIR" \
         --threads=1 \
@@ -47,12 +51,40 @@ nsys profile \
         --solver "$SOLVER" \
         --ecut "$ECUT" \
         --kgrid "$KGRID" \
-        --scf-maxiter "$SCF_MAXITER"
+        --scf-maxiter "$SCF_MAXITER" || true  # nsys exits non-zero after SIGTERM
 
-META_FILE="${SYSTEM}_${SOLVER}_gpu_meta.json"
-REPORT="$(python3 -c "import json; print(json.load(open('$META_FILE'))['report_file'])")"
-echo "Converting $REPORT to JSON..."
-python "$SCRIPT_DIR/analysis/nsys_to_json.py" \
-    --report "$REPORT" \
-    --meta   "$META_FILE" \
-    --output "results/${SYSTEM}_${SOLVER}_gpu.json"
+# Locate the report: nsys writes <stem>.nsys-rep in CWD when the importer is
+# available, otherwise falls back to a .qdstrm in /tmp.
+if [[ -f "${REPORT_STEM}.nsys-rep" ]]; then
+    REPORT="${REPORT_STEM}.nsys-rep"
+elif [[ -f "${REPORT_STEM}.qdstrm" ]]; then
+    REPORT="${REPORT_STEM}.qdstrm"
+else
+    REPORT_TMP=$(ls -t /tmp/nsys-report-*.qdstrm 2>/dev/null | head -1 || true)
+    [[ -z "$REPORT_TMP" ]] && { echo "ERROR: could not locate nsys report" >&2; exit 1; }
+    REPORT="${REPORT_STEM}.qdstrm"
+    cp "$REPORT_TMP" "$REPORT"
+    echo "Report copied from $REPORT_TMP -> $REPORT"
+fi
+
+python3 - "$META_FILE" "$REPORT" <<'EOF'
+import sys, json
+meta_path, report = sys.argv[1], sys.argv[2]
+with open(meta_path) as f:
+    meta = json.load(f)
+meta["report_file"] = report
+with open(meta_path, "w") as f:
+    json.dump(meta, f, indent=2)
+EOF
+
+if [[ "$REPORT" == *.qdstrm ]]; then
+    echo "nsys importer not available on this host."
+    echo "Copy $REPORT and $META_FILE to a machine with full Nsight Systems, then run:"
+    echo "  python analysis/nsys_to_json.py --report <converted>.nsys-rep --meta $META_FILE --output results/${REPORT_STEM}.json"
+else
+    echo "Converting $REPORT to JSON..."
+    python3 "$SCRIPT_DIR/analysis/nsys_to_json.py" \
+        --report "$REPORT" \
+        --meta   "$META_FILE" \
+        --output "results/${REPORT_STEM}.json"
+fi

@@ -20,7 +20,6 @@ function parse_args(args)
         "maxiter"     => 100,
         "tol"         => 1e-6,
         "scf_maxiter" => 10,  # keep low to avoid huge nsys dumps
-        "report"      => nothing,  # must match --output passed to nsys profile
     )
     i = 1
     while i <= length(args)
@@ -31,7 +30,6 @@ function parse_args(args)
         elseif a == "--maxiter"; opts["maxiter"]     = parse(Int, args[i+1]); i += 2
         elseif a == "--tol";     opts["tol"]         = parse(Float64, args[i+1]); i += 2
         elseif a == "--scf-maxiter"; opts["scf_maxiter"] = parse(Int, args[i+1]); i += 2
-        elseif a == "--report";  opts["report"]      = args[i+1]; i += 2
         elseif !startswith(a, "--") && isnothing(opts["structure"])
             opts["structure"] = a; i += 1
         else
@@ -105,11 +103,12 @@ function run_gpu_profile(opts)
 
     system_name = splitext(basename(structure_file))[1]
     meta_file   = "$(system_name)_$(solver)_gpu_meta.json"
-    report_file = something(opts["report"], "report.nsys-rep")
 
     # Profiling run.
     # nsys sends SIGTERM immediately after the capture range ends, so all
     # metadata writing must happen inside the @profile block before it closes.
+    # report_file is intentionally omitted — the shell script locates the nsys
+    # output (which may land in /tmp as a qdstrm) and patches it in afterwards.
     println("Profiling solver: $solver  (scf_maxiter=$scf_maxiter)")
     CUDA.@profile external=true begin
         scfres = self_consistent_field(basis; maxiter=scf_maxiter, tol=tol, eigensolver=eig_solver)
@@ -126,12 +125,9 @@ function run_gpu_profile(opts)
             "cuda_device"   => CUDA.name(CUDA.device()),
             "timestamp"     => string(now()),
             "julia_version" => string(VERSION),
-            "report_file"   => report_file,
         )
         open(meta_file, "w") do io; JSON3.pretty(io, meta); end
         println("Metadata written to $meta_file")
-        println("\nTo produce the JSON timing report run:")
-        println("  python analysis/nsys_to_json.py --report $report_file --meta $meta_file --output results/$(system_name)_$(solver)_gpu.json")
     end
 end
 
