@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run GPU profiling and immediately convert the nsys report to a JSON timing file.
+# Run GPU profiling and convert the nsys report to a JSON timing file.
 #
 # Usage:
 #   ./run_gpu_profile.sh [options] structure.extxyz
@@ -8,8 +8,8 @@
 #   --solver    jd|jd_sketched  (default: jd)
 #   --ecut      FLOAT           (default: 30)
 #   --kgrid     I,J,K           (default: 2,2,2)
-#   --scf-maxiter INT           SCF iterations to profile (default: 10)
-#   --output    DIR             Output directory for JSON (default: results)
+#   --scf-maxiter INT           (default: 10)
+#   --output    DIR             output directory for JSON (default: results)
 #   --threads   INT             Julia threads (default: 1)
 
 set -euo pipefail
@@ -50,11 +50,9 @@ echo "========================================"
 echo "GPU profiling: $SYSTEM / $SOLVER"
 echo "========================================"
 
-# Record a sentinel file so we can find the nsys output by mtime afterwards.
-# nsys may write the report to /tmp as a .qdstrm when the importer is unavailable.
-SENTINEL=$(mktemp)
-
-nsys profile \
+# nsys launch (unlike nsys profile) lets Julia exit naturally before writing
+# the report, so metadata can be written after the @profile block.
+nsys launch \
     --capture-range=cudaProfilerApi \
     --force-overwrite true \
     --output "${REPORT_STEM}" \
@@ -66,52 +64,23 @@ nsys profile \
         --solver "$SOLVER" \
         --ecut "$ECUT" \
         --kgrid "$KGRID" \
-        --scf-maxiter "$SCF_MAXITER" || true  # nsys exits non-zero after SIGTERM
+        --scf-maxiter "$SCF_MAXITER"
 
-rm -f "$SENTINEL"
-
-# Locate the report: nsys writes <stem>.nsys-rep in the CWD when the importer
-# is available, otherwise falls back to a .qdstrm in /tmp.
 echo ""
-if [[ -f "${REPORT_STEM}.nsys-rep" ]]; then
-    REPORT="${REPORT_STEM}.nsys-rep"
-    echo "Report: $REPORT"
-elif [[ -f "${REPORT_STEM}.qdstrm" ]]; then
-    REPORT="${REPORT_STEM}.qdstrm"
-    echo "Report: $REPORT"
-else
-    # nsys wrote to /tmp — find the most recently created nsys qdstrm there
-    REPORT_TMP=$(ls -t /tmp/nsys-report-*.qdstrm 2>/dev/null | head -1 || true)
-    if [[ -z "$REPORT_TMP" ]]; then
-        echo "ERROR: could not locate nsys report (checked CWD and /tmp)" >&2
-        exit 1
-    fi
-    REPORT="${REPORT_STEM}.qdstrm"
-    cp "$REPORT_TMP" "$REPORT"
-    echo "Report copied from $REPORT_TMP -> $REPORT"
-fi
-
-# Patch report_file into the metadata JSON using python (avoids jq dependency)
-python3 - "$META_FILE" "$REPORT" <<'EOF'
+REPORT="${REPORT_STEM}.nsys-rep"
+if [[ -f "$REPORT" ]]; then
+    python3 - "$META_FILE" "$REPORT" <<'EOF'
 import sys, json
 meta_path, report = sys.argv[1], sys.argv[2]
-with open(meta_path) as f:
-    meta = json.load(f)
+with open(meta_path) as f: meta = json.load(f)
 meta["report_file"] = report
-with open(meta_path, "w") as f:
-    json.dump(meta, f, indent=2)
+with open(meta_path, "w") as f: json.dump(meta, f, indent=2)
 EOF
-
-if [[ "$REPORT" == *.qdstrm ]]; then
-    echo ""
-    echo "nsys importer not available on this host."
-    echo "Copy $REPORT and $META_FILE to a machine with full Nsight Systems, then run:"
-    echo "  python analysis/nsys_to_json.py --report <converted>.nsys-rep --meta $META_FILE --output $JSON_OUT"
-else
     echo "Converting $REPORT to JSON..."
     python3 "$SCRIPT_DIR/analysis/nsys_to_json.py" \
-        --report "$REPORT" \
-        --meta   "$META_FILE" \
-        --output "$JSON_OUT"
+        --report "$REPORT" --meta "$META_FILE" --output "$JSON_OUT"
     echo "Done. JSON written to $JSON_OUT"
+else
+    echo "Report not found at $REPORT — nsys importer may be unavailable on this host."
+    echo "Copy the .qdstrm file from /tmp and $META_FILE to a machine with full Nsight Systems."
 fi

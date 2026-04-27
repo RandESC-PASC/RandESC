@@ -9,9 +9,9 @@
 #SBATCH --output=slurm-gpu-%j.out
 #SBATCH --error=slurm-gpu-%j.err
 #
-# Produces report1.nsys-rep in the working directory.
-# View locally with: nsys-ui report1.nsys-rep
-# Stats with:        nsys stats --report nvtx_sum report1.nsys-rep
+# Produces <system>_<solver>_gpu.nsys-rep in the working directory.
+# View locally with: nsys-ui <report>.nsys-rep
+# Stats with:        nsys stats --report nvtx_sum <report>.nsys-rep
 #
 # Submit with:
 #   sbatch submit_slurm_gpu.sh
@@ -39,7 +39,7 @@ SYSTEM="$(basename "${STRUCTURE%.*}")"
 REPORT_STEM="${SYSTEM}_${SOLVER}_gpu"
 META_FILE="${REPORT_STEM}_meta.json"
 
-nsys profile \
+nsys launch \
     --capture-range=cudaProfilerApi \
     --force-overwrite true \
     --output "${REPORT_STEM}" \
@@ -51,40 +51,21 @@ nsys profile \
         --solver "$SOLVER" \
         --ecut "$ECUT" \
         --kgrid "$KGRID" \
-        --scf-maxiter "$SCF_MAXITER" || true  # nsys exits non-zero after SIGTERM
+        --scf-maxiter "$SCF_MAXITER"
 
-# Locate the report: nsys writes <stem>.nsys-rep in CWD when the importer is
-# available, otherwise falls back to a .qdstrm in /tmp.
-if [[ -f "${REPORT_STEM}.nsys-rep" ]]; then
-    REPORT="${REPORT_STEM}.nsys-rep"
-elif [[ -f "${REPORT_STEM}.qdstrm" ]]; then
-    REPORT="${REPORT_STEM}.qdstrm"
-else
-    REPORT_TMP=$(ls -t /tmp/nsys-report-*.qdstrm 2>/dev/null | head -1 || true)
-    [[ -z "$REPORT_TMP" ]] && { echo "ERROR: could not locate nsys report" >&2; exit 1; }
-    REPORT="${REPORT_STEM}.qdstrm"
-    cp "$REPORT_TMP" "$REPORT"
-    echo "Report copied from $REPORT_TMP -> $REPORT"
-fi
-
-python3 - "$META_FILE" "$REPORT" <<'EOF'
+REPORT="${REPORT_STEM}.nsys-rep"
+if [[ -f "$REPORT" ]]; then
+    python3 - "$META_FILE" "$REPORT" <<'EOF'
 import sys, json
 meta_path, report = sys.argv[1], sys.argv[2]
-with open(meta_path) as f:
-    meta = json.load(f)
+with open(meta_path) as f: meta = json.load(f)
 meta["report_file"] = report
-with open(meta_path, "w") as f:
-    json.dump(meta, f, indent=2)
+with open(meta_path, "w") as f: json.dump(meta, f, indent=2)
 EOF
-
-if [[ "$REPORT" == *.qdstrm ]]; then
-    echo "nsys importer not available on this host."
-    echo "Copy $REPORT and $META_FILE to a machine with full Nsight Systems, then run:"
-    echo "  python analysis/nsys_to_json.py --report <converted>.nsys-rep --meta $META_FILE --output results/${REPORT_STEM}.json"
-else
     echo "Converting $REPORT to JSON..."
     python3 "$SCRIPT_DIR/analysis/nsys_to_json.py" \
-        --report "$REPORT" \
-        --meta   "$META_FILE" \
-        --output "results/${REPORT_STEM}.json"
+        --report "$REPORT" --meta "$META_FILE" --output "results/${REPORT_STEM}.json"
+else
+    echo "Report not found at $REPORT — nsys importer may be unavailable on this host."
+    echo "Copy the .qdstrm file from /tmp and $META_FILE to a machine with full Nsight Systems."
 fi
