@@ -73,3 +73,66 @@ function _jdb_mgs2!(V::AbstractMatrix, m::Int, two_pass::Bool=true)
     end
     return nact
 end
+
+
+"""
+    theta_orth_block_against!(V0, Q, SQ, Theta, method, SV_buf)
+
+In-place Θ-orthogonalization of `V0` against Θ-orthonormal `Q`.
+`SV_buf` (s × size(V0,2)) is a pre-allocated scratch array.
+"""
+function theta_orth_block_against!(V0::AbstractMatrix, Q, SQ, Theta, method::Symbol,
+                                   SV_buf::AbstractMatrix)
+    isempty(Q) && return V0
+    nb = size(V0, 2)
+    SV = view(SV_buf, :, 1:nb)
+    mul!(SV, Theta, V0)
+    H = SQ' * SV
+    mul!(V0, Q, H, -1, 1)
+    if method == :rcgs2
+        mul!(SV, Theta, V0)
+        mul!(H, SQ', SV)
+        mul!(V0, Q, H, -1, 1)
+    end
+    return V0
+end
+
+
+"""
+    theta_orth_block!(V_out, SV_out, V0, Theta, method, SV_buf) -> nact
+
+In-place Θ-orthonormalization. Writes accepted vectors into the first `nact` columns of
+pre-allocated `V_out` (n×p) and `SV_out` (s×p). `SV_buf` (s×p) is scratch. Returns `nact`.
+"""
+@views function theta_orth_block!(V_out::AbstractMatrix, SV_out::AbstractMatrix,
+                                  V0::AbstractMatrix, Theta, method::Symbol,
+                                  SV_buf::AbstractMatrix; tol::Float64=1e-14)
+    _, p = size(V0)
+    mul!(SV_buf[:, 1:p], Theta, V0)
+    ncols = 0
+    npass = (method == :rcgs2) ? 2 : 1
+
+    for i in 1:p
+        v  = view(V0,     :, i)
+        sv = view(SV_buf, :, i)
+
+        if ncols > 0
+            Vc  = view(V_out,  :, 1:ncols)
+            SVc = view(SV_out, :, 1:ncols)
+            for _ in 1:npass
+                h = SVc' * sv
+                mul!(v,  Vc,  h, -1, 1)
+                mul!(sv, SVc, h, -1, 1)
+            end
+        end
+
+        nv = norm(sv)
+        if nv > tol
+            ncols += 1
+            V_out[:,  ncols] .= v  ./ nv
+            SV_out[:, ncols] .= sv ./ nv
+        end
+    end
+
+    return ncols
+end
