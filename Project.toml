@@ -15,15 +15,11 @@ TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 [weakdeps]
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+NVTX = "5da4648a-3479-48b8-97b9-01cb529c0a1f"
 
 [extensions]
 RandESCAMDGPUExt = "AMDGPU"
 RandESCCUDAExt = "CUDA"
-
-[weakdeps]
-NVTX = "5da4648a-3479-48b8-97b9-01cb529c0a1f"
-
-[extensions]
 RandESCNVTXExt = "NVTX"
 
 [compat]

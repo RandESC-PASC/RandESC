@@ -56,6 +56,12 @@ function sparse_matrix_csc(I::Vector{<:Integer}, J::Vector{<:Integer},
     return sparse(I, J, V, m, n) # defaults to SparseMatrixCSC on the CPU
 end
 
+"""Returns a sparse matrix of zeros on the same device as the template array."""
+function sparse_zeros(m::Int, n::Int, template::Union{Array,Nothing})
+    return spzeros(m, n)
+end
+
+
 """Performs a 2D discrete cosine transform (DCT type II) along the specified dimensions of the input array."""
 function dct2(X::AbstractArray, dims)
     FFTW.dct(X, dims)

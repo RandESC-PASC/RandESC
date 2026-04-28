@@ -1,4 +1,3 @@
-# sketch.jl
 using Random, LinearAlgebra, SparseArrays
 
 # ── Sketch operator types ──────────────────────────────────────────────────
@@ -48,33 +47,33 @@ function sketch(n::Integer, s::Integer, type::AbstractString, template::Abstract
     n = Int(n); s = Int(s)
     isnothing(seed) || Random.seed!(seed)
 
-    t = lowercase(type)
-    if t == "real_gaussian"
+    st = lowercase(type)
+    if st == "real_gaussian"
         S = random_matrix(real(T), s, n, template) ./ sqrt(s)
         return MatrixSketchOp(S)
 
-    elseif t == "complex_gaussian"
+    elseif st == "complex_gaussian"
         S = random_matrix(complex(T), s, n, template) ./ sqrt(2s)
         return MatrixSketchOp(S)
 
-    elseif t == "complex_srtt"
-        IX = to_device(randperm(rng, n)[1:s], template)
+    elseif st == "complex_srtt"
+        IX = to_device(randperm(n)[1:s], template)
         diag_sign = exp.(im .* (2π) .* random_vector(real(T), n, template))
         return SRTTSketchOp(diag_sign, IX, :complex, sqrt(n/s))
 
-    elseif t == "real_srtt"
-        IX = to_device(randperm(rng, n)[1:s], template)
+    elseif st == "real_srtt"
+        IX = to_device(randperm(n)[1:s], template)
         diag_sign = similar(template, real(T), n)
         map!(i -> ifelse(rand(Bool), 1.0, -1.0), diag_sign, diag_sign)
         return SRTTSketchOp(diag_sign, IX, :real, sqrt(n/s))
 
-    elseif t == "sparsesign"
+    elseif st == "sparsesign"
         ζ = 8
-        return MatrixSketchOp(sparsesign(s, n, ζ; rng, template))
+        return MatrixSketchOp(sparsesign(s, n, ζ, template))
 
-    elseif t == "sparsestack"
+    elseif st == "sparsestack"
         ζ = 4
-        return MatrixSketchOp(sparsestack(s, n, ζ; rng, template))
+        return MatrixSketchOp(sparsestack(s, n, ζ, template))
 
     else
         throw(ArgumentError("Unknown sketch.type \"$type\""))
@@ -91,8 +90,8 @@ function SRTT(diag_sign::AbstractVector, IX::AbstractVector{<:Integer},
     Xscaled = diag_sign .* X
 
     if field === :complex
-        Y = fft(Xscaled, 1) # TODO: a possible optimization would be to create plans ahead of time,
-    elseif field === :real  #       store them in the Op, and use padding
+        Y = fft(Xscaled, 1)
+    elseif field === :real
         Y = dct2(Xscaled, 1) # DCT-II along rows
     else
         throw(ArgumentError("field must be :complex or :real"))
@@ -111,15 +110,13 @@ Build a `d × m` sparse matrix with exactly `ζ` nonzeros per column:
 - Nonzeros are iid ±1/√ζ (Rademacher).
 
 """
-function sparsesign(d::Integer, m::Integer, ζ::Integer;
-                    template=AbstractArray{T}) where {T}
+function sparsesign(d::Integer, m::Integer, ζ::Integer,
+                    template::AbstractArray{T}) where {T}
     @assert d ≥ 1 && m ≥ 1 && ζ ≥ 1 "d, m, ζ must be positive and ζ ≤ d"
 
     # Note: this code can be slightly optimized to run on the GPU, but even then it 
     #       remains slow. The process of generating a random permutation of rows for
-    #       each column is inherently super expensive. We could be a lot more efficient
-    #       if we simply picked random integers in [1, d] (small risk of suplicates).
-    #       Would that be legal though?
+    #       each column is inherently super expensive.
     if template isa AbstractGPUArray
         @warn("sparsesign sketching does not run optimally on the GPU, "*
               "consider switching to sparsestack for better performance.")
@@ -128,7 +125,7 @@ function sparsesign(d::Integer, m::Integer, ζ::Integer;
     nnz = m * ζ
     I = Vector{Int}(undef, nnz)
     J = Vector{Int}(undef, nnz)
-    V = Vector{ComplexF64}(undef, nnz)
+    V = Vector{complex(T)}(undef, nnz)
     v = 1.0 / sqrt(ζ)
 
     idx = 1
@@ -159,10 +156,10 @@ using the blocked one-per-block scheme (MEX `sparseStackl.c`):
 
 This mirrors the MEX behavior closely and constructs CSC arrays directly.
 """
-function sparsestack(d::Integer, m::Integer, ζ::Integer; 
-                     template=AbstractArray{T}) where {T}
+function sparsestack(d::Integer, m::Integer, ζ::Integer,
+                     template::AbstractArray{T}) where {T}
     if d == 0 || m == 0 || ζ == 0
-        return spzeros(d, m) #TODO: return spzeors on approriate arch
+        return sparse_zeros(d, m, template)
     end
     ζ = min(ζ, d)
 

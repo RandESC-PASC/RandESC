@@ -28,6 +28,10 @@ function RandESC.sparse_matrix_csc(I::Vector{<:Integer}, J::Vector{<:Integer},
     CuSparseMatrixCSC(sparse(I, J, V, m, n)) # construct on CPU and move to GPU
 end
 
+function RandESC.sparse_zeros(m::Int, n::Int, template::CuArray)
+    return CuSparseMatrixCSC(spzeros(m, n)) # build on CPU and move to GPU
+end
+
 # Emulate a descrete cosine transform using a FFT on [X; reverse(X)] whith approriate scaling
 function RandESC.dct2(X::CuArray{T}, dims) where {T}
     dims != 1 && error("dct2 only implemented for dims=1 (DCT along rows)")
