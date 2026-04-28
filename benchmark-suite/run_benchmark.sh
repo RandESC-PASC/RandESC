@@ -22,12 +22,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 OUTPUT="results"
-ECUT=40
-KGRID="2,2,2"
+ECUT=30
+KGRID="1,1,1"
 SOLVERS="lobpcg,jd,jd_sketched"
-JULIA_THREADS=2
-FFTW_THREADS=2
-BLAS_THREADS=2
+JULIA_THREADS=1
+FFTW_THREADS=1
+BLAS_THREADS=1
 STRUCTURES=()
 
 while [[ $# -gt 0 ]]; do
