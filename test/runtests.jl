@@ -4,6 +4,7 @@ run_integration = isempty(ARGS) || "integration" in ARGS
 if run_unit
     println("Running unit tests...")
     include("unit/symmetric_hermitian_random_matrix.jl")
+    include("unit/test_orthogonalization.jl")
 end
 
 if run_integration
