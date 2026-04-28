@@ -176,7 +176,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     end
 
     # Use final Ritz values — consistent with the eigenvectors computed below
-    lambda = ew[1:min(k, j)]
+    lambda = copy(ew[1:min(k, j)])  # return a proper array, and not a view
 
     # Compute eigenvectors from current Ritz vectors
     X = V[:, 1:j] * Vc[1:j, 1:k]
