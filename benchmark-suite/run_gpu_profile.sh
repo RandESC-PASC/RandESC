@@ -16,7 +16,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-SOLVERS="lobpcg,jd"
+SOLVERS="jd"
 ECUT=30
 KGRID="2,2,2"
 SCF_MAXITER=10
@@ -70,8 +70,8 @@ for SOLVER in "${SOLVER_LIST[@]}"; do
 
     echo ""
     echo "Report: $REPORT"
-    nsys stats --report nvtx_sum "$REPORT"
     python3 "$SCRIPT_DIR/analysis/parse_nvtx.py" \
-        "$REPORT" "$OUTPUT/${SYSTEM}_${SOLVER}_gpu.json"
+        --report "$REPORT" --solver "$SOLVER" --system "$SYSTEM" \
+        --output "$OUTPUT/${SYSTEM}_${SOLVER}_gpu.json"
     echo ""
 done
