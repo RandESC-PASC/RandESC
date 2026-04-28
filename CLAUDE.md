@@ -5,11 +5,14 @@ Julia library for solving Hermitian eigenvalue problems using randomized algorit
 ## Build & Test
 
 ```bash
-# Run tests (from repo root)
-julia --project=. -e 'using Pkg; Pkg.test()'
+# Run all tests (unit + integration)
+julia --project=. -e 'using Pkg; Pkg.test("RandESC")'
 
-# Or directly
-julia --project=. test/runtests.jl
+# Run only unit tests (no external dependencies)
+julia --project=. -e 'using Pkg; Pkg.test("RandESC"; test_args=["unit"])'
+
+# Run only integration tests (requires DFTK)
+julia --project=. -e 'using Pkg; Pkg.test("RandESC"; test_args=["integration"])'
 ```
 
 Tests generate random symmetric matrices (n=50, k=7) and verify all solvers against `LinearAlgebra.eigen()`.
