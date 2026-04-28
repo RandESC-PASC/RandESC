@@ -8,6 +8,7 @@ module RandESC
     include("utils.jl")
     include("sketch.jl")
     include("randomization_utils.jl")
+    include("orthogonalization.jl")
     include("jd_sketched.jl")
     include("jd.jl")
     include("interface.jl")
