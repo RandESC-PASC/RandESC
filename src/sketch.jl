@@ -1,5 +1,4 @@
-# sketch.jl
-using Random, LinearAlgebra, SparseArrays, FFTW
+using Random, LinearAlgebra, SparseArrays
 
 # ── Sketch operator types ──────────────────────────────────────────────────
 # Wrapping the sketch matrix in a struct lets us define mul!(Y, Theta, X),
@@ -12,8 +11,8 @@ end
 LinearAlgebra.mul!(Y::AbstractVecOrMat, op::MatrixSketchOp, X::AbstractVecOrMat) = mul!(Y, op.S, X)
 
 struct SRTTSketchOp
-    diag_sign::Vector
-    IX::Vector{Int}
+    diag_sign::AbstractVector
+    IX::AbstractVector{Int}
     field::Symbol
     scale::Float64
 end
@@ -25,47 +24,56 @@ function LinearAlgebra.mul!(Y::AbstractVecOrMat, op::SRTTSketchOp, X::AbstractVe
 end
 
 """
-    sketch(n::Integer, s::Integer, type::AbstractString; seed::Union{Nothing,Integer}=nothing)
+    sketch(n::Integer, s::Integer, type::AbstractString, template=AbstractArray{T};
+           seed::Union{Nothing,Integer}=nothing)
 
-Return a callable `SS` that maps `X` (size n×p) to an s×p sketch, following MATLAB's `all_sketch`.
+Return a callable `SS` that maps `X` (size n×p) to an s×p sketch, roughly following 
+MATLAB's `all_sketch`. Architecture (CPU vs GPU) and element types are inferred from `template`.
 
 `type` ∈ {"real_gaussian","complex_gaussian","complex_srtt","real_srtt","sparse_sign","sparse_stack"}.
 
 - "sparse" uses the original `sparsesign` (ζ distinct rows per column, iid ±1/√ζ).
 - "sparse_stack" uses `sparsestack` (blocked one-per-block construction matching the MEX).
+- "real_gaussian" uses a randomly generated real Gaussian matrix, scaled by 1/√s.
+- "complex_gaussian" uses a randomly generated complex Gaussian matrix, scaled by 1/√(2s).
+- "complex_srtt" uses a ramdom complex Subsampled Random Trig Transform
+- "real_srtt" uses a ramdom real Subsampled Random Trig Transform
 
-If `seed` is provided, a fresh RNG is created with that seed (like MATLAB's `rng(seed)`).
+If `seed` is provided, the Random module is seeded with Random.seed!(seed), guranteeing a reproducible
+sequence of generated random numbers.
 """
-function sketch(n::Integer, s::Integer, type::AbstractString; seed::Union{Nothing,Integer}=nothing)
-    rng = isnothing(seed) ? Random.default_rng() : MersenneTwister(seed)
+function sketch(n::Integer, s::Integer, type::AbstractString, template::AbstractArray{T};
+                seed::Union{Nothing,Integer}=nothing) where {T}
     n = Int(n); s = Int(s)
+    isnothing(seed) || Random.seed!(seed)
 
-    t = lowercase(type)
-    if t == "real_gaussian"
-        S = randn(rng, s, n) / sqrt(s)
+    st = lowercase(type)
+    if st == "real_gaussian"
+        S = random_matrix(real(T), s, n, template) ./ sqrt(s)
         return MatrixSketchOp(S)
 
-    elseif t == "complex_gaussian"
-        S = randn(rng, s, n) / sqrt(2s) .+ im * randn(rng, s, n) / sqrt(2s)
+    elseif st == "complex_gaussian"
+        S = random_matrix(complex(T), s, n, template) ./ sqrt(2s)
         return MatrixSketchOp(S)
 
-    elseif t == "complex_srtt"
-        IX = randperm(rng, n)[1:s]
-        diag_sign = exp.(im .* (2π) .* rand(rng, n))
+    elseif st == "complex_srtt"
+        IX = to_device(randperm(n)[1:s], template)
+        diag_sign = exp.(im .* (2π) .* random_vector(real(T), n, template))
         return SRTTSketchOp(diag_sign, IX, :complex, sqrt(n/s))
 
-    elseif t == "real_srtt"
-        IX = randperm(rng, n)[1:s]
-        diag_sign = rand(rng, (-1.0, 1.0), n)
+    elseif st == "real_srtt"
+        IX = to_device(randperm(n)[1:s], template)
+        diag_sign = similar(template, real(T), n)
+        map!(i -> ifelse(rand(Bool), 1.0, -1.0), diag_sign, diag_sign)
         return SRTTSketchOp(diag_sign, IX, :real, sqrt(n/s))
 
-    elseif t == "sparsesign"
+    elseif st == "sparsesign"
         ζ = 8
-        return MatrixSketchOp(sparsesign(s, n, ζ; rng))
+        return MatrixSketchOp(sparsesign(s, n, ζ, template))
 
-    elseif t == "sparsestack"
+    elseif st == "sparsestack"
         ζ = 4
-        return MatrixSketchOp(sparsestack(s, n, ζ; rng))
+        return MatrixSketchOp(sparsestack(s, n, ζ, template))
 
     else
         throw(ArgumentError("Unknown sketch.type \"$type\""))
@@ -84,38 +92,46 @@ function SRTT(diag_sign::AbstractVector, IX::AbstractVector{<:Integer},
     if field === :complex
         Y = fft(Xscaled, 1)
     elseif field === :real
-        Y = FFTW.dct(Xscaled, 1)  # DCT-II along rows
+        Y = dct2(Xscaled, 1) # DCT-II along rows
     else
         throw(ArgumentError("field must be :complex or :real"))
     end
-    return @view Y[IX, :]
+    return Y[IX, :]
 end
 
 # -------------------------------------------------------------------------
 # Original "sparsesign" (distinct rows per column, iid ±1/√ζ)
 # -------------------------------------------------------------------------
 """
-    sparsesign(d::Integer, m::Integer, ζ::Integer; rng=Random.default_rng())
+    sparsesign(d::Integer, m::Integer, ζ::Integer, teamplate=AbstractArray{T})
 
 Build a `d × m` sparse matrix with exactly `ζ` nonzeros per column:
 - For each column, choose `ζ` distinct row indices uniformly at random from `1:d`.
 - Nonzeros are iid ±1/√ζ (Rademacher).
 
 """
-function sparsesign(d::Integer, m::Integer, ζ::Integer; rng=Random.default_rng())
-    d = Int(d); m = Int(m); ζ = Int(min(ζ, d))
+function sparsesign(d::Integer, m::Integer, ζ::Integer,
+                    template::AbstractArray{T}) where {T}
     @assert d ≥ 1 && m ≥ 1 && ζ ≥ 1 "d, m, ζ must be positive and ζ ≤ d"
+
+    # Note: this code can be slightly optimized to run on the GPU, but even then it 
+    #       remains slow. The process of generating a random permutation of rows for
+    #       each column is inherently super expensive.
+    if template isa AbstractGPUArray
+        @warn("sparsesign sketching does not run optimally on the GPU, "*
+              "consider switching to sparsestack for better performance.")
+    end
 
     nnz = m * ζ
     I = Vector{Int}(undef, nnz)
     J = Vector{Int}(undef, nnz)
-    V = Vector{Float64}(undef, nnz)
+    V = Vector{complex(T)}(undef, nnz)
     v = 1.0 / sqrt(ζ)
 
     idx = 1
     @inbounds for j in 1:m
-        rows = randperm(rng, d)[1:ζ]                 # distinct rows
-        signs = rand(rng, (-1.0, 1.0), ζ)            # ±1
+        rows = randperm(d)[1:ζ]                 # distinct rows
+        signs = rand((-1.0, 1.0), ζ)            # ±1
         for t in 1:ζ
             I[idx] = rows[t]
             J[idx] = j
@@ -123,11 +139,12 @@ function sparsesign(d::Integer, m::Integer, ζ::Integer; rng=Random.default_rng(
             idx += 1
         end
     end
-    return sparse(I, J, V, d, m)
+
+    return sparse_matrix_csc(I, J, V, d, m, template)
 end
 
 """
-    sparsestack(d::Integer, m::Integer, ζ::Integer; rng=Random.default_rng())
+    sparsestack(d::Integer, m::Integer, ζ::Integer, template=AbstractArray{T})
 
 Build a `d × m` sparse matrix `S` with exactly `ζ` nonzeros **per column**
 using the blocked one-per-block scheme (MEX `sparseStackl.c`):
@@ -139,68 +156,44 @@ using the blocked one-per-block scheme (MEX `sparseStackl.c`):
 
 This mirrors the MEX behavior closely and constructs CSC arrays directly.
 """
-function sparsestack(d::Integer, m::Integer, ζ::Integer; rng=Random.default_rng())
-    dI = Int(d); mI = Int(m); ζI = Int(ζ)
-    if dI == 0 || mI == 0 || ζI == 0
-        return spzeros(dI, mI)
+function sparsestack(d::Integer, m::Integer, ζ::Integer,
+                     template::AbstractArray{T}) where {T}
+    if d == 0 || m == 0 || ζ == 0
+        return sparse_zeros(d, m, template)
     end
-    ζI = min(ζI, dI)
+    ζ = min(ζ, d)
 
     # guard overflow in nnz = m*ζ
-    if mI > typemax(Int) ÷ ζI
+    if m > typemax(Int) ÷ ζ
         throw(OverflowError("m*ζ overflows Int"))
     end
-    nnz = mI * ζI
+    nnz = m * ζ
 
     # Partition rows: d = q*ζ + r, first r blocks of size q+1, rest q
-    q, r = divrem(dI, ζI)
-    sizes  = Vector{Int}(undef, ζI)
-    starts = Vector{Int}(undef, ζI)
-    @inbounds for j in 0:ζI-1
-        if j < r
-            sizes[j+1]  = q + 1
-            starts[j+1] = j * (q + 1)
-        else
-            sizes[j+1]  = q
-            starts[j+1] = r * (q + 1) + (j - r) * q
-        end
-    end
-
-    # Preallocate CSC arrays
-    colptr = Vector{Int}(undef, mI + 1)
-    rowval = Vector{Int}(undef, nnz)
-    nzval  = Vector{Float64}(undef, nnz)
+    q, r = divrem(d, ζ)
+    js = to_device(collect(0:ζ-1), template)
+    sizes = map(j -> ifelse(j < r, q + 1, q), js)
+    starts = map(j -> ifelse(j < r,
+                             j * (q + 1),
+                             r * (q + 1) + (j - r) * q), js)
 
     # Column pointers (1-based)
-    colptr[1] = 1
-    @inbounds for col in 1:mI
-        colptr[col + 1] = col * ζI + 1
+    indices = to_device(collect(1:m+1), template)
+    colptr = map(col -> (col - 1) * ζ + 1, indices)
+
+    indices = to_device(collect(1:nnz), template) # compound indices
+    rowval = map(indices) do idx
+        j = (idx - 1) % ζ + 1 # idx = (col - 1) * ζ + j
+        # unbiased offset in [0, sizes[j)-1]
+        off = rand(0:(sizes[j] - 1))
+        starts[j] + off + 1 # to 1-based
     end
 
-    a = 1 / sqrt(Float64(ζI))     # magnitude
-    sign_buf::UInt64 = 0x00
-    bits_left::Int   = 0
+    # Note: the sparse matrix created here needs to be complex, for the proper multiplication to
+    #       take place on the GPU (multiplying a complex matrix by a real sparse matrix fails)
+    a = convert(complex(T), 1 / sqrt(ζ))     # magnitude
+    signs = map(i -> ifelse(rand(Bool), 1, -1), indices)
+    nzval = signs .* a
 
-    # Fill columns: each column occupies rowval/nzval indices p0+1 : p0+ζI
-    @inbounds for col in 1:mI
-        p0 = (col - 1) * ζI
-        for j in 1:ζI
-            # unbiased offset in [0, sizes[j)-1]
-            off = rand(rng, 0:(sizes[j] - 1))
-            rowval[p0 + j] = starts[j] + off + 1   # to 1-based
-
-            # reuse bits from a 64-bit random word for ± sign
-            if bits_left == 0
-                sign_buf = rand(rng, UInt64)
-                bits_left = 64
-            end
-            s = if (sign_buf & 0x1) == 0x1 1.0 else -1.0 end
-            sign_buf >>= 1
-            bits_left -= 1
-
-            nzval[p0 + j] = s * a
-        end
-    end
-
-    return SparseMatrixCSC(dI, mI, colptr, rowval, nzval)
+    return sparse_matrix_csc(d, m, colptr, rowval, nzval, template)
 end

@@ -3,7 +3,9 @@ uuid = "f5033a08-872c-425c-a91d-46d0365e7598"
 version = "0.1.0"
 
 [deps]
+AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -11,12 +13,18 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 
 [weakdeps]
+AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 NVTX = "5da4648a-3479-48b8-97b9-01cb529c0a1f"
 
 [extensions]
+RandESCAMDGPUExt = "AMDGPU"
+RandESCCUDAExt = "CUDA"
 RandESCNVTXExt = "NVTX"
 
 [compat]
+AbstractFFTs = "1.5"
+GPUArraysCore = "0.1, 0.2"
 LinearAlgebra = "1.11.0"
 NVTX = "1"
 Printf = "1.11.0"

@@ -62,26 +62,26 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
     T = complex(eltype(v0))
 
-    Theta = sketch(n, s, sketch_type)
+    Theta = sketch(n, s, sketch_type, v0)
 
     # ── Workspace ─────────────────────────────────────────────────────────
     @timing "jd_sketched: allocation" begin
         # Active subspace: columns 1:j live in the the following buffers.
-        V  = zeros(T, n, jmax)
-        SV = zeros(T, s, jmax)
-        W  = zeros(T, n, jmax)
-        SW = zeros(T, s, jmax)
+        V  = similar(v0, T, n, jmax)
+        W  = similar(v0, T, n, jmax)
+        SV = similar(v0, T, s, jmax); SV .= zero(T)  # arrays potentially holding result of a sparse matrix
+        SW = similar(v0, T, s, jmax); SW .= zero(T)  # multiplication must be initialized to zero for safety
         # Work buffers for various allocation free operations:
-        n_buffer = zeros(T, n, jmax)
-        s_buffer = zeros(T, s, jmax)
-        # Ritz vectors and residuals for active pairs (like ub/rb in jd)
+        n_buffer = similar(v0, T, n, jmax)
+        s_buffer = similar(v0, T, s, jmax)
+        # Ritz vectors and residuals for active pairs (like ub/rb in jdsym_block)
         # ub is also reused as T_corr_buf during expand (never live at the same time)
-        ub      = zeros(T, n, kb)
-        rb      = zeros(T, n, kb)
+        ub      = similar(v0, T, n, kb)
+        rb      = similar(v0, T, n, kb)
         # Sketched Ritz vectors for Rayleigh quotient; reused as ST_corr_buf/SV_scratch
         # during expand (never live at the same time as the Rayleigh quotient computation)
-        SX_rq   = zeros(T, s, kb)   # reused as ST_corr_buf in expand
-        SW_rq   = zeros(T, s, kb)   # reused as SV_scratch in expand
+        SX_rq   = similar(v0, T, s, kb); SX_rq .= zero(T)   # reused as ST_corr_buf in expand
+        SW_rq   = similar(v0, T, s, kb); SW_rq .= zero(T)   # reused as SV_scratch in expand
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
@@ -147,7 +147,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 nk    = min(jmin, j)
                 # QR-orthonormalize: U columns from general eigen not guaranteed unitary
                 # Use work buffers to avoid extra allocations
-                Q_rst = Matrix(qr(U[:, 1:nk]).Q)[:, 1:nk]
+                Q_rst = oftype(V, qr(U[:, 1:nk]).Q)
                 mul!(n_buffer[:, 1:nk], V[:, 1:j],  Q_rst)
                 V[:, 1:nk] .= n_buffer[:, 1:nk]
                 mul!(s_buffer[:, 1:nk], SV[:, 1:j], Q_rst)
@@ -188,7 +188,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # Sketch residuals for Θ-norm computation — reuse sv_work to avoid per-column alloc
         @timing "jd_sketched: sketch" begin
             mul!(SW_rq[:, 1:nb], Theta, rb[:, 1:nb])   # reuse SW_rq as tmp buffer
-            rnorms = columnwise_norms(SW_rq[:, 1:nb])
+            rnorms = Array(columnwise_norms(SW_rq[:, 1:nb]))
         end
 
         # Convergence check on active target pairs (skip first iteration, like jd)
