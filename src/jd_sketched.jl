@@ -107,9 +107,9 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # V_a[:,1:j] is both input and output — safe because column i is consumed
         # into v_work before column ncols≤i is overwritten.
         # SW_rq (s×kb) used as SV_buf scratch; not yet populated.
-        j = theta_orth_block!(V[:, 1:j], SV[:, 1:j], V[:, 1:j],
-                              Theta, orth_method,
-                              SW_rq)
+        j = _jd_theta_ortho!(V[:, 1:j], SV[:, 1:j], V[:, 1:j],
+                             Theta, orth_method,
+                             SW_rq)
     end
     @timing "jd_sketched: matvec" begin
         mul!(W[:, 1:j], A, V[:, 1:j])
@@ -339,8 +339,8 @@ Returns the expanded Mc and the number of accepted vectors `nact`.
 
     # Phase 2: Θ-orthonormalize among the nb corrections into pre-allocated buffers
     @timing "jd_sketched: ortho" begin
-        nact = theta_orth_block!(T_corr_buf, ST_corr_buf, rb[:, 1:nb], Theta,
-                                 orth_method, SV_scratch)
+        nact = _jd_theta_ortho!(T_corr_buf, ST_corr_buf, rb[:, 1:nb], Theta,
+                                orth_method, SV_scratch)
     end
 
     nact == 0 && return Mc, 0

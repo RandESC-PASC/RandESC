@@ -74,7 +74,6 @@ function _jdb_mgs2!(V::AbstractMatrix, m::Int, two_pass::Bool=true)
     return nact
 end
 
-
 """
     theta_orth_block_against!(V0, Q, SQ, Theta, method, SV_buf)
 
@@ -135,4 +134,10 @@ pre-allocated `V_out` (n×p) and `SV_out` (s×p). `SV_buf` (s×p) is scratch. Re
     end
 
     return ncols
+end
+
+function _jd_theta_ortho!(V_out::AbstractMatrix, SV_out::AbstractMatrix,
+                           V0::AbstractMatrix, Theta, method::Symbol,
+                           SV_buf::AbstractMatrix)
+    return theta_orth_block!(V_out, SV_out, V0, Theta, method, SV_buf)
 end
