@@ -92,11 +92,13 @@ SV_buf (s×m) is scratch for the sketch. Returns nact."""
     if nact < m
         SV_out[:, 1:nact] .= SV_out[:, good]
     end
-    # QR on sketch: Θ V0 = Q_S R, so Θ V0[:,good] = Q_S[:,1:nact] * R[good,good].
-    # Right-multiplying by R[good,good]^-1: Θ (V0[:,good] / R[good,good]) = Q_S[:,1:nact].
-    # So V0 * R^-1 is sketch orthogonal
-    V_out[:, 1:nact] .= V0[:, good]
-    rdiv!(V_out[:, 1:nact], UpperTriangular(F.R[good, good]))
+    # QR on sketch: Θ V0 = Q_S R, so Θ (V0 R^-1) = Q_S.
+    # Solving V_out = V0 * R^-1 ensures Θ V_out[:,j] = Q_S[:,j] = SV_out[:,j].
+    V_out[:, 1:m] .= V0
+    rdiv!(V_out[:, 1:m], UpperTriangular(F.R))
+    if nact < m
+        V_out[:, 1:nact] .= V_out[:, good]
+    end
     return nact
 end
 
