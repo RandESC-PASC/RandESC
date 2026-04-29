@@ -86,7 +86,12 @@ SV_buf (s×m) is scratch for the sketch. Returns nact."""
     F = qr(SV)
     good = findall(abs.(F.R[diagind(F.R)]) .>= tol)
     nact = length(good)
-    SV_out[:, 1:nact] .= F.Q[:, 1:nact]
+    fill!(SV_out[:, 1:m], zero(eltype(SV_out)))
+    SV_out[diagind(SV_out)[1:m]] .= one(eltype(SV_out))
+    lmul!(F.Q, SV_out[:, 1:m])
+    if nact < m
+        SV_out[:, 1:nact] .= SV_out[:, good]
+    end
     # QR on sketch: Θ V0 = Q_S R, so Θ V0[:,good] = Q_S[:,1:nact] * R[good,good].
     # Right-multiplying by R[good,good]^-1: Θ (V0[:,good] / R[good,good]) = Q_S[:,1:nact].
     # So V0 * R^-1 is sketch orthogonal
