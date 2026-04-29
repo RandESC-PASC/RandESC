@@ -7,6 +7,7 @@ const ORTH_TOL        = 1e-12   # orthonormality: Q'Q ≈ I
 const SPAN_TOL        = 1e-12   # span check: residual outside Q
 const SKETCH_ORTH_TOL = 1e-10   # Θ-orthonormality: SV'SV ≈ I
 const SKETCH_SPAN_TOL = 1e-10   # span check in sketch space
+const SKETCH_V_ORTH_TOL = 0.5  # approximate orthonormality of V_out (JL distortion ~√(p/s))
 
 @testset "Standard orthogonalization" begin
     Random.seed!(42)
@@ -68,7 +69,7 @@ end
 
 @testset "Sketch orthogonalization" begin
     Random.seed!(42)
-    n, s, p = 200, 60, 20
+    n, s, p = 200, 120, 10
     Theta = RandESC.sketch(n, s, "real_gaussian", randn(n))
 
     V_indep = randn(n, p)
@@ -86,7 +87,11 @@ end
             @test nact == p
 
             SQ = SV_out[:, 1:nact]
+            Q  = V_out[:, 1:nact]
             @test SQ' * SQ ≈ I atol=SKETCH_ORTH_TOL
+            v_orth_err = maximum(abs.(Q' * Q - I))
+            # @info "V_out orth error" method v_orth_err
+            @test v_orth_err < SKETCH_V_ORTH_TOL
 
             for i in 1:p
                 sv   = Theta(V_indep[:, i:i])[:, 1]
@@ -105,6 +110,9 @@ end
             nact = RandESC._jd_theta_ortho!(V_out, SV_out, V0, Theta, method, SV_buf)
             @test nact == p
             @test SV_out[:, 1:nact]' * SV_out[:, 1:nact] ≈ I atol=SKETCH_ORTH_TOL
+            v_orth_err = maximum(abs.(V_out[:, 1:nact]' * V_out[:, 1:nact] - I))
+            # @info "V_out orth error" method v_orth_err
+            @test v_orth_err < SKETCH_V_ORTH_TOL
         end
     end
 
