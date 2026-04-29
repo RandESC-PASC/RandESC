@@ -9,6 +9,9 @@ const SKETCH_ORTH_TOL = 1e-10   # Θ-orthonormality: SV'SV ≈ I
 const SKETCH_SPAN_TOL = 1e-10   # span check in sketch space
 const SKETCH_V_ORTH_TOL = 0.5  # approximate orthonormality of V_out (JL distortion ~√(p/s))
 
+const STD_ORTH_METHODS    = (:mgs, :mgs2, :qr)
+const SKETCH_ORTH_METHODS = (:rcgs, :rcgs2, :rqr)
+
 @testset "Standard orthogonalization" begin
     Random.seed!(42)
     n = 50   # ambient dimension
@@ -20,11 +23,11 @@ const SKETCH_V_ORTH_TOL = 0.5  # approximate orthonormality of V_out (JL distort
     V_full = hcat(V_indep, V_indep[:, 1], V_indep[:, 3], V_indep[:, 5])
     m = size(V_full, 2)
 
-    for method in (:mgs, :mgs2, :qr)
+    for method in STD_ORTH_METHODS
         @testset "$method: mixed independent and duplicate columns" begin
             V = copy(V_full)
             buf = similar(V, n, m)
-            nact = RandESC._jd_ortho!(V, m, method, buf)
+            nact = RandESC._ortho!(V, m, method, buf)
 
             # Should recover exactly p independent vectors
             @test nact == p
@@ -46,9 +49,9 @@ const SKETCH_V_ORTH_TOL = 0.5  # approximate orthonormality of V_out (JL distort
     end
 
     @testset "full-rank input (no linear dependencies)" begin
-        for method in (:mgs, :mgs2, :qr)
+        for method in STD_ORTH_METHODS
             V = randn(n, p)
-            nact = RandESC._jd_ortho!(V, p, method)
+            nact = RandESC._ortho!(V, p, method)
             @test nact == p
             @test V[:, 1:nact]' * V[:, 1:nact] ≈ I atol=ORTH_TOL
         end
@@ -57,9 +60,9 @@ const SKETCH_V_ORTH_TOL = 0.5  # approximate orthonormality of V_out (JL distort
     @testset "all-duplicate input (rank 1)" begin
         v = randn(n)
         V = repeat(v, 1, 5)   # 5 identical columns
-        for method in (:mgs, :mgs2, :qr)
+        for method in STD_ORTH_METHODS
             Vc = copy(V)
-            nact = RandESC._jd_ortho!(Vc, 5, method)
+            nact = RandESC._ortho!(Vc, 5, method)
             @test nact == 1
             q = Vc[:, 1]
             @test norm(q) ≈ 1.0 atol=ORTH_TOL
@@ -76,13 +79,13 @@ end
     V_full  = hcat(V_indep, V_indep[:, 1], V_indep[:, 3], V_indep[:, 5])
     m = size(V_full, 2)
 
-    for method in (:rgs, :rcgs, :rcgs2, :rqr)
+    for method in SKETCH_ORTH_METHODS
         @testset "$method: mixed independent and duplicate columns" begin
             V0    = copy(V_full)
             V_out = similar(V0)
             SV_out = zeros(s, m)
             SV_buf = zeros(s, m)
-            nact = RandESC._jd_theta_ortho!(V_out, SV_out, V0, Theta, method, SV_buf)
+            nact = RandESC._sketch_ortho!(V_out, SV_out, V0, Theta, method, SV_buf)
 
             @test nact == p
 
@@ -102,12 +105,12 @@ end
     end
 
     @testset "full-rank input" begin
-        for method in (:rgs, :rcgs, :rcgs2, :rqr)
+        for method in SKETCH_ORTH_METHODS
             V0    = randn(n, p)
             V_out = similar(V0)
             SV_out = zeros(s, p)
             SV_buf = zeros(s, p)
-            nact = RandESC._jd_theta_ortho!(V_out, SV_out, V0, Theta, method, SV_buf)
+            nact = RandESC._sketch_ortho!(V_out, SV_out, V0, Theta, method, SV_buf)
             @test nact == p
             @test SV_out[:, 1:nact]' * SV_out[:, 1:nact] ≈ I atol=SKETCH_ORTH_TOL
             v_orth_err = maximum(abs.(V_out[:, 1:nact]' * V_out[:, 1:nact] - I))
@@ -119,29 +122,29 @@ end
     @testset "all-duplicate input (rank 1)" begin
         v = randn(n)
         V = repeat(v, 1, 5)
-        for method in (:rgs, :rcgs, :rcgs2, :rqr)
+        for method in SKETCH_ORTH_METHODS
             V0    = copy(V)
             V_out = similar(V0)
             SV_out = zeros(s, 5)
             SV_buf = zeros(s, 5)
-            nact = RandESC._jd_theta_ortho!(V_out, SV_out, V0, Theta, method, SV_buf)
+            nact = RandESC._sketch_ortho!(V_out, SV_out, V0, Theta, method, SV_buf)
             @test nact == 1
             @test norm(SV_out[:, 1])^2 ≈ 1.0 atol=SKETCH_ORTH_TOL
         end
     end
 
-    @testset "theta_orth_block_against!" begin
-        for method in (:rgs, :rcgs, :rcgs2)
+    @testset "_sketch_deflate!" begin
+        for method in SKETCH_ORTH_METHODS
             Q0    = randn(n, p ÷ 2)
             V_out = similar(Q0)
             SV_out = zeros(s, p ÷ 2)
             SV_buf = zeros(s, p ÷ 2)
-            RandESC._jd_theta_ortho!(V_out, SV_out, Q0, Theta, :rgs, SV_buf)
+            RandESC._sketch_ortho!(V_out, SV_out, Q0, Theta, :rcgs, SV_buf)
             Q = V_out[:, 1:p÷2]; SQ = SV_out[:, 1:p÷2]
 
             V1     = randn(n, p ÷ 2)
             SV1_buf = zeros(s, p ÷ 2)
-            RandESC.theta_orth_block_against!(V1, Q, SQ, Theta, method, SV1_buf)
+            RandESC._sketch_deflate!(V1, Q, SQ, Theta, method, SV1_buf)
 
             @test norm(SQ' * Theta(V1)) < SKETCH_ORTH_TOL
         end

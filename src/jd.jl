@@ -70,7 +70,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         randn!(TaskLocalRNG(), V[:, nc+1:j])
     end
 
-    @timing "jd: ortho" _jd_ortho!(V, j, orth_method, buffer)
+    @timing "jd: ortho" _ortho!(V, j, orth_method, buffer)
     @timing "jd: matvec" mul!(W[:, 1:j], A, V[:, 1:j])
     nmv += j
     @timing "jd: overlap" Hc = Hermitian(V[:, 1:j]' * W[:, 1:j])
@@ -215,7 +215,7 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
         end
 
         # Phase 2: orthonormalize nb candidates among themselves; dependent columns are dropped
-        nact_rb = _jd_ortho!(rb, nb, orth_method, buf)
+        nact_rb = _ortho!(rb, nb, orth_method, buf)
         nact = min(nact_rb, kmax - j)
         if nact > 0
             V[:, j+1:j+nact] .= rb[:, 1:nact]

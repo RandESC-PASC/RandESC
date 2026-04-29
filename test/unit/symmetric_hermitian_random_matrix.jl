@@ -13,7 +13,7 @@ function sketch_types_for(T::Type)
     end
 end
 
-const ORTH_METHODS = [:rgs, :rcgs, :rcgs2, :rqr]
+const ORTH_METHODS = [:rcgs, :rcgs2, :rqr]
 const JD_ORTH_METHODS = [:mgs, :mgs2, :qr]
 
 # Check that each returned eigenpair (lambda[i], V[:,i]) satisfies the eigenvalue equation
