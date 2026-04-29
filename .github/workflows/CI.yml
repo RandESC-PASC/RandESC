@@ -23,7 +23,7 @@ jobs:
           version: '1'
 
       - name: Cache Julia packages
-        uses: julia-actions/cache@v2
+        uses: julia-actions/cache@v3
 
       - name: Run unit tests
         run: julia --project=. -e 'using Pkg; Pkg.test("RandESC"; test_args=["unit"])'
@@ -40,7 +40,7 @@ jobs:
           version: '1'
 
       - name: Cache Julia packages
-        uses: julia-actions/cache@v2
+        uses: julia-actions/cache@v3
 
       - name: Run DFTK silicon integration test
         run: julia --project=. -e 'using Pkg; Pkg.test("RandESC"; test_args=["integration"])'
