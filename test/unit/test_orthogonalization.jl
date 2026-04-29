@@ -3,8 +3,10 @@ using RandESC
 using Random
 using LinearAlgebra
 
-const ORTH_TOL = 1e-12   # orthonormality: Q'Q ≈ I
-const SPAN_TOL = 1e-12   # span check: residual outside Q
+const ORTH_TOL        = 1e-12   # orthonormality: Q'Q ≈ I
+const SPAN_TOL        = 1e-12   # span check: residual outside Q
+const SKETCH_ORTH_TOL = 1e-10   # Θ-orthonormality: SV'SV ≈ I
+const SKETCH_SPAN_TOL = 1e-10   # span check in sketch space
 
 @testset "Standard orthogonalization" begin
     Random.seed!(42)
@@ -60,6 +62,80 @@ const SPAN_TOL = 1e-12   # span check: residual outside Q
             @test nact == 1
             q = Vc[:, 1]
             @test norm(q) ≈ 1.0 atol=ORTH_TOL
+        end
+    end
+end
+
+@testset "Sketch orthogonalization" begin
+    Random.seed!(42)
+    n, s, p = 200, 60, 20
+    Theta = RandESC.sketch(n, s, "real_gaussian", randn(n))
+
+    V_indep = randn(n, p)
+    V_full  = hcat(V_indep, V_indep[:, 1], V_indep[:, 3], V_indep[:, 5])
+    m = size(V_full, 2)
+
+    for method in (:rgs, :rcgs, :rcgs2, :rqr)
+        @testset "$method: mixed independent and duplicate columns" begin
+            V0    = copy(V_full)
+            V_out = similar(V0)
+            SV_out = zeros(s, m)
+            SV_buf = zeros(s, m)
+            nact = RandESC._jd_theta_ortho!(V_out, SV_out, V0, Theta, method, SV_buf)
+
+            @test nact == p
+
+            SQ = SV_out[:, 1:nact]
+            @test SQ' * SQ ≈ I atol=SKETCH_ORTH_TOL
+
+            for i in 1:p
+                sv   = Theta(V_indep[:, i:i])[:, 1]
+                proj = SQ * (SQ' * sv)
+                @test norm(sv - proj) < SKETCH_SPAN_TOL
+            end
+        end
+    end
+
+    @testset "full-rank input" begin
+        for method in (:rgs, :rcgs, :rcgs2, :rqr)
+            V0    = randn(n, p)
+            V_out = similar(V0)
+            SV_out = zeros(s, p)
+            SV_buf = zeros(s, p)
+            nact = RandESC._jd_theta_ortho!(V_out, SV_out, V0, Theta, method, SV_buf)
+            @test nact == p
+            @test SV_out[:, 1:nact]' * SV_out[:, 1:nact] ≈ I atol=SKETCH_ORTH_TOL
+        end
+    end
+
+    @testset "all-duplicate input (rank 1)" begin
+        v = randn(n)
+        V = repeat(v, 1, 5)
+        for method in (:rgs, :rcgs, :rcgs2, :rqr)
+            V0    = copy(V)
+            V_out = similar(V0)
+            SV_out = zeros(s, 5)
+            SV_buf = zeros(s, 5)
+            nact = RandESC._jd_theta_ortho!(V_out, SV_out, V0, Theta, method, SV_buf)
+            @test nact == 1
+            @test norm(SV_out[:, 1])^2 ≈ 1.0 atol=SKETCH_ORTH_TOL
+        end
+    end
+
+    @testset "theta_orth_block_against!" begin
+        for method in (:rgs, :rcgs, :rcgs2)
+            Q0    = randn(n, p ÷ 2)
+            V_out = similar(Q0)
+            SV_out = zeros(s, p ÷ 2)
+            SV_buf = zeros(s, p ÷ 2)
+            RandESC._jd_theta_ortho!(V_out, SV_out, Q0, Theta, :rgs, SV_buf)
+            Q = V_out[:, 1:p÷2]; SQ = SV_out[:, 1:p÷2]
+
+            V1     = randn(n, p ÷ 2)
+            SV1_buf = zeros(s, p ÷ 2)
+            RandESC.theta_orth_block_against!(V1, Q, SQ, Theta, method, SV1_buf)
+
+            @test norm(SQ' * Theta(V1)) < SKETCH_ORTH_TOL
         end
     end
 end

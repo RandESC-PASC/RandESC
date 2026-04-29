@@ -74,6 +74,27 @@ function _jdb_mgs2!(V::AbstractMatrix, m::Int, two_pass::Bool=true)
     return nact
 end
 
+"""Sketched QR orthonormalization of V0 (nxm) in-place.
+Writes nact accepted columns into V_out[:,1:nact] and SV_out[:,1:nact].
+SV_buf (s×m) is scratch for the sketch. Returns nact."""
+@views function _jd_theta_qr!(V_out::AbstractMatrix, SV_out::AbstractMatrix,
+                               V0::AbstractMatrix, Theta, SV_buf::AbstractMatrix;
+                               tol::Float64=1e-10)
+    m = size(V0, 2)
+    SV = view(SV_buf, :, 1:m)
+    mul!(SV, Theta, V0)
+    F = qr(SV)
+    good = findall(abs.(F.R[diagind(F.R)]) .>= tol)
+    nact = length(good)
+    SV_out[:, 1:nact] .= F.Q[:, 1:nact]
+    # QR on sketch: Θ V0 = Q_S R, so Θ V0[:,good] = Q_S[:,1:nact] * R[good,good].
+    # Right-multiplying by R[good,good]^-1: Θ (V0[:,good] / R[good,good]) = Q_S[:,1:nact].
+    # So V0 * R^-1 is sketch orthogonal
+    V_out[:, 1:nact] .= V0[:, good]
+    rdiv!(V_out[:, 1:nact], UpperTriangular(F.R[good, good]))
+    return nact
+end
+
 """
     theta_orth_block_against!(V0, Q, SQ, Theta, method, SV_buf)
 
@@ -105,7 +126,7 @@ pre-allocated `V_out` (n×p) and `SV_out` (s×p). `SV_buf` (s×p) is scratch. Re
 """
 @views function theta_orth_block!(V_out::AbstractMatrix, SV_out::AbstractMatrix,
                                   V0::AbstractMatrix, Theta, method::Symbol,
-                                  SV_buf::AbstractMatrix; tol::Float64=1e-14)
+                                  SV_buf::AbstractMatrix; tol::Float64=1e-12)
     _, p = size(V0)
     mul!(SV_buf[:, 1:p], Theta, V0)
     ncols = 0
@@ -139,5 +160,9 @@ end
 function _jd_theta_ortho!(V_out::AbstractMatrix, SV_out::AbstractMatrix,
                            V0::AbstractMatrix, Theta, method::Symbol,
                            SV_buf::AbstractMatrix)
-    return theta_orth_block!(V_out, SV_out, V0, Theta, method, SV_buf)
+    if method == :rqr
+        return _jd_theta_qr!(V_out, SV_out, V0, Theta, SV_buf)
+    else
+        return theta_orth_block!(V_out, SV_out, V0, Theta, method, SV_buf)
+    end
 end
