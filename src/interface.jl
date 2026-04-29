@@ -35,9 +35,19 @@ function randESCSolver(A, X0::AbstractArray, n::Integer, k::Integer; preconditio
     end
 
     if useRandomization
-        V, lambda, history = jd_sketched(A, X0; k=k, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose, orth_method=:rgs)
+        if X0 isa AbstractGPUArray
+            orth_method = :rqr
+        else
+            orth_method = :rcgs
+        end
+        V, lambda, history = jd_sketched(A, X0; k=k, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose, orth_method=orth_method)
     else
-        V, lambda, history = jd(A, X0; k=k, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose)
+        if X0 isa AbstractGPUArray
+            orth_method = :qr
+        else
+            orth_method = :mgs
+        end
+        V, lambda, history = jd(A, X0; k=k, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose, orth_method=orth_method)
     end
     n_iter = size(history, 1)
     converged = n_iter < maxiter
