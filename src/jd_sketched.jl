@@ -290,20 +290,20 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         X_full = Xritz * Fk.vectors
         lambda = Fk.values
         perm_s = sortperm(lambda)
-        X_sorted = X_full[:, perm_s]
+        X_sorted = copy(X_full[:, perm_s])
         if eltype(v0) <: Real
             # Eigenvectors computed in complex arithmetic carry an arbitrary scalar phase
             # e^(iφ) per column. Remove it so that real.() discards only imaginary noise.
             # maybe the phase can already be removed in the projected eigenvalue problem that is
             # solved a couple of lines above.
-            for j in axes(X_sorted, 2)
-                col = view(X_sorted, :, j)
-                _, idx = findmax(abs, col)
-                col ./= col[idx] / abs(col[idx])
-            end
+
+            absvals = abs.(X_sorted)
+            maxabs, indices = findmax(absvals; dims=1)
+            X_sorted ./= X_sorted[indices] ./ maxabs
+
             X = real.(X_sorted)
         else
-            X = copy(X_sorted)
+            X = X_sorted
         end
         lambda = copy(lambda[perm_s])
     end
