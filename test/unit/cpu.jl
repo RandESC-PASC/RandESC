@@ -1,0 +1,3 @@
+include("symmetric_hermitian_random_matrix.jl")
+
+run_symmetric_hermitian_random_matrix_tests()
