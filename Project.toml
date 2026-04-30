@@ -33,9 +33,11 @@ SparseArrays = "1.11.0"
 TimerOutputs = "0.5.29"
 
 [extras]
+AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 DFTK = "acf6eb54-70d9-11e9-0013-234b7a5f5337"
 PseudoPotentialData = "5751a51d-ac76-4487-a056-413ecf6fbe19"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["DFTK", "PseudoPotentialData", "Test"]
+test = ["AMDGPU", "CUDA", "DFTK", "PseudoPotentialData", "Test"]
