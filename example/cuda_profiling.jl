@@ -53,7 +53,7 @@ positions = [[0.5, 0.5, 0.5],
 model = model_DFT(lattice, atoms, positions; temperature=0.01, functionals=PBE())
 basis = PlaneWaveBasis(model; Ecut=40, kgrid=[2, 2, 2], architecture=arch)
 
-function make_eigensolver(; useRandomization)
+function make_eigensolver(; use_randomization)
     function eigensolver(A, X0; prec=nothing, maxiter, tol, kwargs...)
         function precond_preparation(M, X)
             DFTK.precondprep!(M, X)
@@ -63,15 +63,15 @@ function make_eigensolver(; useRandomization)
                              precond_preparator=precond_preparation,
                              maxiter=maxiter,
                              tol=tol,
-                             useRandomization=useRandomization,
+                             use_randomization=use_randomization,
                              verbose=false)
     end
 end
 
 # Warmup run: we do not want to profile compilation time
-scfres = self_consistent_field(basis; maxiter=3, eigensolver=make_eigensolver(; useRandomization=randomize))
+scfres = self_consistent_field(basis; maxiter=3, eigensolver=make_eigensolver(; use_randomization=randomize))
 
 # Actual profiling run. Keep number of iterations low to avoid gigantic data dumps
 CUDA.@profile external=true begin
-    self_consistent_field(basis; maxiter=2, eigensolver=make_eigensolver(; useRandomization=randomize))
+    self_consistent_field(basis; maxiter=2, eigensolver=make_eigensolver(; use_randomization=randomize))
 end

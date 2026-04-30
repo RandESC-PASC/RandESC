@@ -10,7 +10,7 @@ using Printf
 
 # precondprep!(P, X) = P
 ecut = 30
-useRandomization = false
+use_randomization = false
 
 function my_eig_solver(A, X0; prec = nothing, maxiter, tol, kwargs...)
 
@@ -72,7 +72,7 @@ function my_eig_solver(A, X0; prec = nothing, maxiter, tol, kwargs...)
     end
 
     return randESCSolver(A, X0, size(X0, 1), size(X0, 2); preconditioner=prec, maxiter=maxiter,
-                         tol=tol, useRandomization=useRandomization, verbose=false,
+                         tol=tol, use_randomization=use_randomization, verbose=false,
                          precond_preparator=precond_preparation)
 end
 
@@ -111,9 +111,9 @@ positionvecs = [ invlat * positions[:, i] for i in 1:nat]
 model = model_DFT(lattice, atom_psps, positionvecs; spin_polarization=:none, functionals=PBE(), temperature=0.01)
 badbasis = PlaneWaveBasis(model, Ecut=4,  kgrid=[2, 2, 2])
 compres = self_consistent_field(badbasis, maxiter=1)
-useRandomization = false
+use_randomization = false
 compres = self_consistent_field(badbasis, maxiter=1, eigensolver = my_eig_solver);
-useRandomization = true
+use_randomization = true
 compres = self_consistent_field(badbasis, maxiter=1, eigensolver = my_eig_solver);
 
 println("\n\n" * "*"^80 * "\n\n")
@@ -132,7 +132,7 @@ println("JD\n")
 
 DFTK.reset_timer!(DFTK.timer)
 RandESC.reset_timer!(RandESC.timer)
-useRandomization = false
+use_randomization = false
 scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
 println(DFTK.timer)
 println(RandESC.timer)
@@ -142,7 +142,7 @@ println("rand-JD\n")
 
 DFTK.reset_timer!(DFTK.timer)
 RandESC.reset_timer!(RandESC.timer)
-useRandomization = true
+use_randomization = true
 scfres = self_consistent_field(basis, eigensolver = my_eig_solver);
 println(DFTK.timer)
 println(RandESC.timer)
