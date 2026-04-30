@@ -18,7 +18,7 @@ Arguments:
 - M: preconditioner, applied as M \\ r (optional)
 - precond_preparator: callback f(M, X) to refresh preconditioner (optional)
 - disp: print iteration info
-- orth_method: orthogonalization method (:mgs, :mgs2, :qr)
+- orth_method: orthogonalization method (:mgs, :mgs2, :qr) mgs better on cpu, qr on gpu
 
 Returns (X, lambda, history) where X is n x k, lambda is length k,
 and history is nit x 3 with columns [max_rnorm, iter, nmv].
@@ -30,7 +30,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                      M=nothing,
                      precond_preparator=nothing,
                      disp::Bool=false,
-                     orth_method::Symbol=:qr)
+                     orth_method::Symbol=:mgs)
 
     n = size(A, 1)
     k = min(k, n)
