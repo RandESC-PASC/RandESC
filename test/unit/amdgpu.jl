@@ -1,7 +1,7 @@
 using AMDGPU
 
 include("symmetric_hermitian_random_matrix.jl")
-include("test_orthogonalization.jl")
+include("orthogonalization.jl")
 
 if AMDGPU.has_rocm_gpu()
     run_symmetric_hermitian_random_matrix_tests(; template=AMDGPU.zeros(1))
