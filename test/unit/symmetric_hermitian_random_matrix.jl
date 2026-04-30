@@ -20,7 +20,11 @@ function sketch_types_for(T::Type)
 end
 
 function orth_methods()
-    return [:rgs, :rcgs, :rcgs2]
+    return [:rcgs, :rcgs2, :rqr]
+end
+
+function jd_orth_methods()
+    return [:mgs, :mgs2, :qr]
 end
 
 # Check that each returned eigenpair (lambda[i], V[:,i]) satisfies the eigenvalue equation
@@ -93,6 +97,31 @@ function test_matrix(A, n, k, test_name; test_tol=1e-5, iter_tol=1e-8, verbose=f
     end
 end
 
+function test_jd_options(A, n, k, test_name; test_tol=1e-5, iter_tol=1e-8, verbose=false, maxiter=1000)
+    A_cpu = RandESC.to_cpu(A)
+    ea = eigen(A_cpu)
+    evals = ea.values[1:k]
+    v0 = RandESC.random_matrix(eltype(A), n, k, A)
+
+    expected_vec_type = eltype(A)
+    expected_val_type = real(eltype(A))
+
+    for orth_method in jd_orth_methods()
+        @testset "$test_name: jd(orth_method=$orth_method)" begin
+            V, lambda, _ = jd(A, v0; k=k, tol=iter_tol, maxit=maxiter, disp=verbose,
+                              orth_method=orth_method)
+            V = RandESC.to_cpu(V)
+            lambda = RandESC.to_cpu(lambda)
+            @test eltype(V) == expected_vec_type
+            @test eltype(lambda) == expected_val_type
+            @test maximum(abs.(evals .- lambda)) < test_tol
+            gram = V' * V
+            @test maximum(abs.(gram - I)) < test_tol
+            test_residuals(A_cpu, lambda, V, iter_tol)
+        end
+    end
+end
+
 function test_jd_sketched_options(A, n, k, test_name; test_tol=1e-5, iter_tol=1e-8, verbose=false, maxiter=1000)
     A_cpu = RandESC.to_cpu(A)
     ea = eigen(A_cpu)
@@ -134,6 +163,15 @@ function random_spd_test(T::Type; ntests=7, test_tol=1e-5, iter_tol=1e-8, seed=9
     end
 end
 
+# Testing a given set of jd orth_method options. Uses a single fixed matrix per type to keep runtime reasonable.
+function jd_options_test(T::Type; n=200, k=5, test_tol=1e-5, iter_tol=1e-8,
+                             seed=12345, template=nothing)
+    Random.seed!(seed)
+    A = RandESC.random_matrix(T, n, n, template)
+    A = A + A'
+    test_jd_options(A, n, k, string(T); test_tol=test_tol, iter_tol=iter_tol)
+end
+
 # Testing a given set of sketch options. Uses a single fixed matrix per type to keep runtime reasonable.
 function sketch_options_test(T::Type; n=200, k=5, test_tol=1e-5, iter_tol=1e-8,
                                  seed=12345, template=nothing)
@@ -162,6 +200,27 @@ function run_symmetric_hermitian_random_matrix_tests(; template=nothing)
     # Tolerances are pretty loose for single precision tests, otherwise they fail
     @testset "RandESC Hermitian Single Precision Eigenvalue Solver Tests" begin
         random_spd_test(ComplexF32, ntests=8, test_tol=1e-3, iter_tol=1e-3, template=template)
+    end
+
+    ### Test all orth_method options for jd, for each input type.
+    @testset "RandESC jd Options — Float64" begin
+        jd_options_test(Float64; n=200, k=5, test_tol=1e-5, iter_tol=1e-8,
+                        seed=11111, template=template)
+    end
+
+    @testset "RandESC jd Options — ComplexF64" begin
+        jd_options_test(ComplexF64; n=200, k=4, test_tol=1e-5, iter_tol=1e-8,
+                        seed=22222, template=template)
+    end
+
+    @testset "RandESC jd Options — Float32" begin
+        jd_options_test(Float32; n=200, k=4, test_tol=1e-2, iter_tol=1e-3,
+                        seed=33333, template=template)
+    end
+
+    @testset "RandESC jd Options — ComplexF32" begin
+        jd_options_test(ComplexF32; n=200, k=4, test_tol=1e-2, iter_tol=1e-3,
+                        seed=44444, template=template)
     end
 
     ### Test all sketch_type and orth_method combinations for jd_sketched, for each input type.

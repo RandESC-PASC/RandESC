@@ -1,9 +1,11 @@
 using AMDGPU
 
 include("symmetric_hermitian_random_matrix.jl")
+include("orthogonalization.jl")
 
 if AMDGPU.has_rocm_gpu()
     run_symmetric_hermitian_random_matrix_tests(; template=AMDGPU.zeros(1))
+    run_orthogonalization_tests(; template=AMDGPU.zeros(1))
 else
     @warn "AMD GPU not detected; skipping AMD tests."
 end
