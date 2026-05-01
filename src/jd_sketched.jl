@@ -72,8 +72,8 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # Active subspace: columns 1:j live in the the following buffers.
         V  = similar(v0, T, n, jmax)
         W  = similar(v0, T, n, jmax)
-        SV = similar(v0, T, s, jmax); SV .= zero(T)  # arrays potentially holding result of a sparse matrix
-        SW = similar(v0, T, s, jmax); SW .= zero(T)  # multiplication must be initialized to zero for safety
+        SV = similar(v0, T, s, jmax)
+        SW = similar(v0, T, s, jmax)
         # Work buffers for various allocation free operations:
         n_buffer = similar(v0, T, n, jmax)
         s_buffer = similar(v0, T, s, jmax)
@@ -314,27 +314,22 @@ Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
         SV[:, j+1:j+nact] .= ST_corr
     end
 
-    # Expand Mc = V'AV and Oc = V'V (BLAS-3 column+row updates).
-    @timing "jd_sketched: overlap" begin
-        W_new = view(W, :, j+1:j+nact)
-        V_old = view(V, :, 1:j)
-
-        Mexp = similar(Mc, j+nact, j+nact)
-        Mexp[1:j, 1:j] .= Mc
-        mul!(Mexp[1:j,        j+1:j+nact], V_old',  W_new)
-        Mexp[j+1:j+nact, 1:j] .= Mexp[1:j, j+1:j+nact]'
-        mul!(Mexp[j+1:j+nact, j+1:j+nact], T_corr', W_new)
-
-        Oexp = similar(Oc, j+nact, j+nact)
-        Oexp[1:j, 1:j] .= Oc
-        mul!(Oexp[1:j,        j+1:j+nact], V_old',  T_corr)
-        Oexp[j+1:j+nact, 1:j] .= Oexp[1:j, j+1:j+nact]'
-        mul!(Oexp[j+1:j+nact, j+1:j+nact], T_corr', T_corr)
-    end
-
     # Write T_corr into V buffer
     @timing "jd_sketched: expand" begin
         V[:, j+1:j+nact] .= T_corr
+    end
+
+    # Expand Mc = V'AV and Oc = V'V
+    @timing "jd_sketched: overlap" begin
+        Mexp = similar(Mc, j+nact, j+nact)
+        Mexp[1:j, 1:j] .= Mc
+        mul!(Mexp[:, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])
+        Mexp = Hermitian(Mexp)
+
+        Oexp = similar(Oc, j+nact, j+nact)
+        Oexp[1:j, 1:j] .= Oc
+        mul!(Oexp[:, j+1:j+nact], V[:, 1:j+nact]', V[:, j+1:j+nact])
+        Oexp = Hermitian(Oexp)
     end
 
     return Mexp, Oexp, nact
