@@ -305,7 +305,7 @@ Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
     end
 
     # Expand Mc = V'AV and Oc = V'V
-    @timing "jd_sketched: overlap" begin
+    @timing "jd_sketched: expand overlap" begin
         Mexp = similar(Mc, j+nact, j+nact)
         Mexp[1:j, 1:j] .= Mc
         mul!(Mexp[:, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])
