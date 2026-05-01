@@ -63,7 +63,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     end
 
 
-    T = complex(eltype(v0))
+    T = eltype(v0)
 
     Theta = sketch(n, s, sketch_type, v0)
 
@@ -74,17 +74,10 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         W  = similar(v0, T, n, jmax)
         SV = similar(v0, T, s, jmax)
         SW = similar(v0, T, s, jmax)
-        # Work buffers for various allocation free operations:
-        n_buffer = similar(v0, T, n, jmax)
-        s_buffer = similar(v0, T, s, jmax)
-        # Ritz vectors and residuals for active pairs (like ub/rb in jdsym_block)
-        # ub is also reused as T_corr_buf during expand (never live at the same time)
-        ub      = similar(v0, T, n, kb)
-        rb      = similar(v0, T, n, kb)
-        # Sketched Ritz vectors for residual Θ-norm; reused as ST_corr_buf/SV_scratch
-        # during expand (never live at the same time as the residual norm computation)
-        SX_rq   = similar(v0, T, s, kb)# ; SX_rq .= zero(T)   # reused as ST_corr_buf in expand
-        SW_rq   = similar(v0, T, s, kb)# ; SW_rq .= zero(T)   # reused as SV_scratch in expand
+        # n_buffer/s_buffer back two roles each: halves [1:kb] for Ritz/residual/expand,
+        # full [1:2kb] as restart rotation scratch (never live at the same time).
+        n_buffer = similar(v0, T, n, 2*kb);  ub = n_buffer[:, 1:kb];  rb = n_buffer[:, kb+1:2*kb]
+        s_buffer = similar(v0, T, s, 2*kb);  SX_rq = s_buffer[:, 1:kb];  SW_rq = s_buffer[:, kb+1:2*kb]
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
@@ -121,8 +114,8 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     # Mc = V'AV, Oc = V'V — stored as plain arrays so similar(Mc,...) preserves device type;
     # Hermitian wrapper applied only at eigen call sites.
     @timing "jd_sketched: overlap" begin
-        Mc = V[:, 1:j]' * W[:, 1:j]
-        Oc = V[:, 1:j]' * V[:, 1:j]
+        Mc = Hermitian(V[:, 1:j]' * W[:, 1:j])
+        Oc = Hermitian(V[:, 1:j]' * V[:, 1:j])
     end
 
     # Generalized Hermitian eigenproblem Mc y = λ Oc y.
@@ -158,10 +151,17 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 SW[:, 1:nk] .= s_buffer[:, 1:nk]
                 j  = nk
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
-                Mc_new = similar(V, T, nk, nk); fill!(Mc_new, zero(T)); Mc_new[diagind(Mc_new)] .= T.(ew[1:nk])
-                Oc_new = similar(V, T, nk, nk); fill!(Oc_new, zero(T)); Oc_new[diagind(Oc_new)] .= one(T)
-                U_new  = similar(V, T, nk, nk); fill!(U_new,  zero(T)); U_new[diagind(U_new)]   .= one(T)
-                Mc = Mc_new;  Oc = Oc_new;  ew = ew[1:nk];  U = U_new
+                Mc = similar(V, T, nk, nk)
+                fill!(Mc, zero(T))
+                Mc[diagind(Mc)] .= ew[1:nk]
+                Mc = Hermitian(Mc)
+                Oc = similar(V, T, nk, nk)
+                fill!(Oc, zero(T))
+                Oc[diagind(Oc)] .= one(T)
+                Oc = Hermitian(Oc)
+                U  = similar(V, T, nk, nk)
+                fill!(U,  zero(T)); U[diagind(U)] .= one(T)
+                ew = ew[1:nk]
                 disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
             end
         end
@@ -249,22 +249,8 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         @warn "jd_sketched did not converge within $maxit iterations."
     end
 
-    # Finalize: U[:,1:k] are Oc-orthonormal, so X = V*U[:,1:k] is standard orthonormal:
-    #   X'X = U[:,1:k]'*(V'V)*U[:,1:k] = U[:,1:k]'*Oc*U[:,1:k] = I
-    # No Cholesky or second eigensolve needed.
-    mul!(n_buffer[:, 1:k], V[:, 1:j], U[:, 1:k])
-    lambda = copy(ew[1:k])
-    if eltype(v0) <: Real
-        # Remove arbitrary complex phase from eigenvectors computed in complex arithmetic.
-        absvals = abs.(n_buffer[:, 1:k])
-        maxabs, indices = findmax(absvals; dims=1)
-        n_buffer[:, 1:k] ./= n_buffer[indices] ./ maxabs
-        X = real.(n_buffer[:, 1:k])
-    else
-        X = copy(n_buffer[:, 1:k])
-    end
-
-    return X, lambda, history[1:hist_row, :]
+    # U[:,1:k] are Oc-orthonormal => X = V*U[:,1:k] is standard orthonormal
+    return V[:, 1:j] * U[:, 1:k], copy(ew[1:k]), history[1:hist_row, :]
 end
 
 
@@ -290,8 +276,7 @@ Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
 
     # Phase 1: Θ-orthogonalize all nb corrections against V[:,1:j] — in-place, no alloc
     @timing "jd_sketched: ortho" begin
-        rbb = view(rb, :, 1:nb)
-        _sketch_deflate!(rbb, V[:, 1:j], SV[:, 1:j], Theta, orth_method, SV_scratch)
+        _sketch_deflate!(rb[:, 1:nb], V[:, 1:j], SV[:, 1:j], Theta, orth_method, SV_scratch)
     end
 
     # Phase 2: Θ-orthonormalize among the nb corrections into pre-allocated buffers
