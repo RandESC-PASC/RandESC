@@ -91,9 +91,9 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         # Restart: keep kb Ritz vectors (soft-locked stay in V)
         if j + nb >= kmax
             @timing "jd: restart" begin
-                mul!(buffer[:, 1:jmin], V[:, 1:j], Vc[1:j, 1:jmin])
+                mul!(buffer[:, 1:jmin], V[:, 1:j], Vc[:, 1:jmin])
                 V[:, 1:jmin] .= buffer[:, 1:jmin]
-                mul!(buffer[:, 1:jmin], W[:, 1:j], Vc[1:j, 1:jmin])
+                mul!(buffer[:, 1:jmin], W[:, 1:j], Vc[:, 1:jmin])
                 W[:, 1:jmin] .= buffer[:, 1:jmin]
                 Hc = Hermitian(Diagonal(T.(ew[1:jmin])))
                 j = jmin
@@ -109,8 +109,8 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
 
         # Compute residuals for active pairs nconv+1..nconv+nb (blocked BLAS-3)
         @timing "jd: residual" begin
-            mul!(ub[:, 1:nb], V[:, 1:j], Vc[1:j, nconv+1:nconv+nb])
-            mul!(rb[:, 1:nb], W[:, 1:j], Vc[1:j, nconv+1:nconv+nb])
+            mul!(ub[:, 1:nb], V[:, 1:j], Vc[:, nconv+1:nconv+nb])
+            mul!(rb[:, 1:nb], W[:, 1:j], Vc[:, nconv+1:nconv+nb])
             rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv+1:nconv+nb]'
             rnorms = Array(columnwise_norms(rb[:, 1:nb])) # move to CPU, for element-wise access
         end
@@ -179,7 +179,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     lambda = copy(ew[1:min(k, j)])  # return a proper array, and not a view
 
     # Compute eigenvectors from current Ritz vectors
-    X = V[:, 1:j] * Vc[1:j, 1:k]
+    X = V[:, 1:j] * Vc[:, 1:k]
 
     return X, lambda, history[1:hist_row, :]
 end
@@ -231,7 +231,7 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
     @timing "jd: overlap" begin
         Hexp = similar(Hc, j+nact, j+nact)
         Hexp[1:j, 1:j] .= Hc
-        mul!(Hexp[1:j+nact, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])
+        mul!(Hexp[:, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])
         Hexp = Hermitian(Hexp)  # Hermitian ==> no need for explicit symmetrization
     end
 
