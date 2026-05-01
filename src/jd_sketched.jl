@@ -277,10 +277,7 @@ Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
     # Phase 1: Θ-orthogonalize all nb corrections against V[:,1:j] — in-place, no alloc
     @timing "jd_sketched: ortho" begin
         _sketch_deflate!(rb[:, 1:nb], V[:, 1:j], SV[:, 1:j], Theta, orth_method, SV_scratch)
-    end
 
-    # Phase 2: Θ-orthonormalize among the nb corrections into pre-allocated buffers
-    @timing "jd_sketched: ortho" begin
         nact = _sketch_ortho!(T_corr_buf, ST_corr_buf, rb[:, 1:nb], Theta,
                                 orth_method, SV_scratch)
     end
