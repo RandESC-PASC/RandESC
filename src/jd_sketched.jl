@@ -118,16 +118,17 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     @timing "jd_sketched: sketch" begin
         mul!(SW[:, 1:j], Theta, W[:, 1:j])
     end
-    # Mc = V'AV, Oc = V'V — both exactly Hermitian
+    # Mc = V'AV, Oc = V'V — stored as plain arrays so similar(Mc,...) preserves device type;
+    # Hermitian wrapper applied only at eigen call sites.
     @timing "jd_sketched: overlap" begin
-        Mc = Hermitian(V[:, 1:j]' * W[:, 1:j])
-        Oc = Hermitian(V[:, 1:j]' * V[:, 1:j])
+        Mc = V[:, 1:j]' * W[:, 1:j]
+        Oc = V[:, 1:j]' * V[:, 1:j]
     end
 
     # Generalized Hermitian eigenproblem Mc y = λ Oc y.
     # Eigenvalues are real and sorted; eigenvectors are Oc-orthonormal (U' Oc U = I).
     @timing "jd_sketched: diag" begin
-        F  = eigen(Mc, Oc)
+        F  = eigen(Hermitian(Mc), Hermitian(Oc))
         ew = F.values
         U  = F.vectors
     end
@@ -157,10 +158,10 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 SW[:, 1:nk] .= s_buffer[:, 1:nk]
                 j  = nk
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
-                Mc = Hermitian(Diagonal(T.(ew[1:nk])))
-                Oc = Hermitian(Matrix{T}(I, nk, nk))
-                ew = ew[1:nk]
-                U  = Matrix{T}(I, nk, nk)
+                Mc_new = similar(V, T, nk, nk); fill!(Mc_new, zero(T)); Mc_new[diagind(Mc_new)] .= T.(ew[1:nk])
+                Oc_new = similar(V, T, nk, nk); fill!(Oc_new, zero(T)); Oc_new[diagind(Oc_new)] .= one(T)
+                U_new  = similar(V, T, nk, nk); fill!(U_new,  zero(T)); U_new[diagind(U_new)]   .= one(T)
+                Mc = Mc_new;  Oc = Oc_new;  ew = ew[1:nk];  U = U_new
                 disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
             end
         end
@@ -236,7 +237,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
         # Generalized Hermitian eigenproblem Mc y = λ Oc y; eigenvalues real and sorted.
         @timing "jd_sketched: diag" begin
-            F  = eigen(Mc, Oc)
+            F  = eigen(Hermitian(Mc), Hermitian(Oc))
             ew = F.values
             U  = F.vectors
         end
@@ -321,16 +322,14 @@ Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
         Mexp = similar(Mc, j+nact, j+nact)
         Mexp[1:j, 1:j] .= Mc
         mul!(Mexp[1:j,        j+1:j+nact], V_old',  W_new)
-        mul!(Mexp[j+1:j+nact, 1:j],        T_corr', W[:, 1:j])
+        Mexp[j+1:j+nact, 1:j] .= Mexp[1:j, j+1:j+nact]'
         mul!(Mexp[j+1:j+nact, j+1:j+nact], T_corr', W_new)
-        Mexp = Hermitian(Mexp)
 
         Oexp = similar(Oc, j+nact, j+nact)
         Oexp[1:j, 1:j] .= Oc
         mul!(Oexp[1:j,        j+1:j+nact], V_old',  T_corr)
-        mul!(Oexp[j+1:j+nact, 1:j],        T_corr', V_old)
+        Oexp[j+1:j+nact, 1:j] .= Oexp[1:j, j+1:j+nact]'
         mul!(Oexp[j+1:j+nact, j+1:j+nact], T_corr', T_corr)
-        Oexp = Hermitian(Oexp)
     end
 
     # Write T_corr into V buffer
