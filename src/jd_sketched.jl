@@ -99,10 +99,9 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         if nc < j
             randn!(TaskLocalRNG(), V[:, nc+1:j])   # in-place, no temp allocation
         end
-        # Θ-orthonormalize in-place into V[:,1:j]/SV[:,1:j]; SW_rq used as scratch.
-        j = _sketch_ortho!(V[:, 1:j], SV[:, 1:j], V[:, 1:j],
-                             Theta, orth_method,
-                             SW_rq)
+        # Θ-orthonormalize in-place; pre-compute sketch first, SW_rq used as scratch.
+        mul!(SV[:, 1:j], Theta, V[:, 1:j])
+        j = _sketch_ortho!(V[:, 1:j], SV[:, 1:j], orth_method)
     end
     @timing "jd_sketched: matvec" begin
         mul!(W[:, 1:j], A, V[:, 1:j])
@@ -229,9 +228,9 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
             end
         end
 
-        # Expand subspace; ub=T_corr_buf, SX_rq=ST_corr_buf, SW_rq=SV_scratch
+        # Expand subspace; SW_rq used as sketch scratch for corrections
         Mc, Oc, nact = _jdrb_expand!(V, SV, W, SW, Mc, Oc, rb, j, nb, jmax, A, Theta,
-                                      orth_method, ub, SX_rq, SW_rq)
+                                      orth_method, SW_rq)
         nmv += nact
         j   += nact
 
@@ -262,44 +261,32 @@ Expand search subspace with up to `nb` correction vectors from `rb[:,1:nb]`.
 Mirrors `_jdb_expand!` from jd, but uses Θ-orthogonalization and maintains
 Mc = V'AV, Oc = V'V, and SW = Θ*AV incrementally.
 
-Phase 1: Θ-orthogonalize all nb corrections against V[:,1:j].
-Phase 2: Θ-orthogonalize among the nb new vectors; normalize; accept.
+Phase 1: sketch rb, Θ-project out V[:,1:j], then Θ-orthonormalize among themselves.
 Then compute A * new columns, update SW, and expand Mc and Oc.
+
+`SV_scratch` (s×kb) is a workspace for sketching corrections; reuse SW_rq (not live during expand).
 
 Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
 """
 @views function _jdrb_expand!(V, SV, W, SW, Mc, Oc, rb, j, nb, jmax, A, Theta, orth_method,
-                       T_corr_buf, ST_corr_buf, SV_scratch)
-    # T_corr_buf  = ub   (n×kb, reused from Ritz-vector buffer — not live during expand)
-    # ST_corr_buf = SX_rq (s×kb, reused from sketched-Ritz buffer — not live during expand)
-    # SV_scratch  = SW_rq (s×kb, reused from sketched-AV buffer  — not live during expand)
-
-    # Phase 1: Θ-orthogonalize all nb corrections against V[:,1:j] — in-place, no alloc
+                               SV_scratch)
     @timing "jd_sketched: ortho" begin
-        _sketch_deflate!(rb[:, 1:nb], V[:, 1:j], SV[:, 1:j], Theta, orth_method, SV_scratch)
-
-        nact = _sketch_ortho!(T_corr_buf, ST_corr_buf, rb[:, 1:nb], Theta,
-                                orth_method, SV_scratch)
+        mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
+        _sketch_project_out!(rb[:, 1:nb], SV_scratch[:, 1:nb], V[:, 1:j], SV[:, 1:j], orth_method)
+        nact = _sketch_ortho!(rb[:, 1:nb], SV_scratch[:, 1:nb], orth_method)
     end
 
     nact == 0 && return Mc, Oc, 0
     nact = min(nact, jmax - j)
     nact == 0 && return Mc, Oc, 0
 
-    T_corr  = view(T_corr_buf,  :, 1:nact)
-    ST_corr = view(ST_corr_buf, :, 1:nact)
+    # Commit accepted columns into V/SV
+    V[:,  j+1:j+nact] .= rb[:,         1:nact]
+    SV[:, j+1:j+nact] .= SV_scratch[:, 1:nact]
 
-    # Compute A * new basis vectors and update SW
-    @timing "jd_sketched: matvec" mul!(W[:, j+1:j+nact], A, T_corr)
-    @timing "jd_sketched: sketch" begin
-        mul!(SW[:, j+1:j+nact], Theta, W[:, j+1:j+nact])
-        SV[:, j+1:j+nact] .= ST_corr
-    end
-
-    # Write T_corr into V buffer
-    @timing "jd_sketched: expand" begin
-        V[:, j+1:j+nact] .= T_corr
-    end
+    # Compute A * new basis vectors and sketch AV
+    @timing "jd_sketched: matvec" mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
+    @timing "jd_sketched: sketch" mul!(SW[:, j+1:j+nact], Theta, W[:, j+1:j+nact])
 
     # Expand Mc = V'AV and Oc = V'V
     @timing "jd_sketched: expand overlap" begin

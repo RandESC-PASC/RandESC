@@ -84,16 +84,14 @@ function run_orthogonalization_tests(; template=nothing)
 
         for method in SKETCH_ORTH_METHODS
             @testset "$method: mixed independent and duplicate columns" begin
-                V0     = copy(V_full)
-                V_out  = similar(V0)
-                SV_out = fill!(similar(V0, s, m), 0)
-                SV_buf = fill!(similar(V0, s, m), 0)
-                nact = RandESC._sketch_ortho!(V_out, SV_out, V0, Theta, method, SV_buf)
+                V0  = copy(V_full)
+                SV0 = Theta(V0)
+                nact = RandESC._sketch_ortho!(V0, SV0, method)
 
                 @test nact == p
 
-                SQ = RandESC.to_cpu(SV_out[:, 1:nact])
-                Q  = RandESC.to_cpu(V_out[:, 1:nact])
+                SQ = RandESC.to_cpu(SV0[:, 1:nact])
+                Q  = RandESC.to_cpu(V0[:, 1:nact])
                 @test SQ' * SQ ≈ I atol=SKETCH_ORTH_TOL
                 @test maximum(abs.(Q' * Q - I)) < SKETCH_V_ORTH_TOL
 
@@ -107,15 +105,13 @@ function run_orthogonalization_tests(; template=nothing)
 
         @testset "full-rank input" begin
             for method in SKETCH_ORTH_METHODS
-                V0     = RandESC.to_device(randn(T, n, p), template)
-                V_out  = similar(V0)
-                SV_out = fill!(similar(V0, s, p), 0)
-                SV_buf = fill!(similar(V0, s, p), 0)
-                nact = RandESC._sketch_ortho!(V_out, SV_out, V0, Theta, method, SV_buf)
+                V0  = RandESC.to_device(randn(T, n, p), template)
+                SV0 = Theta(V0)
+                nact = RandESC._sketch_ortho!(V0, SV0, method)
                 @test nact == p
-                SQ = RandESC.to_cpu(SV_out[:, 1:nact])
+                SQ = RandESC.to_cpu(SV0[:, 1:nact])
                 @test SQ' * SQ ≈ I atol=SKETCH_ORTH_TOL
-                Q = RandESC.to_cpu(V_out[:, 1:nact])
+                Q = RandESC.to_cpu(V0[:, 1:nact])
                 @test maximum(abs.(Q' * Q - I)) < SKETCH_V_ORTH_TOL
             end
         end
@@ -124,28 +120,24 @@ function run_orthogonalization_tests(; template=nothing)
             v = randn(T, n)
             V_cpu = repeat(v, 1, 5)
             for method in SKETCH_ORTH_METHODS
-                V0     = RandESC.to_device(copy(V_cpu), template)
-                V_out  = similar(V0)
-                SV_out = fill!(similar(V0, s, 5), 0)
-                SV_buf = fill!(similar(V0, s, 5), 0)
-                nact = RandESC._sketch_ortho!(V_out, SV_out, V0, Theta, method, SV_buf)
+                V0  = RandESC.to_device(copy(V_cpu), template)
+                SV0 = Theta(V0)
+                nact = RandESC._sketch_ortho!(V0, SV0, method)
                 @test nact == 1
-                @test norm(RandESC.to_cpu(SV_out[:, 1]))^2 ≈ 1.0 atol=SKETCH_ORTH_TOL
+                @test norm(RandESC.to_cpu(SV0[:, 1]))^2 ≈ 1.0 atol=SKETCH_ORTH_TOL
             end
         end
 
-        @testset "_sketch_deflate!" begin
+        @testset "_sketch_project_out!" begin
             for method in SKETCH_ORTH_METHODS
-                Q0     = RandESC.to_device(randn(T, n, p ÷ 2), template)
-                V_out  = similar(Q0)
-                SV_out = fill!(similar(Q0, s, p ÷ 2), 0)
-                SV_buf = fill!(similar(Q0, s, p ÷ 2), 0)
-                RandESC._sketch_ortho!(V_out, SV_out, Q0, Theta, :rcgs, SV_buf)
-                Q = V_out[:, 1:p÷2]; SQ = SV_out[:, 1:p÷2]
+                Q0  = RandESC.to_device(randn(T, n, p ÷ 2), template)
+                SQ0 = Theta(Q0)
+                RandESC._sketch_ortho!(Q0, SQ0, :rcgs)
+                Q = Q0[:, 1:p÷2]; SQ = SQ0[:, 1:p÷2]
 
-                V1      = RandESC.to_device(randn(T, n, p ÷ 2), template)
-                SV1_buf = fill!(similar(V1, s, p ÷ 2), 0)
-                RandESC._sketch_deflate!(V1, Q, SQ, Theta, method, SV1_buf)
+                V1  = RandESC.to_device(randn(T, n, p ÷ 2), template)
+                SV1 = Theta(V1)
+                RandESC._sketch_project_out!(V1, SV1, Q, SQ, method)
 
                 @test norm(RandESC.to_cpu(SQ)' * RandESC.to_cpu(Theta(V1))) < SKETCH_ORTH_TOL
             end
