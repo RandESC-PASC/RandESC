@@ -112,16 +112,15 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
             mul!(ub[:, 1:nb], V[:, 1:j], Vc[:, nconv+1:nconv+nb])
             mul!(rb[:, 1:nb], W[:, 1:j], Vc[:, nconv+1:nconv+nb])
             rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv+1:nconv+nb]'
-            rnorms = Array(columnwise_norms(rb[:, 1:nb])) # move to CPU, for element-wise access
+            rnorms = columnwise_norms(rb[:, 1:nb])
         end
 
         # Consecutive convergence check (target pairs only, skip first iteration)
         nb_target = min(k - nconv, nb)
         nconv_new = 0
         if iter > 1
-            for ib in 1:nb_target
-                rnorms[ib] < tol ? nconv_new += 1 : break
-            end
+            first_notconv = findfirst(rnorms[1:nb_target] .>= tol)
+            nconv_new = isnothing(first_notconv) ? nb_target : first_notconv - 1
         end
 
         hist_row += 1
