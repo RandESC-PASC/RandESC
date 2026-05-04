@@ -188,7 +188,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # Sketch residuals for Θ-norm computation — reuse sv_work to avoid per-column alloc
         @timing "jd_sketched: sketch" begin
             mul!(SW_rq[:, 1:nb], Theta, rb[:, 1:nb])   # reuse SW_rq as tmp buffer
-            rnorms = Array(columnwise_norms(SW_rq[:, 1:nb]))
+            rnorms = columnwise_norms(SW_rq[:, 1:nb])
         end
 
         # Convergence check on active target pairs (skip first iteration, like jd)
@@ -206,9 +206,8 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
             nconv_new = 0
             if iter > 1
-                for ib in 1:nb_target
-                    rnorms[ib] < tol ? nconv_new += 1 : break
-                end
+                first_notconv = findfirst(rnorms[1:nb_target] .>= tol)
+                nconv_new = isnothing(first_notconv) ? nb_target : first_notconv - 1
             end
         end
 
