@@ -9,8 +9,8 @@ const SKETCH_ORTH_TOL   = 1e-10   # Θ-orthonormality: SV'SV ≈ I
 const SKETCH_SPAN_TOL   = 1e-10   # span check in sketch space
 const SKETCH_V_ORTH_TOL = 0.5    # approximate orthonormality of V_out (JL distortion ~√(p/s))
 
-const STD_ORTH_METHODS    = (:mgs, :mgs2, :qr)
-const SKETCH_ORTH_METHODS = (:rcgs, :rcgs2, :rqr)
+const STD_ORTH_METHODS    = RandESC.STD_ORTH_METHODS
+const SKETCH_ORTH_METHODS = RandESC.SKETCH_ORTH_METHODS
 
 function run_orthogonalization_tests(; template=nothing)
     T = Float64

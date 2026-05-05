@@ -1,5 +1,10 @@
 using LinearAlgebra
 
+# Valid orthogonalization method symbols. All dispatch functions in this file validate
+# their `method` argument against these tuples.
+const STD_ORTH_METHODS    = (:mgs, :mgs2, :qr)
+const SKETCH_ORTH_METHODS = (:rcgs, :rcgs2, :rqr)
+
 # === Standard orthogonalization utilities ===
 
 """
@@ -12,14 +17,14 @@ buf (nx≥m) is a workspace for :qr; ignored otherwise.
 """
 function _ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
                     buf::AbstractMatrix=similar(V, size(V, 1), m))
+    orth_method in STD_ORTH_METHODS ||
+        error("Unknown orth_method :$orth_method; valid: $STD_ORTH_METHODS")
     if orth_method == :qr
         return _qr_ortho!(V, m, buf)
     elseif orth_method == :mgs
         return _mgs_ortho!(V, m, false)
-    elseif orth_method == :mgs2
+    else  # :mgs2
         return _mgs_ortho!(V, m, true)
-    else
-        error("Unknown orth_method :$orth_method; valid: :mgs, :mgs2, :qr")
     end
 end
 
@@ -121,10 +126,14 @@ Both are updated in-place. `SV0` is maintained analytically (`SV0 -= SQ*(SQ'*SV0
 so no Θ application is needed — caller must pre-compute `SV0 = Θ*V0`.
 """
 function _sketch_project_out!(V0::AbstractMatrix, SV0::AbstractMatrix, Q, SQ, method::Symbol)
+    method in SKETCH_ORTH_METHODS ||
+        error("Unknown sketch orth_method :$method; valid: $SKETCH_ORTH_METHODS")
     isempty(Q) && return
     H = SQ' * SV0
     mul!(V0,  Q,  H, -1, 1)
     mul!(SV0, SQ, H, -1, 1)
+    # :rcgs and :rqr both use a single projection pass before the subsequent
+    # _sketch_ortho! step; only :rcgs2 repeats the projection here.
     if method == :rcgs2
         mul!(H,   SQ', SV0)
         mul!(V0,  Q,   H, -1, 1)
@@ -188,11 +197,11 @@ Valid `method` symbols:
   `:rqr`   — randomized QR via sketch; batch, preferred on GPU
 """
 function _sketch_ortho!(V::AbstractMatrix, SV::AbstractMatrix, method::Symbol)
+    method in SKETCH_ORTH_METHODS ||
+        error("Unknown sketch orth_method :$method; valid: $SKETCH_ORTH_METHODS")
     if method == :rqr
         return _sketch_qr_ortho!(V, SV)
-    elseif method == :rcgs || method == :rcgs2
+    else  # :rcgs or :rcgs2
         return _sketch_cgs_block!(V, SV, method)
-    else
-        error("Unknown sketch orth_method :$method; valid: :rcgs, :rcgs2, :rqr")
     end
 end
