@@ -29,7 +29,7 @@ Final note: both the CUDA and NVTX packages are required for this example, but t
 included in the local project environment (too heavy). You will need to add them on your own.
 """
 
-randomize = true          # whether we profile randomized or standard JD
+randomize = false          # whether we profile randomized or standard JD
 DFTK.setup_threading()    # Sets up default DFTK thread count
 arch = DFTK.GPU(CuArray)  # Triggers DFTK to run on NVIDIA GPUs
 
@@ -108,13 +108,12 @@ scfres = self_consistent_field(basis; maxiter=3)
 
 maxit = 7
 
-DFTK.reset_timer!(DFTK.timer)
-# Actual profiling run. Keep number of iterations low to avoid gigantic data dumps
 CUDA.@profile external=true begin
     self_consistent_field(basis; maxiter=maxit, eigensolver=make_eigensolver(; use_randomization=randomize))
 end
-println(DFTK.timer)
 
-DFTK.reset_timer!(DFTK.timer)
+t1 = time()
 scfres = self_consistent_field(basis; maxiter=maxit)
-println(DFTK.timer)
+t2 = time()
+elapsed = t2 - t1
+println("Elapsed lobpcg time $elapsed")
