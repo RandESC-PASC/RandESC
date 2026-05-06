@@ -70,14 +70,19 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     # ── Workspace ─────────────────────────────────────────────────────────
     @timing "jd_sketched: allocation" begin
         # Active subspace: columns 1:j live in the the following buffers.
-        V  = similar(v0, T, n, jmax)
-        W  = similar(v0, T, n, jmax)
-        SV = similar(v0, T, s, jmax)
-        SW = similar(v0, T, s, jmax)
-        # n_buffer/s_buffer back two roles each: halves [1:kb] for Ritz/residual/expand,
-        # full [1:2kb] as restart rotation scratch (never live at the same time).
-        n_buffer = similar(v0, T, n, 2*kb);  ub = n_buffer[:, 1:kb];  rb = n_buffer[:, kb+1:2*kb]
-        s_buffer = similar(v0, T, s, 2*kb);  SX_rq = s_buffer[:, 1:kb];  SW_rq = s_buffer[:, kb+1:2*kb]
+        V  = similar(v0, T, n, jmax) # search space
+        W  = similar(v0, T, n, jmax) # W = A * V
+        SV = fill!(similar(v0, T, s, jmax), zero(T)) # Sketch of search space
+        SW = fill!(similar(v0, T, s, jmax), zero(T)) # Sketch of A * V
+
+        # n_buffer/s_buffer each serve two non-overlapping roles: halves [1:kb] hold
+        # Ritz vectors / residuals / corrections; full [1:2kb] used as rotation scratch on restart.
+        n_buffer = similar(v0, T, n, 2*kb)
+        ub    = view(n_buffer, :, 1:kb)        # Ritz vectors X_b = V * U[:,active]
+        rb    = view(n_buffer, :, kb+1:2*kb)   # residuals r_b; repurposed as corrections after precond
+        s_buffer = similar(v0, T, s, 2*kb)
+        SX_rq = view(s_buffer, :, 1:kb)        # Θ * X_b (for sketched residual norms)
+        SW_rq = view(s_buffer, :, kb+1:2*kb)   # Θ * A * X_b; reused as sketch scratch during expand
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
