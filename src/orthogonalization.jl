@@ -1,5 +1,10 @@
 using LinearAlgebra
 
+# Valid orthogonalization method symbols. All dispatch functions in this file validate
+# their `method` argument against these tuples.
+const STD_ORTH_METHODS    = (:mgs, :mgs2, :qr)
+const SKETCH_ORTH_METHODS = (:rcgs, :rcgs2, :rqr)
+
 # === Standard orthogonalization utilities ===
 
 """
@@ -12,14 +17,14 @@ buf (nx≥m) is a workspace for :qr; ignored otherwise.
 """
 function _ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
                     buf::AbstractMatrix=similar(V, size(V, 1), m))
+    orth_method in STD_ORTH_METHODS ||
+        error("Unknown orth_method :$orth_method; valid: $STD_ORTH_METHODS")
     if orth_method == :qr
         return _qr_ortho!(V, m, buf)
     elseif orth_method == :mgs
         return _mgs_ortho!(V, m, false)
-    elseif orth_method == :mgs2
+    else  # :mgs2
         return _mgs_ortho!(V, m, true)
-    else
-        error("Unknown orth_method :$orth_method; valid: :mgs, :mgs2, :qr")
     end
 end
 
@@ -86,90 +91,77 @@ function _mgs_ortho!(V::AbstractMatrix, m::Int, two_pass::Bool=true)
 end
 
 """
-    _sketch_qr_ortho!(V_out, SV_out, V0, Theta, SV_buf; tol) -> nact
+    _sketch_qr_ortho!(V, SV; tol) -> nact
 
-Θ-orthonormalize `V0` (n×m) via sketched QR. Writes `nact` accepted columns into
-`V_out[:,1:nact]` (primal) and `SV_out[:,1:nact]` (sketch). `SV_buf` (s×m) is scratch.
+Θ-orthonormalize columns of `V` (n×m) in-place via sketched QR, with pre-computed
+sketch `SV` (s×m). Both are modified in-place; `nact` accepted columns are compacted
+to `V[:,1:nact]` and `SV[:,1:nact]`.
 """
-@views function _sketch_qr_ortho!(V_out::AbstractMatrix, SV_out::AbstractMatrix,
-                               V0::AbstractMatrix, Theta, SV_buf::AbstractMatrix;
-                               tol::Float64=1e-10)
-    m = size(V0, 2)
-    SV = view(SV_buf, :, 1:m)
-    mul!(SV, Theta, V0)
-    F = qr(SV)
+@views function _sketch_qr_ortho!(V::AbstractMatrix, SV::AbstractMatrix;
+                                  tol::Float64=1e-10)
+    m = size(V, 2)
+    F = qr(SV[:, 1:m])
     good = findall(abs.(F.R[diagind(F.R)]) .>= tol)
     nact = length(good)
-    fill!(SV_out[:, 1:m], zero(eltype(SV_out)))
-    SV_out[diagind(SV_out)[1:m]] .= one(eltype(SV_out))
-    lmul!(F.Q, SV_out[:, 1:m])
+    fill!(SV[:, 1:m], zero(eltype(SV)))
+    SV[diagind(SV)[1:m]] .= one(eltype(SV))
+    lmul!(F.Q, SV[:, 1:m])
     if nact < m
-        SV_out[:, 1:nact] .= SV_out[:, good]
+        SV[:, 1:nact] .= SV[:, good]
     end
-    # QR on sketch: Θ V0 = Q_S R, so Θ (V0 R^-1) = Q_S.
-    # Solving V_out = V0 * R^-1 ensures Θ V_out[:,j] = Q_S[:,j] = SV_out[:,j].
-    V_out[:, 1:m] .= V0
-    rdiv!(V_out[:, 1:m], UpperTriangular(F.R))
+    # QR on sketch: Θ V = Q_S R, so Θ (V R^-1) = Q_S.
+    # rdiv! solves V[:,1:m] = V[:,1:m] * R^-1 in-place.
+    rdiv!(V[:, 1:m], UpperTriangular(F.R))
     if nact < m
-        V_out[:, 1:nact] .= V_out[:, good]
+        V[:, 1:nact] .= V[:, good]
     end
     return nact
 end
 
 """
-    _sketch_deflate!(V0, Q, SQ, Theta, method, SV_buf)
+    _sketch_project_out!(V0, SV0, Q, SQ, method)
 
-In-place Θ-orthogonalization of `V0` against Θ-orthonormal `Q`.
-`SV_buf` (s × size(V0,2)) is a pre-allocated scratch array.
+Project out the Q-component from `V0` and its sketch `SV0` using Θ-inner products.
+Both are updated in-place. `SV0` is maintained analytically (`SV0 -= SQ*(SQ'*SV0)`)
+so no Θ application is needed — caller must pre-compute `SV0 = Θ*V0`.
 """
-function _sketch_deflate!(V0::AbstractMatrix, Q, SQ, Theta, method::Symbol,
-                                   SV_buf::AbstractMatrix)
-    isempty(Q) && return V0
-    nb = size(V0, 2)
-    SV = view(SV_buf, :, 1:nb)
-    mul!(SV, Theta, V0)
-    H = SQ' * SV
-    mul!(V0, Q, H, -1, 1)
-    if method == :rcgs || method == :rqr
-        # single pass done
-    elseif method == :rcgs2
-        mul!(SV, Theta, V0)
-        mul!(H, SQ', SV)
-        mul!(V0, Q, H, -1, 1)
-    else
-        error("Unknown sketch orth_method :$method; valid: :rcgs, :rcgs2, :rqr")
+function _sketch_project_out!(V0::AbstractMatrix, SV0::AbstractMatrix, Q, SQ, method::Symbol)
+    method in SKETCH_ORTH_METHODS ||
+        error("Unknown sketch orth_method :$method; valid: $SKETCH_ORTH_METHODS")
+    isempty(Q) && return
+    H = SQ' * SV0
+    mul!(V0,  Q,  H, -1, 1)
+    mul!(SV0, SQ, H, -1, 1)
+    # :rcgs and :rqr both use a single projection pass before the subsequent
+    # _sketch_ortho! step; only :rcgs2 repeats the projection here.
+    if method == :rcgs2
+        mul!(H,   SQ', SV0)
+        mul!(V0,  Q,   H, -1, 1)
+        mul!(SV0, SQ,  H, -1, 1)
     end
-    return V0
 end
 
 
 """
-    _sketch_cgs_block!(V_out, SV_out, V0, Theta, method, SV_buf) -> nact
+    _sketch_cgs_block!(V, SV, method) -> nact
 
-In-place Θ-orthonormalization. Writes accepted vectors into the first `nact` columns of
-pre-allocated `V_out` (n×p) and `SV_out` (s×p). `SV_buf` (s×p) is scratch. Returns `nact`.
+Θ-orthonormalize columns of `V` (n×p) in-place, with pre-computed sketch `SV` (s×p).
+Both `V` and `SV` are modified in-place; the `nact` accepted columns are compacted
+to `V[:,1:nact]` and `SV[:,1:nact]`.
 """
-@views function _sketch_cgs_block!(V_out::AbstractMatrix, SV_out::AbstractMatrix,
-                                  V0::AbstractMatrix, Theta, method::Symbol,
-                                  SV_buf::AbstractMatrix; tol::Float64=1e-12)
-    _, p = size(V0)
-    mul!(SV_buf[:, 1:p], Theta, V0)
+@views function _sketch_cgs_block!(V::AbstractMatrix, SV::AbstractMatrix,
+                                   method::Symbol; tol::Float64=1e-12)
+    _, p = size(V)
     ncols = 0
-    npass = if method == :rcgs || method == :rqr
-        1
-    elseif method == :rcgs2
-        2
-    else
-        error("Unknown sketch orth_method :$method; valid: :rcgs, :rcgs2, :rqr")
-    end
+    npass = method == :rcgs2 ? 2 : 1
 
     for i in 1:p
-        v  = view(V0,     :, i)
-        sv = view(SV_buf, :, i)
+        v  = view(V,  :, i)
+        sv = view(SV, :, i)
 
         if ncols > 0
-            Vc  = view(V_out,  :, 1:ncols)
-            SVc = view(SV_out, :, 1:ncols)
+            Vc  = view(V,  :, 1:ncols)
+            SVc = view(SV, :, 1:ncols)
             for _ in 1:npass
                 h = SVc' * sv
                 mul!(v,  Vc,  h, -1, 1)
@@ -180,8 +172,8 @@ pre-allocated `V_out` (n×p) and `SV_out` (s×p). `SV_buf` (s×p) is scratch. Re
         nv = norm(sv)
         if nv > tol
             ncols += 1
-            V_out[:,  ncols] .= v  ./ nv
-            SV_out[:, ncols] .= sv ./ nv
+            V[:,  ncols] .= v  ./ nv
+            SV[:, ncols] .= sv ./ nv
         end
     end
 
@@ -189,24 +181,22 @@ pre-allocated `V_out` (n×p) and `SV_out` (s×p). `SV_buf` (s×p) is scratch. Re
 end
 
 """
-    _sketch_ortho!(V_out, SV_out, V0, Theta, method, SV_buf) -> nact
+    _sketch_ortho!(V, SV, method) -> nact
 
-Dispatch for all Θ-orthonormalization. Writes `nact` accepted columns into the first
-`nact` columns of pre-allocated `V_out` (n×p) and `SV_out` (s×p). `SV_buf` (s×p) is scratch.
+Dispatch for all Θ-orthonormalization. `V` (n×p) and its pre-computed sketch `SV` (s×p)
+are modified in-place; `nact` accepted columns are compacted to `V[:,1:nact]` / `SV[:,1:nact]`.
 
 Valid `method` symbols:
-  `:rcgs`  — single-pass randomized CGS (sketch-space inner products)
-  `:rcgs2` — double-pass randomized CGS (more accurate, ~2× cost)
+  `:rcgs`  — single-pass randomized CGS
+  `:rcgs2` — double-pass randomized CGS
   `:rqr`   — randomized QR via sketch; batch, preferred on GPU
 """
-function _sketch_ortho!(V_out::AbstractMatrix, SV_out::AbstractMatrix,
-                           V0::AbstractMatrix, Theta, method::Symbol,
-                           SV_buf::AbstractMatrix)
+function _sketch_ortho!(V::AbstractMatrix, SV::AbstractMatrix, method::Symbol)
+    method in SKETCH_ORTH_METHODS ||
+        error("Unknown sketch orth_method :$method; valid: $SKETCH_ORTH_METHODS")
     if method == :rqr
-        return _sketch_qr_ortho!(V_out, SV_out, V0, Theta, SV_buf)
-    elseif method == :rcgs || method == :rcgs2
-        return _sketch_cgs_block!(V_out, SV_out, V0, Theta, method, SV_buf)
-    else
-        error("Unknown sketch orth_method :$method; valid: :rcgs, :rcgs2, :rqr")
+        return _sketch_qr_ortho!(V, SV)
+    else  # :rcgs or :rcgs2
+        return _sketch_cgs_block!(V, SV, method)
     end
 end

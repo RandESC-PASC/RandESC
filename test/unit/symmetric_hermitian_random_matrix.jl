@@ -9,8 +9,6 @@ using LinearAlgebra
 ### should run (CPU, NVIDIA GPU, AMD GPU). The function is called with approriate template
 ### from the cpu.jl, cuda.jl, and amdgpu.jl test files.
 
-# jd_sketched always promotes its workspace to complex, so real_srtt (DCT-based)
-# is incompatible regardless of input type. complex_srtt (FFT-based) works for both.
 function sketch_types_for(T::Type)
     if T <: Real
         return ["real_gaussian", "real_srtt", "sparsesign", "sparsestack"]

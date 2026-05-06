@@ -8,9 +8,12 @@ using Printf
 Sketched Jacobi-Davidson eigensolver for symmetric/Hermitian matrices.
 Structure mirrors `jd` exactly; the only differences are:
   - V is kept Θ-orthonormal (sketched orthogonalization) instead of standard orthonormal
-  - The projected matrix is Mc = (ΘV)'(ΘAV) instead of Hc = V'AV
-  - Convergence is measured in Θ-norm: ‖Θr‖ instead of ‖r‖
-  - Rayleigh quotients are computed via the sketched inner product
+  - The projected problem is the generalized Hermitian eigenproblem Mc y = λ Oc y, where
+    Mc = V'AV and Oc = V'V (the Gram matrix of the Θ-orthonormal basis)
+  - Eigenvalues are real and sorted by `eigen(Hermitian, Hermitian)`; no sortperm needed
+  - X = V*U[:,1:k] is standard orthonormal since U'*Oc*U = I = U'*(V'V)*U = X'X
+  - Convergence is measured in Θ-norm: ‖Θr‖ instead of ‖r‖; sketched residuals are
+    computed as SW*U - SV*U*diag(θ) without re-applying Θ to the full-space residual
 
 Soft-locking: converged Ritz vectors stay in V; corrections are generated only
 for active pairs. nbuff=2 buffer pairs are kept beyond k. Search space restarts
@@ -60,35 +63,29 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     end
 
 
-    T = complex(eltype(v0))
+    T = eltype(v0)
 
     Theta = sketch(n, s, sketch_type, v0)
 
     # ── Workspace ─────────────────────────────────────────────────────────
     @timing "jd_sketched: allocation" begin
         # Active subspace: columns 1:j live in the the following buffers.
-        V  = similar(v0, T, n, jmax)
-        W  = similar(v0, T, n, jmax)
-        SV = similar(v0, T, s, jmax); SV .= zero(T)  # arrays potentially holding result of a sparse matrix
-        SW = similar(v0, T, s, jmax); SW .= zero(T)  # multiplication must be initialized to zero for safety
-        # Work buffers for various allocation free operations:
-        n_buffer = similar(v0, T, n, jmax)
-        s_buffer = similar(v0, T, s, jmax)
-        # Ritz vectors and residuals for active pairs (like ub/rb in jdsym_block)
-        # ub is also reused as T_corr_buf during expand (never live at the same time)
-        ub      = similar(v0, T, n, kb)
-        rb      = similar(v0, T, n, kb)
-        # Sketched Ritz vectors for Rayleigh quotient; reused as ST_corr_buf/SV_scratch
-        # during expand (never live at the same time as the Rayleigh quotient computation)
-        SX_rq   = similar(v0, T, s, kb); SX_rq .= zero(T)   # reused as ST_corr_buf in expand
-        SW_rq   = similar(v0, T, s, kb); SW_rq .= zero(T)   # reused as SV_scratch in expand
+        V  = similar(v0, T, n, jmax) # search space
+        W  = similar(v0, T, n, jmax) # W = A * V
+        SV = fill!(similar(v0, T, s, jmax), zero(T)) # Sketch of search space
+        SW = fill!(similar(v0, T, s, jmax), zero(T)) # Sketch of A * V
+
+        # n_buffer/s_buffer: rotation scratch during restart (full 2*kb columns);
+        # ub/rb and SX_rq/SW_rq are declared as views into these buffers at each usage site.
+        n_buffer = similar(v0, T, n, 2*kb)
+        s_buffer = similar(v0, T, s, 2*kb)
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
-    # Mc: projected matrix, j x j, Mc = (ΘV)'(ΘAV)
-    # theta_b: Rayleigh quotients for active Ritz pairs, length kb
-    # U: Ritz vectors of the projected problem, j x j
-    # ew: Ritz values of the projected problem, length j, Real vector
+    # Mc: projected matrix V'AV, j×j Hermitian
+    # Oc: Gram matrix V'V,       j×j Hermitian (≈ I but not exactly for Θ-orthonormal V)
+    # ew: Ritz values from generalized Hermitian eigen, length j, Real, sorted
+    # U:  Ritz vectors (Oc-orthonormal), j×j
 
     nconv    = 0
     nmv      = 0
@@ -103,13 +100,9 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         if nc < j
             randn!(TaskLocalRNG(), V[:, nc+1:j])   # in-place, no temp allocation
         end
-        # Θ-orthonormalize in-place into V_a/SV_a using pre-allocated scratch.
-        # V_a[:,1:j] is both input and output — safe because column i is consumed
-        # into v_work before column ncols≤i is overwritten.
-        # SW_rq (s×kb) used as SV_buf scratch; not yet populated.
-        j = _sketch_ortho!(V[:, 1:j], SV[:, 1:j], V[:, 1:j],
-                             Theta, orth_method,
-                             SW_rq)
+        # Θ-orthonormalize in-place; pre-compute sketch first.
+        mul!(SV[:, 1:j], Theta, V[:, 1:j])
+        j = _sketch_ortho!(V[:, 1:j], SV[:, 1:j], orth_method)
     end
     @timing "jd_sketched: matvec" begin
         mul!(W[:, 1:j], A, V[:, 1:j])
@@ -118,19 +111,19 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     @timing "jd_sketched: sketch" begin
         mul!(SW[:, 1:j], Theta, W[:, 1:j])
     end
-    # Mc = (ΘV)'(ΘAV), replaces Hc = V'AV
+    # Mc = V'AV, Oc = V'V — stored as plain arrays so similar(Mc,...) preserves device type;
+    # Hermitian wrapper applied only at eigen call sites.
     @timing "jd_sketched: overlap" begin
-        Mc = SV[:, 1:j]' * SW[:, 1:j]
+        Mc = Hermitian(V[:, 1:j]' * W[:, 1:j])
+        Oc = Hermitian(V[:, 1:j]' * V[:, 1:j])
     end
 
-    # Initial Mc diagonalization (general eigen; only approx. Hermitian for sketching)
+    # Generalized Hermitian eigenproblem Mc y = λ Oc y.
+    # Eigenvalues are real and sorted; eigenvectors are Oc-orthonormal (U' Oc U = I).
     @timing "jd_sketched: diag" begin
-        F    = eigen(Mc)
-        ew   = real.(F.values)
-        U    = F.vectors
-        perm = sortperm(ew)
-        ew   = copy(ew[perm])     # Note: use copy to avoid accidental non-contiguous views
-        U    = copy(U[:, perm])
+        F  = eigen(Hermitian(Mc), Hermitian(Oc))
+        ew = F.values
+        U  = F.vectors
     end
 
     # ── Main loop ──────────────────────────────────────────────────────────
@@ -141,53 +134,58 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # Active pairs: nconv+1 .. nconv+nb  (k-nconv target + nbuff buffer)
         nb = max(min(k - nconv + nbuff, j - nconv), 1)
 
-        # Restart: keep jmin Ritz vectors (soft-locked pairs stay in V)
+        # Restart: keep jmin Ritz vectors (soft-locked pairs stay in V).
+        # U[:,1:nk] is Oc-orthonormal, so after rotation V_new = V*U[:,1:nk]:
+        #   Mc_new = Diagonal(ew[1:nk])  and  Oc_new = I.
+        # No QR needed (unlike the general-eigen restart in the old code).
         if j + nb >= jmax
             @timing "jd_sketched: restart" begin
                 nk    = min(jmin, j)
-                # QR-orthonormalize: U columns from general eigen not guaranteed unitary
-                # Use work buffers to avoid extra allocations
-                Q_rst = oftype(V, qr(U[:, 1:nk]).Q)
-                mul!(n_buffer[:, 1:nk], V[:, 1:j],  Q_rst)
+                mul!(n_buffer[:, 1:nk], V[:, 1:j],  U[:, 1:nk])
                 V[:, 1:nk] .= n_buffer[:, 1:nk]
-                mul!(s_buffer[:, 1:nk], SV[:, 1:j], Q_rst)
+                mul!(s_buffer[:, 1:nk], SV[:, 1:j], U[:, 1:nk])
                 SV[:, 1:nk] .= s_buffer[:, 1:nk]
-                mul!(n_buffer[:, 1:nk], W[:, 1:j],  Q_rst)
+                mul!(n_buffer[:, 1:nk], W[:, 1:j],  U[:, 1:nk])
                 W[:, 1:nk] .= n_buffer[:, 1:nk]
-                mul!(s_buffer[:, 1:nk], SW[:, 1:j], Q_rst)
+                mul!(s_buffer[:, 1:nk], SW[:, 1:j], U[:, 1:nk])
                 SW[:, 1:nk] .= s_buffer[:, 1:nk]
                 j  = nk
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
-                # Rotate Mc to the new basis (like jd_block's Vc'*Hc*Vc, but without the
-                # unitary simplification — Q_rst is only approx. unitary for non-Hermitian Mc)
-                Mc = Q_rst' * Mc * Q_rst   # nk×nk
-                # Re-diagonalize after restart (like jd_block's eigen(Hermitian(Hc[1:j,1:j])))
-                F_rst = eigen(Mc)
-                ew    = real.(F_rst.values)
-                U     = F_rst.vectors
-                perm  = sortperm(ew)
-                ew    = copy(ew[perm]);  U = copy(U[:, perm])
+                Mc = similar(V, T, nk, nk)
+                fill!(Mc, zero(T))
+                Mc[diagind(Mc)] .= ew[1:nk]
+                Mc = Hermitian(Mc)
+                Oc = similar(V, T, nk, nk)
+                fill!(Oc, zero(T))
+                Oc[diagind(Oc)] .= one(T)
+                Oc = Hermitian(Oc)
+                U  = similar(V, T, nk, nk)
+                fill!(U,  zero(T)); U[diagind(U)] .= one(T)
+                ew = ew[1:nk]
                 disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
             end
         end
 
-        # Compute residuals for active pairs nconv+1..nconv+nb (BLAS-3, like jd)
+        # Compute residuals for active pairs nconv+1..nconv+nb (BLAS-3).
+        # ew[nconv+1:nconv+nb] are used directly as Rayleigh quotients.
+        ub    = view(n_buffer, :, 1:nb)
+        rb    = view(n_buffer, :, nb+1:2*nb)
+        SX_rq = view(s_buffer, :, 1:nb)
+        SW_rq = view(s_buffer, :, nb+1:2*nb)
         @timing "jd_sketched: residual" begin
             Y_nb = view(U, :, nconv+1:nconv+nb)
             mul!(ub[:, 1:nb], V[:, 1:j], Y_nb)
             mul!(rb[:, 1:nb], W[:, 1:j], Y_nb)
-            # Sketched Rayleigh quotients: more reliable than real.(ew) for non-Hermitian Mc
-            mul!(SX_rq[:, 1:nb], SV[:, 1:j], Y_nb)
-            mul!(SW_rq[:, 1:nb], SW[:, 1:j], Y_nb)
-            theta_b = real(columnwise_dots(SX_rq[:, 1:nb], SW_rq[:, 1:nb]) ./
-                           columnwise_dots(SX_rq[:, 1:nb], SX_rq[:, 1:nb]))
-            # r = AX - X*diag(theta), in-place (replaces jd_block's rb .-= ub .* ew')
-            @views rb[:, 1:nb] .-= ub[:, 1:nb] .* theta_b[1:nb]'
+            theta_b = ew[nconv+1:nconv+nb]
+            rb[:, 1:nb] .-= ub[:, 1:nb] .* theta_b'
         end
 
-        # Sketch residuals for Θ-norm computation — reuse sv_work to avoid per-column alloc
+        # Compute sketched residuals in sketch space: Θr = SW*U - SV*U*diag(θ).
+        # Avoids re-applying Θ to the full-space residual rb.
         @timing "jd_sketched: sketch" begin
-            mul!(SW_rq[:, 1:nb], Theta, rb[:, 1:nb])   # reuse SW_rq as tmp buffer
+            mul!(SX_rq[:, 1:nb], SV[:, 1:j], Y_nb)
+            mul!(SW_rq[:, 1:nb], SW[:, 1:j], Y_nb)
+            SW_rq[:, 1:nb] .-= SX_rq[:, 1:nb] .* theta_b'
             rnorms = columnwise_norms(SW_rq[:, 1:nb])
         end
 
@@ -216,7 +214,6 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
             @timing "jd_sketched: lock" begin
                 nconv += nconv_new
                 nconv >= k && break
-                # Shift remaining active residuals/Ritz-vectors to front (like jd)
                 nb -= nconv_new
                 if nb > 0
                     rb[:, 1:nb] .= rb[:, nconv_new + 1:nconv_new + nb]
@@ -236,22 +233,17 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
             end
         end
 
-        # Expand subspace: Θ-orthogonalize corrections against V, return new expanded Mc.
-        # Mirrors _jdb_expand! but with sketched orthogonalization and Mc instead of Hc.
-        # ub=T_corr_buf, SX_rq=ST_corr_buf, SW_rq=SV_scratch — merged buffers, not live here
-        Mc, nact = _jdrb_expand!(V, SV, W, SW, Mc, rb, j, nb, jmax, A, Theta, orth_method,
-                                 ub, SX_rq, SW_rq)
+        # Expand subspace; SW_rq used as sketch scratch for corrections
+        Mc, Oc, nact = _jdrb_expand!(V, SV, W, SW, Mc, Oc, rb, j, nb, jmax, A, Theta,
+                                      orth_method, SW_rq)
         nmv += nact
         j   += nact
 
-        # Diagonalize expanded Mc (general eigen; only approx. Hermitian for sketching)
+        # Generalized Hermitian eigenproblem Mc y = λ Oc y; eigenvalues real and sorted.
         @timing "jd_sketched: diag" begin
-            F    = eigen(Mc)
-            ew   = real.(F.values)
-            U    = F.vectors
-            perm = sortperm(ew)
-            ew   = copy(ew[perm])
-            U    = copy(U[:, perm])
+            F  = eigen(Hermitian(Mc), Hermitian(Oc))
+            ew = F.values
+            U  = F.vectors
         end
     end
 
@@ -261,53 +253,8 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         @warn "jd_sketched did not converge within $maxit iterations."
     end
 
-    # Final Ritz extraction and post-processing.
-    # V is Θ-orthonormal (not standard orthonormal) and U from general eigen is non-unitary,
-    # so V*U[:,1:k] is not orthogonal.
-    # Perform one final, full ritz step to get the best approximation from the converged search space.
-    @timing "jd_sketched: finalize" begin
-        F_fin  = eigen(Mc)
-        ew_fin = real.(F_fin.values)
-        U_fin  = F_fin.vectors
-        perm_f = sortperm(ew_fin)
-        U_fin  = copy(U_fin[:, perm_f[1:k]])             # j×k, small
-        mul!(n_buffer[:, 1:k], V[:, 1:j], U_fin)
-        V[:, 1:k] .= n_buffer[:, 1:k]
-        mul!(n_buffer[:, 1:k], W[:, 1:j], U_fin)
-        W[:, 1:k] .= n_buffer[:, 1:k]
-        Xritz = view(V, :, 1:k)
-        Writz = view(W, :, 1:k)
-        # Cholesky-orthonormalize Xritz in-place: Xritz → Xritz / R, Writz → Writz / R
-        K = Xritz' * Xritz                         # k×k, small
-        R = cholesky(Hermitian(K)).U
-        rdiv!(Xritz, R)   # Xritz = Vn, in-place
-        rdiv!(Writz, R)   # Writz = AVn, in-place
-        # Small k×k projected eigenproblem
-        Fk = eigen(Hermitian(Xritz' * Writz))
-        # Final output: only this n×k allocation is unavoidable.
-        # Convert back to input type: real inputs give real outputs (imaginary parts are ~0).
-        X_full = Xritz * Fk.vectors
-        lambda = Fk.values
-        perm_s = sortperm(lambda)
-        X_sorted = copy(X_full[:, perm_s])
-        if eltype(v0) <: Real
-            # Eigenvectors computed in complex arithmetic carry an arbitrary scalar phase
-            # e^(iφ) per column. Remove it so that real.() discards only imaginary noise.
-            # maybe the phase can already be removed in the projected eigenvalue problem that is
-            # solved a couple of lines above.
-
-            absvals = abs.(X_sorted)
-            maxabs, indices = findmax(absvals; dims=1)
-            X_sorted ./= X_sorted[indices] ./ maxabs
-
-            X = real.(X_sorted)
-        else
-            X = X_sorted
-        end
-        lambda = copy(lambda[perm_s])
-    end
-
-    return X, lambda, history[1:hist_row, :]
+    # U[:,1:k] are Oc-orthonormal => X = V*U[:,1:k] is standard orthonormal
+    return V[:, 1:j] * U[:, 1:k], copy(ew[1:k]), history[1:hist_row, :]
 end
 
 
@@ -316,61 +263,48 @@ end
 """
 Expand search subspace with up to `nb` correction vectors from `rb[:,1:nb]`.
 
-Mirrors `_jdb_expand!` from jd, but uses Θ-orthogonalization instead of MGS.
+Mirrors `_jdb_expand!` from jd, but uses Θ-orthogonalization and maintains
+Mc = V'AV, Oc = V'V, and SW = Θ*AV incrementally.
 
-Phase 1: Θ-orthogonalize all nb corrections against V[:,1:j].
-Phase 2: Θ-orthogonalize among the nb new vectors; normalize; accept.
-Then compute A * new columns, sketch, and expands Mc[:,j+1:j+nact] and Mc[j+1:j+nact,:].
+Phase 1: sketch rb, Θ-project out V[:,1:j], then Θ-orthonormalize among themselves.
+Then compute A * new columns, update SW, and expand Mc and Oc.
 
-Returns the expanded Mc and the number of accepted vectors `nact`.
+`SV_scratch` (s×kb) is a workspace for sketching corrections; reuse SW_rq (not live during expand).
+
+Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
 """
-@views function _jdrb_expand!(V, SV, W, SW, Mc, rb, j, nb, jmax, A, Theta, orth_method,
-                       T_corr_buf, ST_corr_buf, SV_scratch)
-    # T_corr_buf  = ub   (n×kb, reused from Ritz-vector buffer — not live during expand)
-    # ST_corr_buf = SX_rq (s×kb, reused from sketched-Ritz buffer — not live during expand)
-    # SV_scratch  = SW_rq (s×kb, reused from sketched-AV buffer  — not live during expand)
-
-    # Phase 1: Θ-orthogonalize all nb corrections against V[:,1:j] — in-place, no alloc
+@views function _jdrb_expand!(V, SV, W, SW, Mc, Oc, rb, j, nb, jmax, A, Theta, orth_method,
+                               SV_scratch)
     @timing "jd_sketched: ortho" begin
-        rbb = view(rb, :, 1:nb)
-        _sketch_deflate!(rbb, V[:, 1:j], SV[:, 1:j], Theta, orth_method, SV_scratch)
+        mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
+        _sketch_project_out!(rb[:, 1:nb], SV_scratch[:, 1:nb], V[:, 1:j], SV[:, 1:j], orth_method)
+        nact = _sketch_ortho!(rb[:, 1:nb], SV_scratch[:, 1:nb], orth_method)
     end
 
-    # Phase 2: Θ-orthonormalize among the nb corrections into pre-allocated buffers
-    @timing "jd_sketched: ortho" begin
-        nact = _sketch_ortho!(T_corr_buf, ST_corr_buf, rb[:, 1:nb], Theta,
-                                orth_method, SV_scratch)
-    end
-
-    nact == 0 && return Mc, 0
+    nact == 0 && return Mc, Oc, 0
     nact = min(nact, jmax - j)
-    nact == 0 && return Mc, 0
+    nact == 0 && return Mc, Oc, 0
 
-    T_corr  = view(T_corr_buf,  :, 1:nact)
-    ST_corr = view(ST_corr_buf, :, 1:nact)
+    # Commit accepted columns into V/SV
+    V[:,  j+1:j+nact] .= rb[:,         1:nact]
+    SV[:, j+1:j+nact] .= SV_scratch[:, 1:nact]
 
-    # Compute A * new basis vectors and their sketches
-    @timing "jd_sketched: matvec" mul!(W[:, j+1:j+nact], A, T_corr)
-    @timing "jd_sketched: sketch" begin
-        mul!(SW[:, j+1:j+nact], Theta, W[:, j+1:j+nact])
-        SV[:, j+1:j+nact] .= ST_corr
-    end
+    # Compute A * new basis vectors and sketch AV
+    @timing "jd_sketched: matvec" mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
+    @timing "jd_sketched: sketch" mul!(SW[:, j+1:j+nact], Theta, W[:, j+1:j+nact])
 
-    # Expand Mc (mirrors jd's Hc column+row update, BLAS-3).
-    @timing "jd_sketched: overlap" begin
-        SW_new = view(SW, :, j+1:j+nact)
-        SW_old = view(SW, :, 1:j)
+    # Expand Mc = V'AV and Oc = V'V
+    @timing "jd_sketched: expand overlap" begin
         Mexp = similar(Mc, j+nact, j+nact)
         Mexp[1:j, 1:j] .= Mc
-        mul!(Mexp[1:j,        j+1:j+nact], SV[:, 1:j]',      SW_new)
-        mul!(Mexp[j+1:j+nact, 1:j],        ST_corr', SW_old)
-        mul!(Mexp[j+1:j+nact, j+1:j+nact], ST_corr', SW_new)
+        mul!(Mexp[:, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])
+        Mexp = Hermitian(Mexp)
+
+        Oexp = similar(Oc, j+nact, j+nact)
+        Oexp[1:j, 1:j] .= Oc
+        mul!(Oexp[:, j+1:j+nact], V[:, 1:j+nact]', V[:, j+1:j+nact])
+        Oexp = Hermitian(Oexp)
     end
 
-    # Write T_corr into V buffer
-    @timing "jd_sketched: expand" begin
-        V[:, j+1:j+nact] .= T_corr
-    end
-
-    return Mexp, nact
+    return Mexp, Oexp, nact
 end

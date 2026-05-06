@@ -227,7 +227,7 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
     @timing "jd: matvec" mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
 
     # Update projected Hamiltonian (full column block, BLAS-3)
-    @timing "jd: overlap" begin
+    @timing "jd: expand overlap" begin
         Hexp = similar(Hc, j+nact, j+nact)
         Hexp[1:j, 1:j] .= Hc
         mul!(Hexp[:, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])

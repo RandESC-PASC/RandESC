@@ -58,8 +58,10 @@ function sketch(n::Integer, s::Integer, type::AbstractString, template::Abstract
 
     elseif st == "complex_srtt"
         IX = to_device(randperm(n)[1:s], template)
-        diag_sign = exp.(im .* (2π) .* random_vector(real(T), n, template))
-        return SRTTSketchOp(diag_sign, IX, :complex, sqrt(n/s))
+        diag_sign = similar(template, complex(T), n)
+        R = real(T)
+        map!(_ -> exp(im * R(2π) * rand(R)), diag_sign, diag_sign)
+        return SRTTSketchOp(diag_sign, IX, :complex, 1/sqrt(s))
 
     elseif st == "real_srtt"
         IX = to_device(randperm(n)[1:s], template)
