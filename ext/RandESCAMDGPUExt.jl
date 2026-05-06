@@ -21,6 +21,14 @@ for T in [Float32, Float64, ComplexF32, ComplexF64]
     end
 end
 
+# AMDGPU does not expose a generalized eigenvalue problem function. This is a workaround
+function LinearAlgebra.eigen(A::Hermitian{T, <:ROCArray}, B::Hermitian{T, <:ROCArray}) where {T}
+    C = cholesky(B)
+    D = C.L \ A / C.L'
+    F = eigen(Hermitian(D))
+    return (; values = F.values, vectors = C.L' \ F.vectors)
+end
+
 function RandESC.random_matrix(T::Type{<:Real}, m::Int, n::Int, template::ROCArray)
     return AMDGPU.randn(T, m, n)
 end
