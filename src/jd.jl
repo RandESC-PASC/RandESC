@@ -47,6 +47,12 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     @timing "jd: allocation" begin
         V      = similar(v0, n, kmax)    # search space basis (includes soft-locked)
         W      = similar(v0, n, kmax)    # A * V
+        
+        softlocked = zeros(Bool, k) # false if not softlocked, true if softlocked
+        hardlocked = zeros(Bool, k) # false if not hardlocked, true if hardlocked
+        highest_soft_locked_ind = 0 # index of highest soft locked eigenvalue
+        highest_hard_locked_ind = 0 # index of highest hard locked eigenvalue
+
         rb     = similar(v0, n, kb)      # residuals / corrections
         ub     = similar(v0, n, kb)      # Ritz vectors for active pairs
         buffer = similar(v0, n, jmin)    # Pre-allocated work array
@@ -121,6 +127,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         if iter > 1
             first_notconv = findfirst(rnorms[1:nb_target] .>= tol)
             nconv_new = isnothing(first_notconv) ? nb_target : first_notconv - 1
+
         end
 
         hist_row += 1
@@ -132,9 +139,12 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                     minimum(rnorms[1:nb_target]), maximum(rnorms[1:nb_target]))
         end
 
-        # Lock newly converged pairs (Ritz vectors stay in V via soft-locking)
+        # Lock newly converged pairs
         if nconv_new > 0
             @timing "jd: lock" begin
+                # soft lock part: 
+                highest_soft_locked_ind += nconv_new
+                softlocked[nconv+1:nconv_new] = true
                 nconv += nconv_new
                 nconv >= k && break
                 # Shift remaining active residuals to front
@@ -145,6 +155,18 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                 else
                     continue
                 end
+                # hard lock part
+                nhardlocknew = findfirst(ew[nconv] .- ew[highest_hard_locked_ind+1:nconv] .< 1.0)
+                if isnothing(nhardlocknew)
+                    nhardlocknew = 0
+                else 
+                    nhardlocknew -= 1
+                end
+                if nhardlocknew > 0
+                    hardlocked[highest_hard_locked_ind+1:highest_hard_locked_ind+nhardlocknew] = true
+                    highest_hard_locked_ind += nhardlocknew
+                end
+
             end
         end
 
