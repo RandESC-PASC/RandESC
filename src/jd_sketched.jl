@@ -75,14 +75,10 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         SV = fill!(similar(v0, T, s, jmax), zero(T)) # Sketch of search space
         SW = fill!(similar(v0, T, s, jmax), zero(T)) # Sketch of A * V
 
-        # n_buffer/s_buffer each serve two non-overlapping roles: halves [1:kb] hold
-        # Ritz vectors / residuals / corrections; full [1:2kb] used as rotation scratch on restart.
+        # n_buffer/s_buffer: rotation scratch during restart (full 2*kb columns);
+        # ub/rb and SX_rq/SW_rq are declared as views into these buffers at each usage site.
         n_buffer = similar(v0, T, n, 2*kb)
-        ub    = view(n_buffer, :, 1:kb)        # Ritz vectors X_b = V * U[:,active]
-        rb    = view(n_buffer, :, kb+1:2*kb)   # residuals r_b; repurposed as corrections after precond
         s_buffer = similar(v0, T, s, 2*kb)
-        SX_rq = view(s_buffer, :, 1:kb)        # Θ * X_b (for sketched residual norms)
-        SW_rq = view(s_buffer, :, kb+1:2*kb)   # Θ * A * X_b; reused as sketch scratch during expand
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
@@ -104,7 +100,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         if nc < j
             randn!(TaskLocalRNG(), V[:, nc+1:j])   # in-place, no temp allocation
         end
-        # Θ-orthonormalize in-place; pre-compute sketch first, SW_rq used as scratch.
+        # Θ-orthonormalize in-place; pre-compute sketch first.
         mul!(SV[:, 1:j], Theta, V[:, 1:j])
         j = _sketch_ortho!(V[:, 1:j], SV[:, 1:j], orth_method)
     end
@@ -172,6 +168,10 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
         # Compute residuals for active pairs nconv+1..nconv+nb (BLAS-3).
         # ew[nconv+1:nconv+nb] are used directly as Rayleigh quotients.
+        ub    = view(n_buffer, :, 1:nb)
+        rb    = view(n_buffer, :, nb+1:2*nb)
+        SX_rq = view(s_buffer, :, 1:nb)
+        SW_rq = view(s_buffer, :, nb+1:2*nb)
         @timing "jd_sketched: residual" begin
             Y_nb = view(U, :, nconv+1:nconv+nb)
             mul!(ub[:, 1:nb], V[:, 1:j], Y_nb)
