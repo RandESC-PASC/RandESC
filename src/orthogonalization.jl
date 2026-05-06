@@ -172,13 +172,8 @@ to `V[:,1:nact]` and `SV[:,1:nact]`.
         nv = norm(sv)
         if nv > tol
             ncols += 1
-            if ncols != i
-                V[:,  ncols] .= v  ./ nv
-                SV[:, ncols] .= sv ./ nv
-            else
-                v  ./= nv
-                sv ./= nv
-            end
+            V[:,  ncols] .= v  ./ nv
+            SV[:, ncols] .= sv ./ nv
         end
     end
 
