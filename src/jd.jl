@@ -104,13 +104,22 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                 fill!(Vc, zero(T))           # do not like I, so explicit matrix
                 Vc[diagind(Vc)] .= one(T)
                 disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
+                restarted = true
             end
+        else
+            restarted = false
         end
 
         # Compute residuals for active pairs nconv+1..nconv+nb (blocked BLAS-3)
         @timing "jd: residual" begin
-            mul!(ub[:, 1:nb], V[:, 1:j], Vc[:, nconv+1:nconv+nb])
-            mul!(rb[:, 1:nb], W[:, 1:j], Vc[:, nconv+1:nconv+nb])
+            if restarted
+                # Vc is identity, can simply copy columns over
+                ub[:, 1:nb] .= V[:, nconv+1:nconv+nb]
+                rb[:, 1:nb] .= W[:, nconv+1:nconv+nb]
+            else
+                mul!(ub[:, 1:nb], V[:, 1:j], Vc[:, nconv+1:nconv+nb])
+                mul!(rb[:, 1:nb], W[:, 1:j], Vc[:, nconv+1:nconv+nb])
+            end
             rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv+1:nconv+nb]'
             rnorms = columnwise_norms(rb[:, 1:nb])
         end
