@@ -52,6 +52,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         hardlocked = zeros(Bool, k) # false if not hardlocked, true if hardlocked
         highest_soft_locked_ind = 0 # index of highest soft locked eigenvalue
         highest_hard_locked_ind = 0 # index of highest hard locked eigenvalue
+        lambda_hl  = zeros(real(T), k)   # eigenvalues of hard-locked pairs
 
         rb     = similar(v0, n, kb)      # residuals / corrections
         ub     = similar(v0, n, kb)      # Ritz vectors for active pairs
@@ -88,26 +89,31 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
 
     # ── Main loop ──────────────────────────────────────────────────────────
     jd_iter = 0
+    nhl_sum = 0
     for iter in 1:maxit
         jd_iter = iter
 
         # Active pairs: nconv+1 .. nconv+nb  (k-nconv target + nbuff buffer)
+        nhl = highest_hard_locked_ind
+        nhl_sum += nhl
+        nconv_r = nconv - nhl   # soft-locked count in reduced space V[:,nhl+1:j]
         nb = max(min(k - nconv + nbuff, j - nconv), 1)
 
         # Restart: keep kb Ritz vectors (soft-locked stay in V)
         if j + nb >= kmax
             @timing "jd: restart" begin
-                mul!(buffer[:, 1:jmin], V[:, 1:j], Vc[:, 1:jmin])
-                V[:, 1:jmin] .= buffer[:, 1:jmin]
-                mul!(buffer[:, 1:jmin], W[:, 1:j], Vc[:, 1:jmin])
-                W[:, 1:jmin] .= buffer[:, 1:jmin]
-                Hc = Hermitian(Diagonal(T.(ew[1:jmin])))
-                j = jmin
+                jmin_r = jmin - nhl
+                mul!(buffer[:, 1:jmin_r], V[:, nhl+1:j], Vc[:, 1:jmin_r])
+                V[:, nhl+1:nhl+jmin_r] .= buffer[:, 1:jmin_r]
+                mul!(buffer[:, 1:jmin_r], W[:, nhl+1:j], Vc[:, 1:jmin_r])
+                W[:, nhl+1:nhl+jmin_r] .= buffer[:, 1:jmin_r]
+                Hc = Hermitian(Diagonal(T.(ew[1:jmin_r])))
+                j = nhl + jmin_r
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
                 # Because Hc is diagonal, eigenvalues and eigenvectors are trivial
-                ew = ew[1:jmin]
-                Vc = similar(V, jmin, jmin)  # identity matrix. mul! with GPU arrays
-                fill!(Vc, zero(T))           # do not like I, so explicit matrix
+                ew = ew[1:jmin_r]
+                Vc = similar(V, jmin_r, jmin_r)  # identity matrix. mul! with GPU arrays
+                fill!(Vc, zero(T))               # do not like I, so explicit matrix
                 Vc[diagind(Vc)] .= one(T)
                 disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
             end
@@ -115,9 +121,9 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
 
         # Compute residuals for active pairs nconv+1..nconv+nb (blocked BLAS-3)
         @timing "jd: residual" begin
-            mul!(ub[:, 1:nb], V[:, 1:j], Vc[:, nconv+1:nconv+nb])
-            mul!(rb[:, 1:nb], W[:, 1:j], Vc[:, nconv+1:nconv+nb])
-            rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv+1:nconv+nb]'
+            mul!(ub[:, 1:nb], V[:, nhl+1:j], Vc[:, nconv_r+1:nconv_r+nb])
+            mul!(rb[:, 1:nb], W[:, nhl+1:j], Vc[:, nconv_r+1:nconv_r+nb])
+            rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv_r+1:nconv_r+nb]'
             rnorms = columnwise_norms(rb[:, 1:nb])
         end
 
@@ -144,7 +150,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
             @timing "jd: lock" begin
                 # soft lock part: 
                 highest_soft_locked_ind += nconv_new
-                softlocked[nconv+1:nconv_new] = true
+                softlocked[nconv+1:nconv+nconv_new] .= true
                 nconv += nconv_new
                 nconv >= k && break
                 # Shift remaining active residuals to front
@@ -155,16 +161,35 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                 else
                     continue
                 end
-                # hard lock part
-                nhardlocknew = findfirst(ew[nconv] .- ew[highest_hard_locked_ind+1:nconv] .< 1.0)
+                # hard lock part: gap criterion in reduced space (ew indexed from 1 after trimming)
+                nconv_r = nconv - nhl
+                nhardlocknew = findfirst(ew[nconv_r] .- ew[1:nconv_r] .< .2)
                 if isnothing(nhardlocknew)
                     nhardlocknew = 0
-                else 
+                else
                     nhardlocknew -= 1
                 end
                 if nhardlocknew > 0
-                    hardlocked[highest_hard_locked_ind+1:highest_hard_locked_ind+nhardlocknew] = true
+                    hardlocked[highest_hard_locked_ind+1:highest_hard_locked_ind+nhardlocknew] .= true
                     highest_hard_locked_ind += nhardlocknew
+                    # Rotate V[:,nhl+1:j] to Ritz basis so hard-locked Ritz vectors
+                    # land in V[:,nhl+1:nhl_new] and remaining in V[:,nhl_new+1:j]
+                    @timing "jd: hardlock" begin
+                        jr_old = j - nhl
+                        lambda_hl[nhl+1:highest_hard_locked_ind] .= ew[1:nhardlocknew]
+                        Vtmp = V[:, nhl+1:j] * Vc[:, 1:jr_old]
+                        V[:, nhl+1:j] .= Vtmp
+                        Wtmp = W[:, nhl+1:j] * Vc[:, 1:jr_old]
+                        W[:, nhl+1:j] .= Wtmp
+                        nhl = highest_hard_locked_ind
+                        jr = j - nhl
+                        Hc = Hermitian(Diagonal(T.(ew[nhardlocknew+1:nhardlocknew+jr])))
+                        ew = ew[nhardlocknew+1:nhardlocknew+jr]
+                        Vc = similar(V, jr, jr)
+                        fill!(Vc, zero(T))
+                        Vc[diagind(Vc)] .= one(T)
+                        nconv_r = nconv - nhl
+                    end
                 end
 
             end
@@ -180,7 +205,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         end
 
         # Expand subspace, new expanded Hc comes out
-        Hc, nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, orth_method, ub)
+        Hc, nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, orth_method, ub, nhl)
         nmv += nact
         j += nact
 
@@ -190,17 +215,17 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         end
     end
 
-    disp && @printf("jd: done. nconv=%d/%d  iter=%d  nmv=%d\n", nconv, k, jd_iter, nmv)
+    @printf("jd: done. nconv=%d/%d  iter=%d  nmv=%d  avg_hardlocked/k=%.2f\n", nconv, k, jd_iter, nmv, nhl_sum / (jd_iter * k))
 
     if nconv < k
         @warn "jd did not converge within $maxit iterations."
     end
 
-    # Use final Ritz values — consistent with the eigenvectors computed below
-    lambda = copy(ew[1:min(k, j)])  # return a proper array, and not a view
-
-    # Compute eigenvectors from current Ritz vectors
-    X = V[:, 1:j] * Vc[:, 1:k]
+    nhl = highest_hard_locked_ind
+    lambda = vcat(lambda_hl[1:nhl], ew[1:k - nhl])
+    X = similar(v0, n, k)
+    X[:, 1:nhl] .= V[:, 1:nhl]
+    X[:, nhl+1:k] .= V[:, nhl+1:j] * Vc[:, 1:k - nhl]
 
     return X, lambda, history[1:hist_row, :]
 end
@@ -221,7 +246,8 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
                       Hc::AbstractMatrix, rb::AbstractMatrix,
                       j::Int, nb::Int, kmax::Int, A,
                       orth_method::Symbol=:mgs,
-                      buf::AbstractMatrix=similar(V, size(V, 1), nb))
+                      buf::AbstractMatrix=similar(V, size(V, 1), nb),
+                      nhl::Int=0)
     nact = 0
 
     @timing "jd: ortho" begin
@@ -250,9 +276,10 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
 
     # Update projected Hamiltonian (full column block, BLAS-3)
     @timing "jd: expand overlap" begin
-        Hexp = similar(Hc, j+nact, j+nact)
-        Hexp[1:j, 1:j] .= Hc
-        mul!(Hexp[:, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])
+        jr = j - nhl
+        Hexp = similar(Hc, jr+nact, jr+nact)
+        Hexp[1:jr, 1:jr] .= Hc
+        mul!(Hexp[:, jr+1:jr+nact], V[:, nhl+1:j+nact]', W[:, j+1:j+nact])
         Hexp = Hermitian(Hexp)  # Hermitian ==> no need for explicit symmetrization
     end
 
