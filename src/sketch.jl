@@ -59,8 +59,7 @@ function sketch(n::Integer, s::Integer, type::AbstractString, template::Abstract
     elseif st == "complex_srtt"
         IX = to_device(randperm(n)[1:s], template)
         diag_sign = similar(template, complex(T), n)
-        R = real(T)
-        map!(_ -> exp(im * R(2π) * rand(R)), diag_sign, diag_sign)
+        map!(_ -> exp(im * 2π * rand(real(T))), diag_sign, diag_sign)
         return SRTTSketchOp(diag_sign, IX, :complex, 1/sqrt(s))
 
     elseif st == "real_srtt"
@@ -127,7 +126,7 @@ function sparsesign(d::Integer, m::Integer, ζ::Integer,
     nnz = m * ζ
     I = Vector{Int}(undef, nnz)
     J = Vector{Int}(undef, nnz)
-    V = Vector{complex(T)}(undef, nnz)
+    V = Vector{T}(undef, nnz)
     v = 1.0 / sqrt(ζ)
 
     idx = 1
@@ -191,11 +190,9 @@ function sparsestack(d::Integer, m::Integer, ζ::Integer,
         starts[j] + off + 1 # to 1-based
     end
 
-    # Note: the sparse matrix created here needs to be complex, for the proper multiplication to
-    #       take place on the GPU (multiplying a complex matrix by a real sparse matrix fails)
-    a = convert(complex(T), 1 / sqrt(ζ))     # magnitude
-    signs = map(i -> ifelse(rand(Bool), 1, -1), indices)
-    nzval = signs .* a
+    a = 1 / sqrt(ζ)     # magnitude
+    nzval = similar(template, T, nnz)
+    map!(i -> ifelse(rand(Bool), a, -a), nzval, indices)
 
     return sparse_matrix_csc(d, m, colptr, rowval, nzval, template)
 end
