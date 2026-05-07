@@ -20,7 +20,7 @@ NVTX = "5da4648a-3479-48b8-97b9-01cb529c0a1f"
 [extensions]
 RandESCAMDGPUExt = "AMDGPU"
 RandESCCUDAExt = "CUDA"
-RandESCNVTXExt = "NVTX"
+RandESCNVTXExt = ["NVTX", "CUDA"]
 
 [compat]
 AbstractFFTs = "1.5"

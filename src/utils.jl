@@ -1,6 +1,16 @@
 using FFTW
 using GPUArraysCore
 
+"""Enable NVTX profiling"""
+function activate_nvtx_profiling()
+    if isnothing(Base.get_extension(RandESC, :RandESCNVTXExt))
+        @warn("NVTX and CUDA modules not loaded. NVTX profiling is not available.")
+    else
+        sync_nvtx_profiling(true)
+    end
+end
+sync_nvtx_profiling() = nothing  # default no-op implementation; overridden by RandESCNVTXExt
+
 """Return the 2-norm of each column of `X` as a vector."""
 function columnwise_norms(X::AbstractArray)
     vec(sqrt.(sum(abs2, X; dims=1)))

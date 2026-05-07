@@ -25,6 +25,10 @@ To get a statsitical summary instead of a timeline, you can run
 
     nsys stats --report nvtx_sum report1.nsys-rep
 
+Note that the first column (Time (%)) accounts for the total profiling time, including startup
+overead. To get accurate percentage spent in each section, compare the relevant Total Time (ns)
+entry to that of the "Main:profile" line.
+
 Final note: both the CUDA and NVTX packages are required for this example, but they are not
 included in the local project environment (too heavy). You will need to add them on your own.
 """
@@ -72,6 +76,9 @@ end
 scfres = self_consistent_field(basis; maxiter=3, eigensolver=make_eigensolver(; use_randomization=randomize))
 
 # Actual profiling run. Keep number of iterations low to avoid gigantic data dumps
+RandESC.activate_nvtx_profiling() # add device synchronization for accurate NVTX ranges
 CUDA.@profile external=true begin
-    self_consistent_field(basis; maxiter=2, eigensolver=make_eigensolver(; use_randomization=randomize))
+    NVTX.@range "profile" begin
+        self_consistent_field(basis; maxiter=2, eigensolver=make_eigensolver(; use_randomization=randomize))
+    end
 end
