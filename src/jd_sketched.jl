@@ -192,8 +192,14 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # Compute sketched residuals in sketch space: Θr = SW*U - SV*U*diag(θ).
         # Avoids re-applying Θ to the full-space residual rb.
         @timing "jd_sketched: sketch" begin
-            mul!(SX_rq[:, 1:nb], SV[:, 1:j], Y_nb)
-            mul!(SW_rq[:, 1:nb], SW[:, 1:j], Y_nb)
+            if restarted
+                # U is identity, can simply copy columns
+                SW_rq[:, 1:nb] .= SW[:, nconv+1:nconv+nb]
+                SX_rq[:, 1:nb] .= SV[:, nconv+1:nconv+nb]
+            else
+                mul!(SX_rq[:, 1:nb], SV[:, 1:j], Y_nb)
+                mul!(SW_rq[:, 1:nb], SW[:, 1:j], Y_nb)
+            end
             SW_rq[:, 1:nb] .-= SX_rq[:, 1:nb] .* theta_b'
             rnorms = columnwise_norms(SW_rq[:, 1:nb])
         end
