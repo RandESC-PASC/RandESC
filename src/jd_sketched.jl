@@ -163,7 +163,10 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 fill!(U,  zero(T)); U[diagind(U)] .= one(T)
                 ew = ew[1:nk]
                 disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
+                restarted = true
             end
+        else
+            restarted = false
         end
 
         # Compute residuals for active pairs nconv+1..nconv+nb (BLAS-3).
@@ -174,8 +177,14 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         SW_rq = view(s_buffer, :, nb+1:2*nb)
         @timing "jd_sketched: residual" begin
             Y_nb = view(U, :, nconv+1:nconv+nb)
-            mul!(ub[:, 1:nb], V[:, 1:j], Y_nb)
-            mul!(rb[:, 1:nb], W[:, 1:j], Y_nb)
+            if restarted
+                # U is identity, can simply copy columns
+                ub[:, 1:nb] .= V[:, nconv+1:nconv+nb]
+                rb[:, 1:nb] .= W[:, nconv+1:nconv+nb]
+            else
+                mul!(ub[:, 1:nb], V[:, 1:j], Y_nb)
+                mul!(rb[:, 1:nb], W[:, 1:j], Y_nb)
+            end
             theta_b = ew[nconv+1:nconv+nb]
             rb[:, 1:nb] .-= ub[:, 1:nb] .* theta_b'
         end
