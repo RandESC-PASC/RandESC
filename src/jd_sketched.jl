@@ -15,8 +15,13 @@ Structure mirrors `jd` exactly; the only differences are:
   - Convergence is measured as norm of residuals.
 
 Soft-locking: converged Ritz vectors stay in V; corrections are generated only
-for active pairs. nbuff=2 buffer pairs are kept beyond k. Search space restarts
-to jmin=2*(k+nbuff) vectors when full, and grows up to jmax=4*(k+nbuff).
+for active pairs. Hard-locking: at each restart, soft-locked pairs whose eigenvalue
+is more than `hardlock_gap` below the largest soft-locked eigenvalue are moved into
+a fixed prefix V[:,1:nhl] and excluded from the projected eigenvalue problem,
+reducing its size. The restart already rotates V to the Ritz basis (standard
+orthonormal), so no extra rotation is needed for hard-locking. nbuff=2 buffer
+pairs are kept beyond k. Search space restarts to jmin=2*(k+nbuff) vectors when
+full, and grows up to jmax=4*(k+nbuff).
 
 # Arguments
 - `A`: Symmetric/Hermitian matrix or operator
@@ -32,6 +37,7 @@ to jmin=2*(k+nbuff) vectors when full, and grows up to jmax=4*(k+nbuff).
 - `sketch_type="sparsestack"`: Sketch operator type (see sketch.jl)
 - `sketch_size=-1`: Sketch dimension s (default: `max(5*jmax, 5*k)`)
 - `orth_method=:rcgs`: Θ-orthogonalization method (`:rcgs`, `:rcgs2`, `:rqr`)
+- `hardlock_gap=0.01`: Minimum gap (largest_soft_λ - λᵢ) required to hard-lock pair i
 
 # Returns
 `(X, lambda, history)` where X is nxk, lambda is length k,
@@ -46,7 +52,9 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                           disp::Bool=false,
                           sketch_type::String="sparsestack",
                           sketch_size::Int=-1,
-                          orth_method::Symbol=:rcgs)
+                          orth_method::Symbol=:rcgs,
+                          hardlock_gap::Float64=0.01,
+                          sketch_project_out::Bool=false)
 
     n = size(A, 1)
     k = min(k, n)
@@ -69,9 +77,11 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     # ── Workspace ─────────────────────────────────────────────────────────
     @timing "jd_sketched: allocation" begin
         # Active subspace: columns 1:j live in the the following buffers.
-        V  = similar(v0, T, n, jmax) # search space
+        V  = similar(v0, T, n, jmax) # search space (hard-locked prefix + active)
         W  = similar(v0, T, n, jmax) # W = A * V
         SV = fill!(similar(v0, T, s, jmax), zero(T)) # Sketch of search space
+
+        lambda_hl = zeros(real(T), k)  # eigenvalues of hard-locked pairs
 
         # n_buffer/s_buffer: rotation scratch during restart (full 2*kb columns);
         # ub/rb are declared as views into these buffers at each usage site.
@@ -80,15 +90,16 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
-    # Mc: projected matrix V'AV, j×j Hermitian
-    # Oc: Gram matrix V'V,       j×j Hermitian (≈ I but not exactly for Θ-orthonormal V)
-    # ew: Ritz values from generalized Hermitian eigen, length j, Real, sorted
-    # U:  Ritz vectors (Oc-orthonormal), j×j
+    # Mc: projected matrix V'AV over reduced space, jr×jr Hermitian
+    # Oc: Gram matrix V'V over reduced space,       jr×jr Hermitian (≈ I but not exactly)
+    # ew: Ritz values from generalized Hermitian eigen, length jr, Real, sorted
+    # U:  Ritz vectors (Oc-orthonormal), jr×jr
 
     nconv    = 0
     nmv      = 0
     history  = zeros(Float64, maxit, 3)
     hist_row = 0
+    highest_hard_locked_ind = 0  # nhl: V[:,1:nhl] are hard-locked eigenvectors
 
     # ── Initialize subspace ───────────────────────────────────────────────
     j = min(kb, n)
@@ -126,57 +137,77 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     for iter in 1:maxit
         jd_iter = iter
 
+        nhl = highest_hard_locked_ind
+        nconv_r = nconv - nhl  # soft-locked count in reduced space V[:,nhl+1:j]
+
         # Active pairs: nconv+1 .. nconv+nb  (k-nconv target + nbuff buffer)
         nb = max(min(k - nconv + nbuff, j - nconv), 1)
 
-        # Restart: keep jmin Ritz vectors (soft-locked pairs stay in V).
-        # U[:,1:nk] is Oc-orthonormal, so after rotation V_new = V*U[:,1:nk]:
-        #   Mc_new = Diagonal(ew[1:nk])  and  Oc_new = I.
-        # No QR needed (unlike the general-eigen restart in the old code).
+        # Restart: rotate reduced space to Ritz basis, then opportunistically hard-lock.
+        # Hard-locking is free here since V is already standard orthonormal after rotation
+        # (U' Oc U = I  =>  (VU)'(VU) = I), so SV[:,nhl+1:...] = Theta*V[:,nhl+1:...] exactly.
         if j + nb >= jmax
             @timing "jd_sketched: restart" begin
-                nk    = min(jmin, j)
-                mul!(n_buffer[:, 1:nk], V[:, 1:j],  U[:, 1:nk])
-                V[:, 1:nk] .= n_buffer[:, 1:nk]
-                mul!(s_buffer[:, 1:nk], SV[:, 1:j], U[:, 1:nk])
-                SV[:, 1:nk] .= s_buffer[:, 1:nk]
-                mul!(n_buffer[:, 1:nk], W[:, 1:j],  U[:, 1:nk])
-                W[:, 1:nk] .= n_buffer[:, 1:nk]
-                j  = nk
+                nk = min(jmin, j - nhl)
+                mul!(n_buffer[:, 1:nk], V[:, nhl+1:j],  U[:, 1:nk])
+                V[:, nhl+1:nhl+nk] .= n_buffer[:, 1:nk]
+                mul!(s_buffer[:, 1:nk], SV[:, nhl+1:j], U[:, 1:nk])
+                SV[:, nhl+1:nhl+nk] .= s_buffer[:, 1:nk]
+                mul!(n_buffer[:, 1:nk], W[:, nhl+1:j],  U[:, 1:nk])
+                W[:, nhl+1:nhl+nk] .= n_buffer[:, 1:nk]
+                ew = ew[1:nk]
+
+                # Hard lock: V[:,nhl+1:nhl+nconv_r] are now Ritz vectors; pairs
+                # with gap > hardlock_gap to the largest soft-locked one move into prefix.
+                if nconv_r >= 2
+                    nhardlocknew = findfirst(ew[nconv_r] .- ew[1:nconv_r] .< hardlock_gap)
+                    nhardlocknew = isnothing(nhardlocknew) ? nconv_r : nhardlocknew - 1
+                else
+                    nhardlocknew = 0
+                end
+                if nhardlocknew > 0
+                    lambda_hl[nhl+1:nhl+nhardlocknew] .= ew[1:nhardlocknew]
+                    highest_hard_locked_ind += nhardlocknew
+                    nhl = highest_hard_locked_ind
+                    ew = ew[nhardlocknew+1:end]
+                    nconv_r = nconv - nhl
+                end
+
+                jr = length(ew)
+                j  = nhl + jr
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
-                Mc = similar(V, T, nk, nk)
+                Mc = similar(V, T, jr, jr)
                 fill!(Mc, zero(T))
-                Mc[diagind(Mc)] .= ew[1:nk]
+                Mc[diagind(Mc)] .= ew
                 Mc = Hermitian(Mc)
-                Oc = similar(V, T, nk, nk)
+                Oc = similar(V, T, jr, jr)
                 fill!(Oc, zero(T))
                 Oc[diagind(Oc)] .= one(T)
                 Oc = Hermitian(Oc)
-                U  = similar(V, T, nk, nk)
+                U  = similar(V, T, jr, jr)
                 fill!(U,  zero(T)); U[diagind(U)] .= one(T)
-                ew = ew[1:nk]
-                disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
+                disp && @printf("  RESTART -> j=%d  nconv=%d/%d  nhl=%d\n", j, nconv, k, nhl)
                 restarted = true
             end
         else
             restarted = false
         end
 
-        # Compute residuals for active pairs nconv+1..nconv+nb (BLAS-3).
-        # ew[nconv+1:nconv+nb] are used directly as Rayleigh quotients.
+        # Compute residuals for active pairs (BLAS-3).
+        # Indices in reduced space: nconv_r+1 .. nconv_r+nb
         ub    = view(n_buffer, :, 1:nb)
         rb    = view(n_buffer, :, nb+1:2*nb)
         @timing "jd_sketched: residual" begin
-            Y_nb = view(U, :, nconv+1:nconv+nb)
+            Y_nb = view(U, :, nconv_r+1:nconv_r+nb)
             if restarted
                 # U is identity, can simply copy columns
-                ub[:, 1:nb] .= V[:, nconv+1:nconv+nb]
-                rb[:, 1:nb] .= W[:, nconv+1:nconv+nb]
+                ub[:, 1:nb] .= V[:, nhl+nconv_r+1:nhl+nconv_r+nb]
+                rb[:, 1:nb] .= W[:, nhl+nconv_r+1:nhl+nconv_r+nb]
             else
-                mul!(ub[:, 1:nb], V[:, 1:j], Y_nb)
-                mul!(rb[:, 1:nb], W[:, 1:j], Y_nb)
+                mul!(ub[:, 1:nb], V[:, nhl+1:j], Y_nb)
+                mul!(rb[:, 1:nb], W[:, nhl+1:j], Y_nb)
             end
-            rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv + 1:nconv + nb]'
+            rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv_r+1:nconv_r+nb]'
             rnorms = columnwise_norms(rb[:, 1:nb])
         end
 
@@ -226,7 +257,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
         scratch = view(s_buffer, :, nb+1:2*nb)
         Mc, Oc, nact = _jdrb_expand!(V, SV, W, Mc, Oc, rb, j, nb, jmax, A, Theta,
-                                      orth_method, scratch)
+                                      orth_method, scratch, nhl, sketch_project_out)
         nmv += nact
         j   += nact
 
@@ -244,8 +275,12 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         @warn "jd_sketched did not converge within $maxit iterations."
     end
 
-    # U[:,1:k] are Oc-orthonormal => X = V*U[:,1:k] is standard orthonormal
-    return V[:, 1:j] * U[:, 1:k], copy(ew[1:k]), history[1:hist_row, :]
+    nhl = highest_hard_locked_ind
+    lambda = vcat(lambda_hl[1:nhl], ew[1:k - nhl])
+    X = similar(v0, n, k)
+    X[:, 1:nhl] .= V[:, 1:nhl]
+    X[:, nhl+1:k] .= V[:, nhl+1:j] * U[:, 1:k - nhl]
+    return X, lambda, history[1:hist_row, :]
 end
 
 
@@ -255,7 +290,9 @@ end
 Expand search subspace with up to `nb` correction vectors from `rb[:,1:nb]`.
 
 Mirrors `_jdb_expand!` from jd, but uses Θ-orthogonalization and maintains
-Mc = V'AV, Oc = V'V incrementally.
+Mc = V'AV, Oc = V'V incrementally over the reduced space V[:,nhl+1:j+nact].
+The full V[:,1:j] (including hard-locked prefix) is used for orthogonalization
+so new vectors are orthogonal to everything.
 
 Phase 1: sketch rb, Θ-project out V[:,1:j], then Θ-orthonormalize among themselves.
 Then compute A * new columns and expand Mc and Oc.
@@ -265,10 +302,16 @@ Then compute A * new columns and expand Mc and Oc.
 Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
 """
 @views function _jdrb_expand!(V, SV, W, Mc, Oc, rb, j, nb, jmax, A, Theta, orth_method,
-                               SV_scratch)
+                               SV_scratch, nhl=0, sketch_project_out=false)
     @timing "jd_sketched: ortho" begin
-        mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
-        _sketch_project_out!(rb[:, 1:nb], SV_scratch[:, 1:nb], V[:, 1:j], SV[:, 1:j], orth_method)
+        if sketch_project_out
+            mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
+            _sketch_project_out!(rb[:, 1:nb], SV_scratch[:, 1:nb], V[:, 1:j], SV[:, 1:j], orth_method)
+        else
+            c = V[:, 1:j]' * rb[:, 1:nb]
+            mul!(rb[:, 1:nb], V[:, 1:j], c, -1, 1)
+            mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
+        end
         nact = _sketch_ortho!(rb[:, 1:nb], SV_scratch[:, 1:nb], orth_method)
     end
 
@@ -283,16 +326,17 @@ Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
     # Compute A * new basis vectors and sketch AV
     @timing "jd_sketched: matvec" mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
 
-    # Expand Mc = V'AV and Oc = V'V
+    # Expand Mc = V'AV and Oc = V'V over reduced space V[:,nhl+1:j+nact]
     @timing "jd_sketched: expand overlap" begin
-        Mexp = similar(Mc, j+nact, j+nact)
-        Mexp[1:j, 1:j] .= Mc
-        mul!(Mexp[:, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])
+        jr = j - nhl
+        Mexp = similar(Mc, jr+nact, jr+nact)
+        Mexp[1:jr, 1:jr] .= Mc
+        mul!(Mexp[:, jr+1:jr+nact], V[:, nhl+1:j+nact]', W[:, j+1:j+nact])
         Mexp = Hermitian(Mexp)
 
-        Oexp = similar(Oc, j+nact, j+nact)
-        Oexp[1:j, 1:j] .= Oc
-        mul!(Oexp[:, j+1:j+nact], V[:, 1:j+nact]', V[:, j+1:j+nact])
+        Oexp = similar(Oc, jr+nact, jr+nact)
+        Oexp[1:jr, 1:jr] .= Oc
+        mul!(Oexp[:, jr+1:jr+nact], V[:, nhl+1:j+nact]', V[:, j+1:j+nact])
         Oexp = Hermitian(Oexp)
     end
 
