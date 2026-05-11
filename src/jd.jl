@@ -6,8 +6,12 @@ using Printf
 
 Davidson eigensolver for symmetric/Hermitian matrices (smallest eigenvalues).
 Soft-locking: converged Ritz vectors stay in V; corrections are generated only
-for active pairs. nbuff=2 buffer pairs are kept beyond k. Search space restarts
-to jmin=2*(k+nbuff) vectors when full, and grows up to kmax=4*(k+nbuff).
+for active pairs. Hard-locking: at each restart, soft-locked pairs whose eigenvalue
+is more than `hardlock_gap` below the largest soft-locked eigenvalue are moved into
+a fixed prefix V[:,1:nhl] and excluded from the projected eigenvalue problem,
+reducing its size. The restart already rotates V to the Ritz basis, so no extra
+rotation is needed for hard-locking. nbuff=2 buffer pairs are kept beyond k. Search
+space restarts to jmin=2*(k+nbuff) vectors when full, and grows up to kmax=4*(k+nbuff).
 
 Arguments:
 - A: Hermitian matrix or operator
@@ -19,6 +23,7 @@ Arguments:
 - precond_preparator: callback f(M, X) to refresh preconditioner (optional)
 - disp: print iteration info
 - orth_method: orthogonalization method (:mgs, :mgs2, :qr) mgs better on cpu, qr on gpu
+- hardlock_gap: minimum gap (largest_soft_λ - λᵢ) required to hard-lock pair i (default 0.01)
 
 Returns (X, lambda, history) where X is n x k, lambda is length k,
 and history is nit x 3 with columns [max_rnorm, iter, nmv].
@@ -30,7 +35,8 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                      M=nothing,
                      precond_preparator=nothing,
                      disp::Bool=false,
-                     orth_method::Symbol=:mgs)
+                     orth_method::Symbol=:mgs,
+                     hardlock_gap::Float64=0.01)
 
     n = size(A, 1)
     k = min(k, n)
@@ -45,22 +51,24 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     # Note: inherit architecture from input v0 (CPU, NVIDIA GPU, AMD GPU, etc.).
     #       The resulting code is vendor agnostic.
     @timing "jd: allocation" begin
-        V      = similar(v0, n, kmax)    # search space basis (includes soft-locked)
-        W      = similar(v0, n, kmax)    # A * V
-        rb     = similar(v0, n, kb)      # residuals / corrections
-        ub     = similar(v0, n, kb)      # Ritz vectors for active pairs
-        buffer = similar(v0, n, jmin)    # Pre-allocated work array
+        V         = similar(v0, n, kmax)    # search space basis (hard-locked prefix + active)
+        W         = similar(v0, n, kmax)    # A * V
+        lambda_hl = zeros(real(T), k)       # eigenvalues of hard-locked pairs
+        rb        = similar(v0, n, kb)      # residuals / corrections
+        ub        = similar(v0, n, kb)      # Ritz vectors for active pairs
+        buffer    = similar(v0, n, jmin)    # Pre-allocated work array
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
-    # Hc: projected Hamiltonian, j x j T Hermitian matrix
-    # Vc: Ritz vectors of the projected problem, j x j T matrix
-    # ew: Ritz values of the projected problem, length j Real vector
+    # Hc: projected Hamiltonian over reduced (non-hard-locked) space, size (j-nhl) x (j-nhl)
+    # Vc: Ritz vectors of the projected problem
+    # ew: Ritz values of the projected problem
 
     nconv    = 0
     nmv      = 0
     history  = zeros(Float64, maxit, 3)
     hist_row = 0
+    highest_hard_locked_ind = 0  # nhl: V[:,1:nhl] are hard-locked eigenvectors
 
     # ── Initialize subspace ───────────────────────────────────────────────
     j = min(kb, n)
@@ -85,42 +93,65 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     for iter in 1:maxit
         jd_iter = iter
 
+        nhl = highest_hard_locked_ind
+        nconv_r = nconv - nhl  # soft-locked count in reduced space V[:,nhl+1:j]
+
         # Active pairs: nconv+1 .. nconv+nb  (k-nconv target + nbuff buffer)
         nb = max(min(k - nconv + nbuff, j - nconv), 1)
 
-        # Restart: keep kb Ritz vectors (soft-locked stay in V)
+        # Restart: rotate reduced space to Ritz basis, then opportunistically hard-lock.
+        # Hard-locking is free here since V is already in Ritz basis after the rotation.
         if j + nb >= kmax
             @timing "jd: restart" begin
-                mul!(buffer[:, 1:jmin], V[:, 1:j], Vc[:, 1:jmin])
-                V[:, 1:jmin] .= buffer[:, 1:jmin]
-                mul!(buffer[:, 1:jmin], W[:, 1:j], Vc[:, 1:jmin])
-                W[:, 1:jmin] .= buffer[:, 1:jmin]
-                Hc = Hermitian(Diagonal(T.(ew[1:jmin])))
-                j = jmin
+                mul!(buffer[:, 1:jmin], V[:, nhl+1:j], Vc[:, 1:jmin])
+                V[:, nhl+1:nhl+jmin] .= buffer[:, 1:jmin]
+                mul!(buffer[:, 1:jmin], W[:, nhl+1:j], Vc[:, 1:jmin])
+                W[:, nhl+1:nhl+jmin] .= buffer[:, 1:jmin]
+                ew = ew[1:jmin]
+
+                # Hard lock: V[:,nhl+1:nhl+nconv_r] are now Ritz vectors; pairs
+                # with gap > hardlock_gap to the largest soft-locked one move into prefix.
+                if nconv_r >= 2
+                    nhardlocknew = findfirst(ew[nconv_r] .- ew[1:nconv_r] .< hardlock_gap)
+                    nhardlocknew = isnothing(nhardlocknew) ? nconv_r : nhardlocknew - 1
+                else
+                    nhardlocknew = 0
+                end
+                if nhardlocknew > 0
+                    lambda_hl[nhl+1:nhl+nhardlocknew] .= ew[1:nhardlocknew]
+                    highest_hard_locked_ind += nhardlocknew
+                    nhl = highest_hard_locked_ind
+                    ew = ew[nhardlocknew+1:end]
+                    nconv_r = nconv - nhl
+                end
+
+                jr = length(ew)
+                Hc = Hermitian(Diagonal(T.(ew)))
+                j = nhl + jr
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
                 # Because Hc is diagonal, eigenvalues and eigenvectors are trivial
-                ew = ew[1:jmin]
-                Vc = similar(V, jmin, jmin)  # identity matrix. mul! with GPU arrays
-                fill!(Vc, zero(T))           # do not like I, so explicit matrix
+                Vc = similar(V, jr, jr)  # identity matrix. mul! with GPU arrays
+                fill!(Vc, zero(T))       # do not like I, so explicit matrix
                 Vc[diagind(Vc)] .= one(T)
-                disp && @printf("  RESTART -> j=%d  nconv=%d/%d\n", j, nconv, k)
+                disp && @printf("  RESTART -> j=%d  nconv=%d/%d  nhl=%d\n", j, nconv, k, nhl)
                 restarted = true
             end
         else
             restarted = false
         end
 
-        # Compute residuals for active pairs nconv+1..nconv+nb (blocked BLAS-3)
+        # Compute residuals for active pairs (blocked BLAS-3)
+        # Indices in reduced space: nconv_r+1 .. nconv_r+nb
         @timing "jd: residual" begin
             if restarted
-                # Vc is identity, can simply copy columns over
-                ub[:, 1:nb] .= V[:, nconv+1:nconv+nb]
-                rb[:, 1:nb] .= W[:, nconv+1:nconv+nb]
+                # Vc is identity: active Ritz vectors sit directly in V
+                ub[:, 1:nb] .= V[:, nhl+nconv_r+1:nhl+nconv_r+nb]
+                rb[:, 1:nb] .= W[:, nhl+nconv_r+1:nhl+nconv_r+nb]
             else
-                mul!(ub[:, 1:nb], V[:, 1:j], Vc[:, nconv+1:nconv+nb])
-                mul!(rb[:, 1:nb], W[:, 1:j], Vc[:, nconv+1:nconv+nb])
+                mul!(ub[:, 1:nb], V[:, nhl+1:j], Vc[:, nconv_r+1:nconv_r+nb])
+                mul!(rb[:, 1:nb], W[:, nhl+1:j], Vc[:, nconv_r+1:nconv_r+nb])
             end
-            rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv+1:nconv+nb]'
+            rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv_r+1:nconv_r+nb]'
             rnorms = columnwise_norms(rb[:, 1:nb])
         end
 
@@ -167,11 +198,11 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         end
 
         # Expand subspace, new expanded Hc comes out
-        Hc, nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, orth_method, ub)
+        Hc, nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, orth_method, ub, nhl)
         nmv += nact
         j += nact
 
-        # Diagonalize over full subspace (soft-locked pairs stay in V)
+        # Diagonalize over reduced subspace (hard-locked excluded, soft-locked included)
         @timing "jd: diag" begin
             ew, Vc = eigen(Hc)
         end
@@ -183,11 +214,11 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         @warn "jd did not converge within $maxit iterations."
     end
 
-    # Use final Ritz values — consistent with the eigenvectors computed below
-    lambda = copy(ew[1:min(k, j)])  # return a proper array, and not a view
-
-    # Compute eigenvectors from current Ritz vectors
-    X = V[:, 1:j] * Vc[:, 1:k]
+    nhl = highest_hard_locked_ind
+    lambda = vcat(lambda_hl[1:nhl], ew[1:k - nhl])
+    X = similar(v0, n, k)
+    X[:, 1:nhl] .= V[:, 1:nhl]
+    X[:, nhl+1:k] .= V[:, nhl+1:j] * Vc[:, 1:k - nhl]
 
     return X, lambda, history[1:hist_row, :]
 end
@@ -198,9 +229,11 @@ end
 """
 Expand search subspace with up to `nb` correction vectors from `rb[:,1:nb]`.
 
-Phase 1 (BLAS-3): orthogonalize all nb vectors at once against V[:,1:j].
+Phase 1 (BLAS-3): orthogonalize all nb vectors at once against V[:,1:j]
+(includes hard-locked prefix V[:,1:nhl]).
 Phase 2: orthonormalize the nb candidates among themselves via `orth_method`, accept non-degenerate columns.
-Then compute A * new columns and returns the expanded projected Hamiltonian Hexp.
+Then compute A * new columns and returns the expanded projected Hamiltonian Hexp
+over the reduced space V[:,nhl+1:j+nact].
 
 Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vectors `nact`.
 """
@@ -208,11 +241,13 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
                       Hc::AbstractMatrix, rb::AbstractMatrix,
                       j::Int, nb::Int, kmax::Int, A,
                       orth_method::Symbol=:mgs,
-                      buf::AbstractMatrix=similar(V, size(V, 1), nb))
+                      buf::AbstractMatrix=similar(V, size(V, 1), nb),
+                      nhl::Int=0)
     nact = 0
 
     @timing "jd: ortho" begin
         # Phase 1: orthogonalize all nb corrections against existing V[:,1:j]
+        # (includes hard-locked prefix, ensuring full orthogonality)
         let Vj = view(V, :, 1:j), rbv = view(rb, :, 1:nb)
             c1v = Vj' * rbv
             mul!(rbv, Vj, c1v, -1, 1)
@@ -235,11 +270,12 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
     # Compute A * new basis vectors
     @timing "jd: matvec" mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
 
-    # Update projected Hamiltonian (full column block, BLAS-3)
+    # Update projected Hamiltonian over reduced space V[:,nhl+1:j+nact]
     @timing "jd: expand overlap" begin
-        Hexp = similar(Hc, j+nact, j+nact)
-        Hexp[1:j, 1:j] .= Hc
-        mul!(Hexp[:, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])
+        jr = j - nhl
+        Hexp = similar(Hc, jr+nact, jr+nact)
+        Hexp[1:jr, 1:jr] .= Hc
+        mul!(Hexp[:, jr+1:jr+nact], V[:, nhl+1:j+nact]', W[:, j+1:j+nact])
         Hexp = Hermitian(Hexp)  # Hermitian ==> no need for explicit symmetrization
     end
 
