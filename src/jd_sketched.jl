@@ -12,8 +12,7 @@ Structure mirrors `jd` exactly; the only differences are:
     Mc = V'AV and Oc = V'V (the Gram matrix of the Θ-orthonormal basis)
   - Eigenvalues are real and sorted by `eigen(Hermitian, Hermitian)`; no sortperm needed
   - X = V*U[:,1:k] is standard orthonormal since U'*Oc*U = I = U'*(V'V)*U = X'X
-  - Convergence is measured in Θ-norm: ‖Θr‖ instead of ‖r‖; sketched residuals are
-    computed as SW*U - SV*U*diag(θ) without re-applying Θ to the full-space residual
+  - Convergence is measured as norm of residuals.
 
 Soft-locking: converged Ritz vectors stay in V; corrections are generated only
 for active pairs. nbuff=2 buffer pairs are kept beyond k. Search space restarts
@@ -73,10 +72,9 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         V  = similar(v0, T, n, jmax) # search space
         W  = similar(v0, T, n, jmax) # W = A * V
         SV = fill!(similar(v0, T, s, jmax), zero(T)) # Sketch of search space
-        SW = fill!(similar(v0, T, s, jmax), zero(T)) # Sketch of A * V
 
         # n_buffer/s_buffer: rotation scratch during restart (full 2*kb columns);
-        # ub/rb and SX_rq/SW_rq are declared as views into these buffers at each usage site.
+        # ub/rb are declared as views into these buffers at each usage site.
         n_buffer = similar(v0, T, n, 2*kb)
         s_buffer = similar(v0, T, s, 2*kb)
     end
@@ -107,9 +105,6 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     @timing "jd_sketched: matvec" begin
         mul!(W[:, 1:j], A, V[:, 1:j])
         nmv += j
-    end
-    @timing "jd_sketched: sketch" begin
-        mul!(SW[:, 1:j], Theta, W[:, 1:j])
     end
     # Mc = V'AV, Oc = V'V — stored as plain arrays so similar(Mc,...) preserves device type;
     # Hermitian wrapper applied only at eigen call sites.
@@ -147,8 +142,6 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 SV[:, 1:nk] .= s_buffer[:, 1:nk]
                 mul!(n_buffer[:, 1:nk], W[:, 1:j],  U[:, 1:nk])
                 W[:, 1:nk] .= n_buffer[:, 1:nk]
-                mul!(s_buffer[:, 1:nk], SW[:, 1:j], U[:, 1:nk])
-                SW[:, 1:nk] .= s_buffer[:, 1:nk]
                 j  = nk
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
                 Mc = similar(V, T, nk, nk)
@@ -173,8 +166,6 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # ew[nconv+1:nconv+nb] are used directly as Rayleigh quotients.
         ub    = view(n_buffer, :, 1:nb)
         rb    = view(n_buffer, :, nb+1:2*nb)
-        SX_rq = view(s_buffer, :, 1:nb)
-        SW_rq = view(s_buffer, :, nb+1:2*nb)
         @timing "jd_sketched: residual" begin
             Y_nb = view(U, :, nconv+1:nconv+nb)
             if restarted
@@ -185,23 +176,8 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 mul!(ub[:, 1:nb], V[:, 1:j], Y_nb)
                 mul!(rb[:, 1:nb], W[:, 1:j], Y_nb)
             end
-            theta_b = ew[nconv+1:nconv+nb]
-            rb[:, 1:nb] .-= ub[:, 1:nb] .* theta_b'
-        end
-
-        # Compute sketched residuals in sketch space: Θr = SW*U - SV*U*diag(θ).
-        # Avoids re-applying Θ to the full-space residual rb.
-        @timing "jd_sketched: sketch" begin
-            if restarted
-                # U is identity, can simply copy columns
-                SW_rq[:, 1:nb] .= SW[:, nconv+1:nconv+nb]
-                SX_rq[:, 1:nb] .= SV[:, nconv+1:nconv+nb]
-            else
-                mul!(SX_rq[:, 1:nb], SV[:, 1:j], Y_nb)
-                mul!(SW_rq[:, 1:nb], SW[:, 1:j], Y_nb)
-            end
-            SW_rq[:, 1:nb] .-= SX_rq[:, 1:nb] .* theta_b'
-            rnorms = columnwise_norms(SW_rq[:, 1:nb])
+            rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nvonv + 1:nconv + nv]'
+            rnorms = columnwise_norms(rb[:, 1:nb])
         end
 
         # Convergence check on active target pairs (skip first iteration, like jd)
@@ -248,9 +224,9 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
             end
         end
 
-        # Expand subspace; SW_rq used as sketch scratch for corrections
-        Mc, Oc, nact = _jdrb_expand!(V, SV, W, SW, Mc, Oc, rb, j, nb, jmax, A, Theta,
-                                      orth_method, SW_rq)
+        scratch = view(s_buffer, :, nb+1:2*nb)
+        Mc, Oc, nact = _jdrb_expand!(V, SV, W, Mc, Oc, rb, j, nb, jmax, A, Theta,
+                                      orth_method, scratch)
         nmv += nact
         j   += nact
 
@@ -279,16 +255,16 @@ end
 Expand search subspace with up to `nb` correction vectors from `rb[:,1:nb]`.
 
 Mirrors `_jdb_expand!` from jd, but uses Θ-orthogonalization and maintains
-Mc = V'AV, Oc = V'V, and SW = Θ*AV incrementally.
+Mc = V'AV, Oc = V'V incrementally.
 
 Phase 1: sketch rb, Θ-project out V[:,1:j], then Θ-orthonormalize among themselves.
-Then compute A * new columns, update SW, and expand Mc and Oc.
+Then compute A * new columns and expand Mc and Oc.
 
-`SV_scratch` (s×kb) is a workspace for sketching corrections; reuse SW_rq (not live during expand).
+`SV_scratch` (s×kb) is a workspace for sketching corrections
 
 Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
 """
-@views function _jdrb_expand!(V, SV, W, SW, Mc, Oc, rb, j, nb, jmax, A, Theta, orth_method,
+@views function _jdrb_expand!(V, SV, W, Mc, Oc, rb, j, nb, jmax, A, Theta, orth_method,
                                SV_scratch)
     @timing "jd_sketched: ortho" begin
         mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
@@ -306,7 +282,6 @@ Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
 
     # Compute A * new basis vectors and sketch AV
     @timing "jd_sketched: matvec" mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
-    @timing "jd_sketched: sketch" mul!(SW[:, j+1:j+nact], Theta, W[:, j+1:j+nact])
 
     # Expand Mc = V'AV and Oc = V'V
     @timing "jd_sketched: expand overlap" begin
