@@ -176,7 +176,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 mul!(ub[:, 1:nb], V[:, 1:j], Y_nb)
                 mul!(rb[:, 1:nb], W[:, 1:j], Y_nb)
             end
-            rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nvonv + 1:nconv + nv]'
+            rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv + 1:nconv + nb]'
             rnorms = columnwise_norms(rb[:, 1:nb])
         end
 
