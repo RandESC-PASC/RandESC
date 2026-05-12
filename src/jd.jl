@@ -53,7 +53,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     @timing "jd: allocation" begin
         V         = similar(v0, n, kmax)    # search space basis (hard-locked prefix + active)
         W         = similar(v0, n, kmax)    # A * V
-        lambda_hl = zeros(real(T), k)       # eigenvalues of hard-locked pairs
+        lambda_hl = fill!(similar(v0, real(T), k), zero(real(T)))  # eigenvalues of hard-locked pairs
         rb        = similar(v0, n, kb)      # residuals / corrections
         ub        = similar(v0, n, kb)      # Ritz vectors for active pairs
         buffer    = similar(v0, n, jmin)    # Pre-allocated work array
@@ -112,7 +112,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                 # Hard lock: V[:,nhl+1:nhl+nconv_r] are now Ritz vectors; pairs
                 # with gap > hardlock_gap to the largest soft-locked one move into prefix.
                 if nconv_r >= 2
-                    nhardlocknew = findfirst(ew[nconv_r] .- ew[1:nconv_r] .< hardlock_gap)
+                    nhardlocknew = findfirst(ew[nconv_r:nconv_r] .- ew[1:nconv_r] .< hardlock_gap)
                     nhardlocknew = isnothing(nhardlocknew) ? nconv_r : nhardlocknew - 1
                 else
                     nhardlocknew = 0

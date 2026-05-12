@@ -81,7 +81,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         W  = similar(v0, T, n, jmax) # W = A * V
         SV = fill!(similar(v0, T, s, jmax), zero(T)) # Sketch of search space
 
-        lambda_hl = zeros(real(T), k)  # eigenvalues of hard-locked pairs
+        lambda_hl = fill!(similar(v0, real(T), k), zero(real(T)))  # eigenvalues of hard-locked pairs
 
         # n_buffer/s_buffer: rotation scratch during restart (full 2*kb columns);
         # ub/rb are declared as views into these buffers at each usage site.
@@ -160,7 +160,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 # Hard lock: V[:,nhl+1:nhl+nconv_r] are now Ritz vectors; pairs
                 # with gap > hardlock_gap to the largest soft-locked one move into prefix.
                 if nconv_r >= 2
-                    nhardlocknew = findfirst(ew[nconv_r] .- ew[1:nconv_r] .< hardlock_gap)
+                    nhardlocknew = findfirst(ew[nconv_r:nconv_r] .- ew[1:nconv_r] .< hardlock_gap)
                     nhardlocknew = isnothing(nhardlocknew) ? nconv_r : nhardlocknew - 1
                 else
                     nhardlocknew = 0
