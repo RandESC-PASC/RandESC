@@ -2,7 +2,7 @@ using LinearAlgebra
 
 # Valid orthogonalization method symbols. All dispatch functions in this file validate
 # their `method` argument against these tuples.
-const STD_ORTH_METHODS    = (:mgs, :mgs2, :qr)
+const STD_ORTH_METHODS    = (:mgs, :mgs2, :qr, :cholqr, :cholqr2)
 const SKETCH_ORTH_METHODS = (:rcgs, :rcgs2, :rqr)
 
 # === Standard orthogonalization utilities ===
@@ -23,6 +23,10 @@ function _ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
         return _qr_ortho!(V, m, buf)
     elseif orth_method == :mgs
         return _mgs_ortho!(V, m, false)
+    elseif orth_method == :cholqr
+        return _cholqr_ortho!(V, m, buf; two_pass=false)
+    elseif orth_method == :cholqr2
+        return _cholqr_ortho!(V, m, buf; two_pass=true)
     else  # :mgs2
         return _mgs_ortho!(V, m, true)
     end
@@ -61,6 +65,33 @@ end
         V[:, 1:nact] .= V[:, good]
     end
     return nact
+end
+
+@views function _cholqr_ortho!(V::AbstractMatrix, m::Int, buf::AbstractMatrix;
+                               two_pass::Bool=true)
+    Vm = V[:, 1:m]
+    buf[:, 1:m] .= Vm
+
+    npass = two_pass ? 2 : 1
+    for _ in 1:npass
+        G = Hermitian(Vm' * Vm)
+
+        F = try
+            cholesky(G)
+        catch
+            V[:, 1:m] .= buf[:, 1:m]
+            return _qr_ortho!(V, m, buf)
+        end
+
+        if any(abs.(diag(F.U)) .<= 1e-14)
+            V[:, 1:m] .= buf[:, 1:m]
+            return _qr_ortho!(V, m, buf)
+        end
+
+        rdiv!(Vm, UpperTriangular(F.U))
+    end
+
+    return m
 end
 
 """MGS orthonormalization of V[:,1:m] in-place. Compacts linearly independent columns
