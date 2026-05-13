@@ -62,21 +62,22 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     end
 
 
-    T = eltype(v0)
+    T  = eltype(v0)
+    TS = T <: Complex ? ComplexF32 : Float32  # sketch arrays in single precision
 
     Theta = sketch(n, s, sketch_type, v0)
 
     # ── Workspace ─────────────────────────────────────────────────────────
     @timing "jd_sketched: allocation" begin
         # Active subspace: columns 1:j live in the the following buffers.
-        V  = similar(v0, T, n, jmax) # search space
-        W  = similar(v0, T, n, jmax) # W = A * V
-        SV = fill!(similar(v0, T, s, jmax), zero(T)) # Sketch of search space
+        V  = similar(v0, T,  n, jmax) # search space
+        W  = similar(v0, T,  n, jmax) # W = A * V
+        SV = fill!(similar(v0, TS, s, jmax), zero(TS)) # Sketch of search space (single precision)
 
         # n_buffer/s_buffer: rotation scratch during restart (full 2*kb columns);
         # ub/rb are declared as views into these buffers at each usage site.
-        n_buffer = similar(v0, T, n, 2*kb)
-        s_buffer = similar(v0, T, s, 2*kb)
+        n_buffer = similar(v0, T,  n, 2*kb)
+        s_buffer = similar(v0, TS, s, 2*kb)
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
