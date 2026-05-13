@@ -100,7 +100,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
             randn!(TaskLocalRNG(), V[:, nc+1:j])   # in-place, no temp allocation
         end
         # Θ-orthonormalize in-place; pre-compute sketch first.
-        mul!(SV[:, 1:j], Theta, V[:, 1:j])
+        @timing "jd_sketched: sketch" mul!(SV[:, 1:j], Theta, V[:, 1:j])
         j = _sketch_ortho!(V[:, 1:j], SV[:, 1:j], orth_method)
     end
     @timing "jd_sketched: matvec" begin
@@ -267,8 +267,8 @@ Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
 """
 @views function _jdrb_expand!(V, SV, W, Mc, Oc, rb, j, nb, jmax, A, Theta, orth_method,
                                SV_scratch)
+    @timing "jd_sketched: sketch" mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
     @timing "jd_sketched: ortho" begin
-        mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
         _sketch_project_out!(rb[:, 1:nb], SV_scratch[:, 1:nb], V[:, 1:j], SV[:, 1:j], orth_method)
         nact = _sketch_ortho!(rb[:, 1:nb], SV_scratch[:, 1:nb], orth_method)
     end
