@@ -4,18 +4,24 @@ using Random, LinearAlgebra, SparseArrays
 # Wrapping the sketch matrix in a struct lets us define mul!(Y, Theta, X),
 # which writes the sketch in-place without allocating a temporary.
 
-struct MatrixSketchOp{M<:AbstractMatrix}
+mutable struct MatrixSketchOp{M<:AbstractMatrix}
     S::M
+    buf::AbstractMatrix
 end
+MatrixSketchOp(S::AbstractMatrix) = MatrixSketchOp(S, similar(S, 0, 0))
 (op::MatrixSketchOp)(X) = op.S * X
 function LinearAlgebra.mul!(Y::AbstractVecOrMat, op::MatrixSketchOp, X::AbstractVecOrMat)
     TS = eltype(op.S)
     if eltype(X) == TS
         mul!(Y, op.S, X)
     else
-        Xc = similar(X, TS)
-        copyto!(Xc, X)
-        mul!(Y, op.S, Xc)
+        n, k = size(X, 1), size(X, 2)
+        if size(op.buf, 2) < k # allocate new array if buffer not large enough
+            op.buf = similar(X, TS, n, k)
+        end
+        buf = @view op.buf[:, 1:k]
+        copyto!(buf, X)
+        mul!(Y, op.S, buf)
     end
 end
 
