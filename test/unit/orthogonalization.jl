@@ -120,7 +120,7 @@ function run_orthogonalization_tests(; template=nothing)
             v = randn(T, n)
             V_cpu = repeat(v, 1, 5)
             for method in SKETCH_ORTH_METHODS
-                V0  = RandESC.to_device(V_cpu, template)
+                V0  = RandESC.to_device(copy(V_cpu), template)
                 SV0 = Theta(V0)
                 nact = RandESC._sketch_ortho!(V0, SV0, method)
                 @test nact == 1

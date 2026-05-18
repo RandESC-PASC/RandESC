@@ -31,7 +31,7 @@ to jmin=2*(k+nbuff) vectors when full, and grows up to jmax=4*(k+nbuff).
 - `disp=false`: Print iteration info
 - `sketch_type="sparsestack"`: Sketch operator type (see sketch.jl)
 - `sketch_size=-1`: Sketch dimension s (default: `max(5*jmax, 5*k)`)
-- `orth_method=:rcgs`: Θ-orthogonalization method (`:rcgs`, `:rcgs2`, `:rqr`)
+- `orth_method=:rcgs`: Θ-orthogonalization method (`:rcgs`, `:rcgs2`, `:rqr`, `:rcholqr`, `:rcholqr2`)
 
 # Returns
 `(X, lambda, history)` where X is nxk, lambda is length k,
@@ -100,7 +100,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         end
         # Θ-orthonormalize in-place; pre-compute sketch first.
         mul!(SV[:, 1:j], Theta, V[:, 1:j])
-        j = _sketch_ortho!(V[:, 1:j], SV[:, 1:j], orth_method)
+        j = _sketch_ortho!(V[:, 1:j], SV[:, 1:j], orth_method, n_buffer, s_buffer)
     end
     @timing "jd_sketched: matvec" begin
         mul!(W[:, 1:j], A, V[:, 1:j])
@@ -224,9 +224,11 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
             end
         end
 
-        scratch = view(s_buffer, :, nb+1:2*nb)
+        SV_scratch = view(s_buffer, :, 1:nb)
+        V_scratch = view(n_buffer, :, 1:nb) # note: overwrites ub
+        S_scratch = view(s_buffer, :, nb+1:2*nb)
         Mc, Oc, nact = _jdrb_expand!(V, SV, W, Mc, Oc, rb, j, nb, jmax, A, Theta,
-                                      orth_method, scratch)
+                                      orth_method, SV_scratch, V_scratch, S_scratch)
         nmv += nact
         j   += nact
 
@@ -265,11 +267,11 @@ Then compute A * new columns and expand Mc and Oc.
 Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
 """
 @views function _jdrb_expand!(V, SV, W, Mc, Oc, rb, j, nb, jmax, A, Theta, orth_method,
-                               SV_scratch)
+                               SV_scratch, V_scratch, S_scratch)
     @timing "jd_sketched: ortho" begin
         mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
         _sketch_project_out!(rb[:, 1:nb], SV_scratch[:, 1:nb], V[:, 1:j], SV[:, 1:j], orth_method)
-        nact = _sketch_ortho!(rb[:, 1:nb], SV_scratch[:, 1:nb], orth_method)
+        nact = _sketch_ortho!(rb[:, 1:nb], SV_scratch[:, 1:nb], orth_method, V_scratch, S_scratch)
     end
 
     nact == 0 && return Mc, Oc, 0
