@@ -14,7 +14,8 @@ function LinearAlgebra.mul!(Y::AbstractVecOrMat, op::MatrixSketchOp, X::Abstract
     TS = eltype(op.S)
     if eltype(X) == TS
         mul!(Y, op.S, X)
-    else
+    else # X is in double precision, but sketch in single precision.
+        # op.buf contains a buffer for X because we need to cast X to single precision before mul! can be called.
         n, k = size(X, 1), size(X, 2)
         if size(op.buf, 2) < k # allocate new array if buffer not large enough
             op.buf = similar(X, TS, n, k)
