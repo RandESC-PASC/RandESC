@@ -59,7 +59,7 @@ If `seed` is provided, the Random module is seeded with Random.seed!(seed), gura
 sequence of generated random numbers.
 """
 function sketch(n::Integer, s::Integer, type::AbstractString, template::AbstractArray{T};
-                seed::Union{Nothing,Integer}=nothing, prec::Type=Float32) where {T}
+                seed::Union{Nothing,Integer}=nothing, prec::Type{<:AbstractFloat}=Float32) where {T}
     n = Int(n); s = Int(s)
     isnothing(seed) || Random.seed!(seed)
 

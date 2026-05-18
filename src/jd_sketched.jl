@@ -48,7 +48,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                           sketch_type::String="sparsestack",
                           sketch_size::Int=-1,
                           orth_method::Symbol=:rcgs,
-                          sketch_prec::Type=Float32)
+                          sketch_prec::Type{<:AbstractFloat}=Float32)
 
     n = size(A, 1)
     k = min(k, n)
