@@ -96,6 +96,10 @@ end
 Θ-orthonormalize columns of `V` (n×m) in-place via sketched QR, with pre-computed
 sketch `SV` (s×m). Both are modified in-place; `nact` accepted columns are compacted
 to `V[:,1:nact]` and `SV[:,1:nact]`.
+
+`TV = eltype(V)` is the high-precision type (e.g. `Float64`);
+`TS = eltype(SV)` is the low-precision sketch type (e.g. `Float32`).
+Mixed-precision casts (e.g. `TV.(F.R)`) are applied only when `TV != TS`.
 """
 @views function _sketch_qr_ortho!(V::AbstractMatrix, SV::AbstractMatrix;
                                   tol::Float64=1e-10)
@@ -189,6 +193,10 @@ end
 
 Dispatch for all Θ-orthonormalization. `V` (n×p) and its pre-computed sketch `SV` (s×p)
 are modified in-place; `nact` accepted columns are compacted to `V[:,1:nact]` / `SV[:,1:nact]`.
+
+Throughout this file, `TV = eltype(V)` denotes the high-precision type (e.g. `Float64`)
+and `TS = eltype(SV)` the low-precision sketch type (e.g. `Float32`). Mixed-precision
+casts are applied only when `TV != TS`.
 
 Valid `method` symbols:
   `:rcgs`  — single-pass randomized CGS
