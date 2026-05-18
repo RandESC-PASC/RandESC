@@ -6,7 +6,7 @@ using Random, LinearAlgebra, SparseArrays
 
 mutable struct MatrixSketchOp{M<:AbstractMatrix}
     S::M
-    buf::AbstractMatrix
+    buf::M
 end
 MatrixSketchOp(S::AbstractMatrix) = MatrixSketchOp(S, similar(S, 0, 0))
 (op::MatrixSketchOp)(X) = op.S * X
@@ -25,11 +25,11 @@ function LinearAlgebra.mul!(Y::AbstractVecOrMat, op::MatrixSketchOp, X::Abstract
     end
 end
 
-struct SRTTSketchOp
+struct SRTTSketchOp{R<:Real}
     diag_sign::AbstractVector
     IX::AbstractVector{Int}
     field::Symbol
-    scale::Float32
+    scale::R
 end
 (op::SRTTSketchOp)(X) = op.scale * SRTT(op.diag_sign, op.IX, X, op.field)
 # FFT inside SRTT always allocates; mul! avoids the outer alloc but not the FFT temp
@@ -58,42 +58,41 @@ If `seed` is provided, the Random module is seeded with Random.seed!(seed), gura
 sequence of generated random numbers.
 """
 function sketch(n::Integer, s::Integer, type::AbstractString, template::AbstractArray{T};
-                seed::Union{Nothing,Integer}=nothing) where {T}
+                seed::Union{Nothing,Integer}=nothing, prec::Type=Float32) where {T}
     n = Int(n); s = Int(s)
     isnothing(seed) || Random.seed!(seed)
 
-    # Sketch arrays are always single precision; complex inputs get ComplexF32.
-    ST = T <: Complex ? ComplexF32 : Float32
-    template32 = similar(template, ST, 1)  # device proxy, Float32 element type
+    CP = T <: Complex ? complex(prec) : prec  # sketch element type
+    template_prec = similar(template, CP, 1)  # device proxy with sketch element type
 
     st = lowercase(type)
     if st == "real_gaussian"
-        S = random_matrix(Float32, s, n, template) ./ Float32(sqrt(s))
+        S = random_matrix(prec, s, n, template) ./ prec(sqrt(s))
         return MatrixSketchOp(S)
 
     elseif st == "complex_gaussian"
-        S = random_matrix(ComplexF32, s, n, template) ./ Float32(sqrt(2s))
+        S = random_matrix(CP, s, n, template) ./ prec(sqrt(2s))
         return MatrixSketchOp(S)
 
     elseif st == "complex_srtt"
         IX = to_device(randperm(n)[1:s], template)
-        diag_sign = similar(template, ComplexF32, n)
-        map!(_ -> ComplexF32(exp(im * 2π * rand(Float32))), diag_sign, diag_sign)
-        return SRTTSketchOp(diag_sign, IX, :complex, Float32(1/sqrt(s)))
+        diag_sign = similar(template, CP, n)
+        map!(_ -> convert(CP, exp(im * prec(2π) * rand(prec))), diag_sign, diag_sign)
+        return SRTTSketchOp(diag_sign, IX, :complex, prec(1/sqrt(s)))
 
     elseif st == "real_srtt"
         IX = to_device(randperm(n)[1:s], template)
-        diag_sign = similar(template, Float32, n)
-        map!(_ -> ifelse(rand(Bool), 1f0, -1f0), diag_sign, diag_sign)
-        return SRTTSketchOp(diag_sign, IX, :real, Float32(sqrt(n/s)))
+        diag_sign = similar(template, prec, n)
+        map!(_ -> ifelse(rand(Bool), one(prec), -one(prec)), diag_sign, diag_sign)
+        return SRTTSketchOp(diag_sign, IX, :real, prec(sqrt(n/s)))
 
     elseif st == "sparsesign"
         ζ = 8
-        return MatrixSketchOp(sparsesign(s, n, ζ, template32))
+        return MatrixSketchOp(sparsesign(s, n, ζ, template_prec))
 
     elseif st == "sparsestack"
         ζ = 4
-        return MatrixSketchOp(sparsestack(s, n, ζ, template32))
+        return MatrixSketchOp(sparsestack(s, n, ζ, template_prec))
 
     else
         throw(ArgumentError("Unknown sketch.type \"$type\""))

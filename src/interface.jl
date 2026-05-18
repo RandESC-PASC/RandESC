@@ -25,6 +25,7 @@ Solves the eigenvalue problem for the matrix `A`, computing `k` smallest eigenva
 - `use_randomization`: Boolean flag to enable or disable randomization in the solver.
 - `orth_method`: Orthogonalization method to use. Defaults to `:rqr`/`:rcgs` when `use_randomization=true` and `:qr`/`:mgs` otherwise, depending on whether `X0` is a GPU array.
 - `verbose`: Whether to print verbose output during the computation (default: `false`).
+- `sketch_prec`: real floating-point type for sketch arrays when `use_randomization=true` (`Float32` or `Float64`; complex inputs use the corresponding complex type automatically); default: `Float32`.
 
 # Returns
 A named tuple with the following fields:
@@ -35,7 +36,7 @@ A named tuple with the following fields:
 - `converged`: Boolean indicating whether the solver converged.
 - `n_matvec`: Number of matrix-vector products performed.
 """
-function randESCSolver(A, X0::AbstractArray, n::Integer, k::Integer; preconditioner=nothing, precond_preparator=nothing, maxiter=100, tol=1e-6, use_randomization=false, orth_method=_default_orth_method(X0, use_randomization), verbose=false)
+function randESCSolver(A, X0::AbstractArray, n::Integer, k::Integer; preconditioner=nothing, precond_preparator=nothing, maxiter=100, tol=1e-6, use_randomization=false, orth_method=_default_orth_method(X0, use_randomization), verbose=false, sketch_prec::Type=Float32)
     if size(X0, 1) != n
         error("X0 must have $n rows (got $(size(X0, 1)))")
     end
@@ -44,7 +45,7 @@ function randESCSolver(A, X0::AbstractArray, n::Integer, k::Integer; preconditio
     end
 
     if use_randomization
-        V, lambda, history = jd_sketched(A, X0; k=k, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose, orth_method=orth_method)
+        V, lambda, history = jd_sketched(A, X0; k=k, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose, orth_method=orth_method, sketch_prec=sketch_prec)
     else
         V, lambda, history = jd(A, X0; k=k, maxit=maxiter, tol=tol, M=preconditioner, precond_preparator=precond_preparator, disp=verbose, orth_method=orth_method)
     end
