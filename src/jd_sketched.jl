@@ -141,7 +141,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 nk    = min(jmin, j)
                 mul!(n_buffer[:, 1:nk], V[:, 1:j],  U[:, 1:nk])
                 V[:, 1:nk] .= n_buffer[:, 1:nk]
-                mul!(s_buffer[:, 1:nk], SV[:, 1:j], TS.(U[:, 1:nk]))
+                mul!(s_buffer[:, 1:nk], SV[:, 1:j], T == TS ? U[:, 1:nk] : TS.(U[:, 1:nk]))
                 SV[:, 1:nk] .= s_buffer[:, 1:nk]
                 mul!(n_buffer[:, 1:nk], W[:, 1:j],  U[:, 1:nk])
                 W[:, 1:nk] .= n_buffer[:, 1:nk]
