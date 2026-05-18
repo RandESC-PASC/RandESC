@@ -82,15 +82,15 @@ function sketch(n::Integer, s::Integer, type::AbstractString, template::Abstract
         return MatrixSketchOp(S)
 
     elseif st == "complex_srtt"
-        IX = to_device(randperm(n)[1:s], template)
-        diag_sign = similar(template, CP, n)
-        map!(_ -> convert(CP, exp(im * prec(2π) * rand(prec))), diag_sign, diag_sign)
+        IX            = to_device(randperm(n)[1:s], template)
+        diag_sign_cpu = map(_ -> convert(CP, exp(im * prec(2π) * rand(prec))), 1:n)
+        diag_sign     = to_device(diag_sign_cpu, template)
         return SRTTSketchOp(diag_sign, IX, :complex, prec(1/sqrt(s)))
 
     elseif st == "real_srtt"
-        IX = to_device(randperm(n)[1:s], template)
-        diag_sign = similar(template, prec, n)
-        map!(_ -> ifelse(rand(Bool), one(prec), -one(prec)), diag_sign, diag_sign)
+        IX            = to_device(randperm(n)[1:s], template)
+        diag_sign_cpu = map(_ -> ifelse(rand(Bool), one(prec), -one(prec)), 1:n)
+        diag_sign     = to_device(diag_sign_cpu, template)
         return SRTTSketchOp(diag_sign, IX, :real, prec(sqrt(n/s)))
 
     elseif st == "sparsesign"
