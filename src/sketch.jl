@@ -4,11 +4,17 @@ using Random, LinearAlgebra, SparseArrays
 # Wrapping the sketch matrix in a struct lets us define mul!(Y, Theta, X),
 # which writes the sketch in-place without allocating a temporary.
 
-mutable struct MatrixSketchOp{M<:AbstractMatrix}
-    S::M
-    buf::M
+mutable struct MatrixSketchOp{SM<:AbstractMatrix, BM<:AbstractMatrix}
+    S::SM
+    buf::BM
 end
+# Default: buf has the same type as S (works for dense S)
 MatrixSketchOp(S::AbstractMatrix) = MatrixSketchOp(S, similar(S, 0, 0))
+# With explicit buf_template: buf is dense, on the same device as buf_template.
+# Required when S is sparse (e.g. CuSparseMatrixCSC on GPU): similar(S,...) would
+# produce another sparse matrix, but buf must be dense for copyto!/mul! to work.
+MatrixSketchOp(S::AbstractMatrix, buf_template::AbstractArray) =
+    MatrixSketchOp(S, similar(buf_template, eltype(S), 0, 0))
 (op::MatrixSketchOp)(X) = op.S * X
 function LinearAlgebra.mul!(Y::AbstractVecOrMat, op::MatrixSketchOp, X::AbstractVecOrMat)
     TS = eltype(op.S)
@@ -17,8 +23,8 @@ function LinearAlgebra.mul!(Y::AbstractVecOrMat, op::MatrixSketchOp, X::Abstract
     else # X is in double precision, but sketch in single precision.
         # op.buf contains a buffer for X because we need to cast X to single precision before mul! can be called.
         n, k = size(X, 1), size(X, 2)
-        if size(op.buf, 2) < k # allocate new array if buffer not large enough
-            op.buf = similar(X, TS, n, k)
+        if size(op.buf, 2) < k
+            op.buf = similar(op.buf, TS, n, k)
         end
         buf = @view op.buf[:, 1:k]
         copyto!(buf, X)
@@ -89,11 +95,11 @@ function sketch(n::Integer, s::Integer, type::AbstractString, template::Abstract
 
     elseif st == "sparsesign"
         ζ = 8
-        return MatrixSketchOp(sparsesign(s, n, ζ, template_prec))
+        return MatrixSketchOp(sparsesign(s, n, ζ, template_prec), template_prec)
 
     elseif st == "sparsestack"
         ζ = 4
-        return MatrixSketchOp(sparsestack(s, n, ζ, template_prec))
+        return MatrixSketchOp(sparsestack(s, n, ζ, template_prec), template_prec)
 
     else
         throw(ArgumentError("Unknown sketch.type \"$type\""))
