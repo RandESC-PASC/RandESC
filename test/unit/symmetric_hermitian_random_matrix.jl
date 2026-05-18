@@ -179,6 +179,23 @@ function sketch_options_test(T::Type; n=200, k=5, test_tol=1e-5, iter_tol=1e-8,
     test_jd_sketched_options(A, n, k, string(T); test_tol=test_tol, iter_tol=iter_tol)
 end
 
+function test_sketch_prec_float64(T::Type; n=200, k=5, test_tol=1e-5, iter_tol=1e-8,
+                                  seed=55555, template=nothing)
+    Random.seed!(seed)
+    A = RandESC.random_matrix(T, n, n, template)
+    A = A + A'
+    A_cpu = RandESC.to_cpu(A)
+    evals = eigen(A_cpu).values[1:k]
+    v0 = RandESC.random_matrix(T, n, k, A)
+
+    V, lambda, _ = jd_sketched(A, v0; k=k, tol=iter_tol, maxit=1000, sketch_prec=Float64)
+    V = RandESC.to_cpu(V)
+    lambda = RandESC.to_cpu(lambda)
+    @test eltype(V) == T
+    @test maximum(abs.(evals .- lambda)) < test_tol
+    @test maximum(abs.(V' * V - I)) < test_tol
+end
+
 function run_symmetric_hermitian_random_matrix_tests(; template=nothing)
 
     ### Testing with random spd matrices of various types
@@ -240,5 +257,13 @@ function run_symmetric_hermitian_random_matrix_tests(; template=nothing)
     @testset "RandESC jd_sketched Options — ComplexF32" begin
         sketch_options_test(ComplexF32; n=200, k=4, test_tol=1e-2, iter_tol=1e-3,
                             seed=44444, template=template)
+    end
+
+    @testset "RandESC jd_sketched sketch_prec=Float64 — Float64" begin
+        test_sketch_prec_float64(Float64; template=template)
+    end
+
+    @testset "RandESC jd_sketched sketch_prec=Float64 — ComplexF64" begin
+        test_sketch_prec_float64(ComplexF64; k=4, template=template)
     end
 end
