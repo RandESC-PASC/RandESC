@@ -3,24 +3,45 @@ using LinearAlgebra
 using Statistics
 using CairoMakie
 
+const USE_CUDA = "--cuda" in ARGS
+
+if USE_CUDA
+    using CUDA
+    to_array(x) = CuArray(x)
+    cpu_array(x) = Array(x)
+    cuda_sync() = CUDA.synchronize()
+    println("Running on CUDA GPU")
+else
+    to_array(x) = x
+    cpu_array(x) = x
+    cuda_sync() = nothing
+    println("Running on CPU")
+end
+
 const METHODS = [:mgs, :mgs2, :qr, :cholqr, :cholqr2]
 const N_VALUES = [500, 1000, 2000, 5000, 10000, 20000, 50000]
 const N_REPS   = 5   # repetitions per (method, n); take median
+const SUFFIX   = USE_CUDA ? "_cuda" : ""
 
 function bench_method(method::Symbol, n::Int, k::Int)
     times = Vector{Float64}(undef, N_REPS)
     orth_err = 0.0
 
     for r in 1:N_REPS
-        V   = randn(n, k)
+        V   = to_array(randn(n, k))
         buf = similar(V)
-        t   = @elapsed RandESC._ortho!(V, k, method, buf)
+        cuda_sync()
+        t = @elapsed begin
+            RandESC._ortho!(V, k, method, buf)
+            cuda_sync()
+        end
         times[r] = t
         if r == N_REPS
             # orthogonality error on a fresh random matrix
-            V2 = randn(n, k)
+            V2 = to_array(randn(n, k))
             RandESC._ortho!(V2, k, method, similar(V2))
-            orth_err = norm(V2' * V2 - I(k))
+            A = cpu_array(V2)
+            orth_err = norm(A' * A - I(k))
         end
     end
 
@@ -78,8 +99,8 @@ for method in METHODS
 end
 
 Legend(fig_time[1, 2], ax_time, "Method")
-save("time_vs_n.benchmark.pdf", fig_time)
-println("\nSaved time_vs_n.benchmark.pdf")
+save("time_vs_n$(SUFFIX).benchmark.pdf", fig_time)
+println("\nSaved time_vs_n$(SUFFIX).benchmark.pdf")
 
 # Stability plot
 fig_stab = Figure(size=(700, 450))
@@ -107,8 +128,8 @@ for method in METHODS
 end
 
 Legend(fig_stab[1, 2], ax_stab, "Method")
-save("stability_vs_n.benchmark.pdf", fig_stab)
-println("Saved stability_vs_n.benchmark.pdf")
+save("stability_vs_n$(SUFFIX).benchmark.pdf", fig_stab)
+println("Saved stability_vs_n$(SUFFIX).benchmark.pdf")
 
 # ── Stability vs condition number (fixed n, k) ───────────────────────────────
 
@@ -127,7 +148,7 @@ function rand_matrix_with_condition(n, k, κ)
     U = Matrix(qr(randn(n, k)).Q)   # n×k orthogonal
     W = Matrix(qr(randn(k, k)).Q)   # k×k orthogonal
     s = exp.(range(0, log(κ), length=k))
-    return (U .* s') * W'           # U * diag(s) * W'
+    return to_array((U .* s') * W')           # U * diag(s) * W'
 end
 
 println("\nBenchmarking stability vs condition number (n=$N_COND, k=$K_COND)...")
@@ -140,7 +161,8 @@ for κ in KAPPA_VALUES
         V   = copy(A)
         buf = similar(V)
         RandESC._ortho!(V, K_COND, method, buf)
-        err = norm(V' * V - I(K_COND))
+        Vc = cpu_array(V)
+        err = norm(Vc' * Vc - I(K_COND))
         push!(cond_results[method], err)
     end
     println("  κ=$(round(κ, sigdigits=2)): done")
@@ -169,5 +191,5 @@ for method in METHODS
 end
 
 Legend(fig_cond[1, 2], ax_cond, "Method")
-save("stability_vs_cond.benchmark.pdf", fig_cond)
-println("Saved stability_vs_cond.benchmark.pdf")
+save("stability_vs_cond$(SUFFIX).benchmark.pdf", fig_cond)
+println("Saved stability_vs_cond$(SUFFIX).benchmark.pdf")
