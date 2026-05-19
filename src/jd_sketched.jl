@@ -31,7 +31,7 @@ to jmin=2*(k+nbuff) vectors when full, and grows up to jmax=4*(k+nbuff).
 - `disp=false`: Print iteration info
 - `sketch_type="sparsestack"`: Sketch operator type (see sketch.jl)
 - `sketch_size=-1`: Sketch dimension s (default: `max(5*jmax, 5*k)`)
-- `orth_method=:rcgs`: Θ-orthogonalization method (`:rcgs`, `:rcgs2`, `:rqr`, `:rcholqr`, `:rcholqr2`)
+- `orth_method=:rcgs`: Θ-orthogonalization method (`:rcgs`, `:rcgs2`, `:rqr`, `:cholqr2`, `:cholqr3`)
 
 # Returns
 `(X, lambda, history)` where X is nxk, lambda is length k,
