@@ -36,7 +36,7 @@ A named tuple with the following fields:
 - `converged`: Boolean indicating whether the solver converged.
 - `n_matvec`: Number of matrix-vector products performed.
 """
-function randESCSolver(A, X0::AbstractArray, n::Integer, k::Integer; preconditioner=nothing, precond_preparator=nothing, maxiter=100, tol=1e-6, use_randomization=false, orth_method=_default_orth_method(X0, use_randomization), verbose=false, sketch_prec::Type=Float32)
+function randESCSolver(A, X0::AbstractArray, n::Integer, k::Integer; preconditioner=nothing, precond_preparator=nothing, maxiter=100, tol=1e-6, use_randomization=false, orth_method=_default_orth_method(X0, use_randomization), verbose=false, sketch_prec::Type{<:AbstractFloat}=Float32)
     if size(X0, 1) != n
         error("X0 must have $n rows (got $(size(X0, 1)))")
     end
