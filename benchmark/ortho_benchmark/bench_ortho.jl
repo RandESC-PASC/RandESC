@@ -78,8 +78,8 @@ for method in METHODS
 end
 
 Legend(fig_time[1, 2], ax_time, "Method")
-save("time_vs_n.pdf", fig_time)
-println("\nSaved time_vs_n.pdf")
+save("time_vs_n.benchmark.pdf", fig_time)
+println("\nSaved time_vs_n.benchmark.pdf")
 
 # Stability plot
 fig_stab = Figure(size=(700, 450))
@@ -107,5 +107,67 @@ for method in METHODS
 end
 
 Legend(fig_stab[1, 2], ax_stab, "Method")
-save("stability_vs_n.pdf", fig_stab)
-println("Saved stability_vs_n.pdf")
+save("stability_vs_n.benchmark.pdf", fig_stab)
+println("Saved stability_vs_n.benchmark.pdf")
+
+# ── Stability vs condition number (fixed n, k) ───────────────────────────────
+
+const N_COND = 10_000
+const K_COND = 100
+# condition numbers from 1 to 1e15
+const KAPPA_VALUES = 10 .^ (0:0.5:18)
+
+"""
+Build a random n×k matrix with prescribed condition number κ.
+V = U * diag(s) * W' where U (n×k) and W (k×k) are random orthogonal matrices
+and s spans [1, κ] geometrically. The Gram matrix V'V = W*diag(s²)*W' has
+condition number κ², so the columns are genuinely nearly linearly dependent.
+"""
+function rand_matrix_with_condition(n, k, κ)
+    U = Matrix(qr(randn(n, k)).Q)   # n×k orthogonal
+    W = Matrix(qr(randn(k, k)).Q)   # k×k orthogonal
+    s = exp.(range(0, log(κ), length=k))
+    return (U .* s') * W'           # U * diag(s) * W'
+end
+
+println("\nBenchmarking stability vs condition number (n=$N_COND, k=$K_COND)...")
+
+cond_results = Dict(m => Float64[] for m in METHODS)
+
+for κ in KAPPA_VALUES
+    A = rand_matrix_with_condition(N_COND, K_COND, κ)
+    for method in METHODS
+        V   = copy(A)
+        buf = similar(V)
+        RandESC._ortho!(V, K_COND, method, buf)
+        err = norm(V' * V - I(K_COND))
+        push!(cond_results[method], err)
+    end
+    println("  κ=$(round(κ, sigdigits=2)): done")
+end
+
+fig_cond = Figure(size=(700, 450))
+ax_cond  = Axis(fig_cond[1, 1];
+    xlabel = "Condition number κ",
+    ylabel = "‖V'V − I‖_F",
+    title  = "Orthogonalization stability vs condition number  (n=$N_COND, k=$K_COND)",
+    xscale = log10,
+    yscale = log10,
+)
+
+for method in METHODS
+    errs = cond_results[method]
+    lines!(ax_cond, KAPPA_VALUES, errs;
+        label     = string(method),
+        color     = method_color[method],
+        linewidth = 2,
+    )
+    scatter!(ax_cond, KAPPA_VALUES, errs;
+        color      = method_color[method],
+        markersize = 8,
+    )
+end
+
+Legend(fig_cond[1, 2], ax_cond, "Method")
+save("stability_vs_cond.benchmark.pdf", fig_cond)
+println("Saved stability_vs_cond.benchmark.pdf")
