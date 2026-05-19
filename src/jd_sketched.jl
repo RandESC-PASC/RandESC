@@ -31,7 +31,7 @@ to jmin=2*(k+nbuff) vectors when full, and grows up to jmax=4*(k+nbuff).
 - `disp=false`: Print iteration info
 - `sketch_type="sparsestack"`: Sketch operator type (see sketch.jl)
 - `sketch_size=-1`: Sketch dimension s (default: `max(5*jmax, 5*k)`)
-- `orth_method=:rcgs`: Θ-orthogonalization method (`:rcgs`, `:rcgs2`, `:rqr`, `:rcholqr`, `:rcholqr2`)
+- `orth_method=:rcgs`: Θ-orthogonalization method (`:rcgs`, `:rcgs2`, `:rqr`, `:cholqr2`, `:cholqr3`)
 - `sketch_prec=Float32`: real floating-point type for sketch arrays (`Float32` or `Float64`); complex inputs automatically use the corresponding complex type (`ComplexF32` / `ComplexF64`)
 
 # Returns

@@ -1,9 +1,8 @@
 using LinearAlgebra
-
 # Valid orthogonalization method symbols. All dispatch functions in this file validate
 # their `method` argument against these tuples.
-const STD_ORTH_METHODS    = (:mgs, :mgs2, :qr, :cholqr, :cholqr2)
-const SKETCH_ORTH_METHODS = (:rcgs, :rcgs2, :rqr, :rcholqr, :rcholqr2)
+const STD_ORTH_METHODS    = (:mgs, :mgs2, :qr, :cholqr2, :cholqr3)
+const SKETCH_ORTH_METHODS = (:rcgs, :rcgs2, :rqr, :cholqr2, :cholqr3)
 
 # === Standard orthogonalization utilities ===
 
@@ -13,8 +12,8 @@ are removed: independent columns are compacted to V[:,1:nact]. Returns nact.
   :mgs     — single-pass modified Gram-Schmidt
   :mgs2    — double-pass modified Gram-Schmidt (more accurate, more expensive)
   :qr      — Householder QR (batch)
-  :cholqr  — Cholesky QR (single pass; falls back to :qr if Cholesky fails)
   :cholqr2 — Cholesky QR (double pass; falls back to :qr if Cholesky fails)
+  :cholqr3 — Cholesky QR (triple pass; falls back to :qr if Cholesky fails)
 buf (nx≥m) is a workspace for :qr; ignored otherwise.
 """
 function _ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
@@ -23,10 +22,10 @@ function _ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
         error("Unknown orth_method :$orth_method; valid: $STD_ORTH_METHODS")
     if orth_method == :qr
         return _qr_ortho!(V, m, buf)
-    elseif orth_method == :cholqr
-        return _cholqr_ortho!(V, m, buf; two_pass=false)
     elseif orth_method == :cholqr2
-        return _cholqr_ortho!(V, m, buf; two_pass=true)
+        return _cholqr_ortho!(V, m, buf; n_pass=2)
+    elseif orth_method == :cholqr3
+        return _cholqr_ortho!(V, m, buf; n_pass=3)
     elseif orth_method == :mgs
         return _mgs_ortho!(V, m, false)
     else  # :mgs2
@@ -70,12 +69,11 @@ end
 end
 
 @views function _cholqr_ortho!(V::AbstractMatrix, m::Int, buf::AbstractMatrix;
-                               two_pass::Bool=true)
+                               n_pass::Int=2)
     Vm = V[:, 1:m]
     buf[:, 1:m] .= Vm
 
-    npass = two_pass ? 2 : 1
-    for _ in 1:npass
+    for _ in 1:n_pass
         G = Hermitian(Vm' * Vm)
 
         F = try
@@ -85,7 +83,8 @@ end
             return _qr_ortho!(V, m, buf)
         end
 
-        if any(abs.(diag(F.U)) .<= 1e-14)
+        # Aggressive rank check, revert to QR if any diagonal entries are "near" zero or NaN
+        if any(isnan, F.U) || minimum(abs, diag(F.U)) <= 1e-6
             V[:, 1:m] .= buf[:, 1:m]
             return _qr_ortho!(V, m, buf)
         end
@@ -159,13 +158,12 @@ end
 
 @views function _sketch_cholqr_ortho!(V::AbstractMatrix, SV::AbstractMatrix,
                                       V_buf::AbstractMatrix, S_buf::AbstractMatrix;
-                                      two_pass::Bool=true, tol::Float64=1e-10)
+                                      n_pass::Int=2, tol::Float64=1e-10)
     m = size(V, 2)
     V_buf[:, 1:m] .= V
     S_buf[:, 1:m] .= SV
 
-    npass = two_pass ? 2 : 1
-    for _ in 1:npass
+    for _ in 1:n_pass
         G = Hermitian(SV' * SV)
 
         F = try
@@ -176,7 +174,8 @@ end
             return _sketch_qr_ortho!(V, SV; tol=tol)
         end
 
-        if any(abs.(diag(F.U)) .<= tol)
+        # Aggressive rank check, revert to QR if any diagonal entries are "near" zero or NaN
+        if  any(isnan, F.U) || minimum(abs, diag(F.U)) <= 1e-6
             V .= V_buf
             SV .= S_buf
             return _sketch_qr_ortho!(V, SV; tol=tol)
@@ -188,7 +187,6 @@ end
     end
 
     return m
-
 end
 
 """
@@ -269,8 +267,8 @@ Valid `method` symbols:
   `:rcgs`  — single-pass randomized CGS
   `:rcgs2` — double-pass randomized CGS
   `:rqr`   — randomized QR via sketch; batch, preferred on GPU
-  `:rcholqr`  — randomized Cholesky QR (single pass; falls back to :qr if Cholesky fails)
-  `:rcholqr2` — randomized Cholesky QR (double pass; falls back to :qr if Cholesky fails)
+  `:cholqr2` — Cholesky QR (double pass; falls back to :qr if Cholesky fails)
+  `:cholqr3` — Cholesky QR (triple pass; falls back to :qr if Cholesky fails)
 """
 function _sketch_ortho!(V::AbstractMatrix, SV::AbstractMatrix, method::Symbol,
                         v_buf::AbstractMatrix=similar(V), s_buf::AbstractMatrix=similar(SV))
@@ -278,10 +276,10 @@ function _sketch_ortho!(V::AbstractMatrix, SV::AbstractMatrix, method::Symbol,
         error("Unknown sketch orth_method :$method; valid: $SKETCH_ORTH_METHODS")
     if method == :rqr
         return _sketch_qr_ortho!(V, SV)
-    elseif method == :rcholqr
-        return _sketch_cholqr_ortho!(V, SV, v_buf, s_buf; two_pass=false)
-    elseif method == :rcholqr2
-        return _sketch_cholqr_ortho!(V, SV, v_buf, s_buf; two_pass=true)
+    elseif method == :cholqr2
+        return _sketch_cholqr_ortho!(V, SV, v_buf, s_buf; n_pass=2)
+    elseif method == :cholqr3
+        return _sketch_cholqr_ortho!(V, SV, v_buf, s_buf; n_pass=3)
     else  # :rcgs or :rcgs2
         return _sketch_cgs_block!(V, SV, method)
     end
