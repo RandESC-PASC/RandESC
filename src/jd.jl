@@ -30,7 +30,11 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                      M=nothing,
                      precond_preparator=nothing,
                      disp::Bool=false,
-                     orth_method::Symbol=:mgs)
+                     orth_method::Symbol=:rcholqr2,
+                     sketch_type::AbstractString="sparsestack",
+                     sketch_size::Int=-1,
+                     sketch_prec::Type{<:AbstractFloat}=Float32)
+                     #TODO: update docstring with sketch args, orth methods, etc
 
     n = size(A, 1)
     k = min(k, n)
@@ -57,6 +61,15 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
     # Vc: Ritz vectors of the projected problem, j x j T matrix
     # ew: Ritz values of the projected problem, length j Real vector
 
+    s_buffer = nothing
+    Theta = nothing
+    if orth_method == :rcholqr2
+        s = sketch_size < 0 ? max(5 * kmax, 5 * k) : sketch_size
+        TS = T <: Complex ? complex(sketch_prec) : sketch_prec
+        s_buffer = similar(v0, TS, s, jmin)
+        Theta = sketch(n, s, sketch_type, s_buffer; prec=sketch_prec)
+    end
+
     nconv    = 0
     nmv      = 0
     history  = zeros(Float64, maxit, 3)
@@ -70,7 +83,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         randn!(TaskLocalRNG(), V[:, nc+1:j])
     end
 
-    @timing "jd: ortho" _ortho!(V, j, orth_method, buffer)
+    @timing "jd: ortho" _ortho!(V, j, orth_method, buffer, s_buffer, Theta)
     @timing "jd: matvec" mul!(W[:, 1:j], A, V[:, 1:j])
     nmv += j
     @timing "jd: overlap" Hc = Hermitian(V[:, 1:j]' * W[:, 1:j])
@@ -167,7 +180,8 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         end
 
         # Expand subspace, new expanded Hc comes out
-        Hc, nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, orth_method, ub)
+        #TODO: use buffer instead of ub for more clarity?
+        Hc, nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, orth_method, buffer, s_buffer, Theta)
         nmv += nact
         j += nact
 
@@ -208,7 +222,8 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
                       Hc::AbstractMatrix, rb::AbstractMatrix,
                       j::Int, nb::Int, kmax::Int, A,
                       orth_method::Symbol=:mgs,
-                      buf::AbstractMatrix=similar(V, size(V, 1), nb))
+                      buf::AbstractMatrix=similar(V, size(V, 1), nb),
+                      s_buf=nothing, Theta=nothing)
     nact = 0
 
     @timing "jd: ortho" begin
@@ -223,7 +238,7 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
         end
 
         # Phase 2: orthonormalize nb candidates among themselves; dependent columns are dropped
-        nact_rb = _ortho!(rb, nb, orth_method, buf)
+        nact_rb = _ortho!(rb, nb, orth_method, buf, s_buf, Theta)
         nact = min(nact_rb, kmax - j)
         if nact > 0
             V[:, j+1:j+nact] .= rb[:, 1:nact]

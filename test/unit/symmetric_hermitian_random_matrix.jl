@@ -22,7 +22,7 @@ function orth_methods()
 end
 
 function jd_orth_methods()
-    return [:mgs, :mgs2, :qr, :cholqr2, :cholqr3]
+    return [:mgs, :mgs2, :qr, :cholqr2, :cholqr3, :rcholqr2]
 end
 
 # Check that each returned eigenpair (lambda[i], V[:,i]) satisfies the eigenvalue equation

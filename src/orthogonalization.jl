@@ -1,7 +1,7 @@
 using LinearAlgebra
 # Valid orthogonalization method symbols. All dispatch functions in this file validate
 # their `method` argument against these tuples.
-const STD_ORTH_METHODS    = (:mgs, :mgs2, :qr, :cholqr2, :cholqr3)
+const STD_ORTH_METHODS    = (:mgs, :mgs2, :qr, :cholqr2, :cholqr3, :rcholqr2)
 const SKETCH_ORTH_METHODS = (:rcgs, :rcgs2, :rqr, :cholqr2, :cholqr3)
 
 # === Standard orthogonalization utilities ===
@@ -17,7 +17,9 @@ are removed: independent columns are compacted to V[:,1:nact]. Returns nact.
 buf (nx≥m) is a workspace for :qr; ignored otherwise.
 """
 function _ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
-                 buf::AbstractMatrix=similar(V, size(V, 1), m))
+                 buf::AbstractMatrix=similar(V, size(V, 1), m),
+                 s_buf=similar(V, ceil(Int, size(V, 1)/2), m),
+                 Theta=sketch(size(V, 1), size(s_buf, 1), "sparsestack", V))
     orth_method in STD_ORTH_METHODS ||
         error("Unknown orth_method :$orth_method; valid: $STD_ORTH_METHODS")
     if orth_method == :qr
@@ -28,6 +30,8 @@ function _ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
         return _cholqr_ortho!(V, m, buf; n_pass=3)
     elseif orth_method == :mgs
         return _mgs_ortho!(V, m, false)
+    elseif orth_method == :rcholqr2
+        return _rand_cholqr2_ortho!(V, m, buf, s_buf, Theta)
     else  # :mgs2
         return _mgs_ortho!(V, m, true)
     end
@@ -128,6 +132,13 @@ function _mgs_ortho!(V::AbstractMatrix, m::Int, two_pass::Bool=true)
     return nact
 end
 
+@views function _rand_cholqr2_ortho!(V::AbstractMatrix, m::Int, v_buf::AbstractMatrix,
+                                     s_buf::AbstractMatrix, Theta)
+    mul!(s_buf[:, 1:m], Theta, V[:, 1:m])
+    nact = _sketch_qr_ortho!(V[:, 1:m], s_buf[:, 1:m]; skip_sv=true)
+    return _cholqr_ortho!(V, nact, v_buf; n_pass=1)
+end
+
 """
     _sketch_qr_ortho!(V, SV; tol) -> nact
 
@@ -139,18 +150,20 @@ to `V[:,1:nact]` and `SV[:,1:nact]`.
 `TS = eltype(SV)` is the low-precision sketch type (e.g. `Float32`).
 Mixed-precision casts (e.g. `TV.(F.R)`) are applied only when `TV != TS`.
 """
-@views function _sketch_qr_ortho!(V::AbstractMatrix, SV::AbstractMatrix,
-                                  S_buf::AbstractMatrix; tol::Float64=1e-10)
+@views function _sketch_qr_ortho!(V::AbstractMatrix, SV::AbstractMatrix;
+                                  S_buf::AbstractMatrix, tol::Float64=1e-10, skip_sv=false)
     m = size(V, 2)
     S_buf[:, 1:m] .= SV[:, 1:m]
     F = qr!(S_buf[:, 1:m])
     good = findall(abs.(F.R[diagind(F.R)]) .>= tol)
     nact = length(good)
-    fill!(SV[:, 1:m], zero(eltype(SV)))
-    SV[diagind(SV)[1:m]] .= one(eltype(SV))
-    lmul!(F.Q, SV[:, 1:m])
-    if nact < m
-        SV[:, 1:nact] .= SV[:, good]
+    if !skip_sv
+        fill!(SV[:, 1:m], zero(eltype(SV)))
+        SV[diagind(SV)[1:m]] .= one(eltype(SV))
+        lmul!(F.Q, SV[:, 1:m])
+        if nact < m
+            SV[:, 1:nact] .= SV[:, good]
+        end
     end
     # QR on sketch: Θ V = Q_S R, so Θ (V R^-1) = Q_S.
     # rdiv! solves V[:,1:m] = V[:,1:m] * R^-1 in-place.
