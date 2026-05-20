@@ -18,7 +18,7 @@ else
     println("Running on CPU")
 end
 
-const METHODS = [:mgs, :mgs2, :qr, :cholqr, :cholqr2]
+const METHODS = [:mgs, :mgs2, :qr, :cholqr2, :cholqr3]
 const N_VALUES = [500, 1000, 2000, 5000, 10000, 20000, 50000]
 const N_REPS   = 5   # repetitions per (method, n); take median
 const SUFFIX   = USE_CUDA ? "_cuda" : ""
