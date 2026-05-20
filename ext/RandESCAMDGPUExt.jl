@@ -24,9 +24,9 @@ end
 # AMDGPU does not expose a generalized eigenvalue problem function. This is a workaround
 function LinearAlgebra.eigen(A::Hermitian{T, <:ROCArray}, B::Hermitian{T, <:ROCArray}) where {T}
     C = cholesky(B)
-    D = C.L \ A / C.L'
+    D = C.U' \ ROCArray(A) / C.U
     F = eigen(Hermitian(D))
-    return (; values = F.values, vectors = C.L' \ F.vectors)
+    return (; values = F.values, vectors = C.U \ F.vectors)
 end
 
 function RandESC.random_matrix(T::Type{<:Real}, m::Int, n::Int, template::ROCArray)
