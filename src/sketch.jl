@@ -4,17 +4,39 @@ using Random, LinearAlgebra, SparseArrays
 # Wrapping the sketch matrix in a struct lets us define mul!(Y, Theta, X),
 # which writes the sketch in-place without allocating a temporary.
 
-struct MatrixSketchOp{M<:AbstractMatrix}
-    S::M
+mutable struct MatrixSketchOp{SM<:AbstractMatrix, BM<:AbstractMatrix}
+    S::SM
+    buf::BM
 end
+# Default: buf has the same type as S (works for dense S)
+MatrixSketchOp(S::AbstractMatrix) = MatrixSketchOp(S, similar(S, 0, 0))
+# With explicit buf_template: buf is dense, on the same device as buf_template.
+# Required when S is sparse (e.g. CuSparseMatrixCSC on GPU): similar(S,...) would
+# produce another sparse matrix, but buf must be dense for copyto!/mul! to work.
+MatrixSketchOp(S::AbstractMatrix, buf_template::AbstractArray) =
+    MatrixSketchOp(S, similar(buf_template, eltype(S), 0, 0))
 (op::MatrixSketchOp)(X) = op.S * X
-LinearAlgebra.mul!(Y::AbstractVecOrMat, op::MatrixSketchOp, X::AbstractVecOrMat) = mul!(Y, op.S, X)
+function LinearAlgebra.mul!(Y::AbstractVecOrMat, op::MatrixSketchOp, X::AbstractVecOrMat)
+    TS = eltype(op.S)
+    if eltype(X) == TS
+        mul!(Y, op.S, X)
+    else # X is in double precision, but sketch in single precision.
+        # op.buf contains a buffer for X because we need to cast X to single precision before mul! can be called.
+        n, k = size(X, 1), size(X, 2)
+        if size(op.buf, 2) < k
+            op.buf = similar(op.buf, TS, n, k)
+        end
+        buf = @view op.buf[:, 1:k]
+        copyto!(buf, X)
+        mul!(Y, op.S, buf)
+    end
+end
 
-struct SRTTSketchOp
+struct SRTTSketchOp{R<:Real}
     diag_sign::AbstractVector
     IX::AbstractVector{Int}
     field::Symbol
-    scale::Float64
+    scale::R
 end
 (op::SRTTSketchOp)(X) = op.scale * SRTT(op.diag_sign, op.IX, X, op.field)
 # FFT inside SRTT always allocates; mul! avoids the outer alloc but not the FFT temp
@@ -43,38 +65,41 @@ If `seed` is provided, the Random module is seeded with Random.seed!(seed), gura
 sequence of generated random numbers.
 """
 function sketch(n::Integer, s::Integer, type::AbstractString, template::AbstractArray{T};
-                seed::Union{Nothing,Integer}=nothing) where {T}
+                seed::Union{Nothing,Integer}=nothing, prec::Type{<:AbstractFloat}=Float32) where {T}
     n = Int(n); s = Int(s)
     isnothing(seed) || Random.seed!(seed)
 
+    CP = T <: Complex ? complex(prec) : prec  # sketch element type
+    template_prec = similar(template, CP, 1)  # device proxy with sketch element type
+
     st = lowercase(type)
     if st == "real_gaussian"
-        S = random_matrix(real(T), s, n, template) ./ sqrt(s)
+        S = random_matrix(prec, s, n, template) ./ prec(sqrt(s))
         return MatrixSketchOp(S)
 
     elseif st == "complex_gaussian"
-        S = random_matrix(complex(T), s, n, template) ./ sqrt(2s)
+        S = random_matrix(CP, s, n, template) ./ prec(sqrt(2s))
         return MatrixSketchOp(S)
 
     elseif st == "complex_srtt"
-        IX = to_device(randperm(n)[1:s], template)
-        diag_sign = similar(template, complex(T), n)
-        map!(_ -> exp(im * 2π * rand(real(T))), diag_sign, diag_sign)
-        return SRTTSketchOp(diag_sign, IX, :complex, 1/sqrt(s))
+        IX            = to_device(randperm(n)[1:s], template)
+        diag_sign_cpu = map(_ -> convert(CP, exp(im * prec(2π) * rand(prec))), 1:n)
+        diag_sign     = to_device(diag_sign_cpu, template)
+        return SRTTSketchOp(diag_sign, IX, :complex, prec(1/sqrt(s)))
 
     elseif st == "real_srtt"
-        IX = to_device(randperm(n)[1:s], template)
-        diag_sign = similar(template, real(T), n)
-        map!(i -> ifelse(rand(Bool), 1.0, -1.0), diag_sign, diag_sign)
-        return SRTTSketchOp(diag_sign, IX, :real, sqrt(n/s))
+        IX            = to_device(randperm(n)[1:s], template)
+        diag_sign_cpu = map(_ -> ifelse(rand(Bool), one(prec), -one(prec)), 1:n)
+        diag_sign     = to_device(diag_sign_cpu, template)
+        return SRTTSketchOp(diag_sign, IX, :real, prec(sqrt(n/s)))
 
     elseif st == "sparsesign"
         ζ = 8
-        return MatrixSketchOp(sparsesign(s, n, ζ, template))
+        return MatrixSketchOp(sparsesign(s, n, ζ, template_prec), template_prec)
 
     elseif st == "sparsestack"
         ζ = 4
-        return MatrixSketchOp(sparsestack(s, n, ζ, template))
+        return MatrixSketchOp(sparsestack(s, n, ζ, template_prec), template_prec)
 
     else
         throw(ArgumentError("Unknown sketch.type \"$type\""))
@@ -88,7 +113,9 @@ end
 function SRTT(diag_sign::AbstractVector, IX::AbstractVector{<:Integer},
               X::AbstractMatrix, field::Symbol)
     @assert length(diag_sign) == size(X,1) "diag_sign length must match size(X,1)"
-    Xscaled = diag_sign .* X
+    TS = eltype(diag_sign)
+    Xc = eltype(X) == TS ? X : TS.(X)
+    Xscaled = diag_sign .* Xc
 
     if field === :complex
         Y = fft(Xscaled, 1)

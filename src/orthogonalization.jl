@@ -96,6 +96,10 @@ end
 Θ-orthonormalize columns of `V` (n×m) in-place via sketched QR, with pre-computed
 sketch `SV` (s×m). Both are modified in-place; `nact` accepted columns are compacted
 to `V[:,1:nact]` and `SV[:,1:nact]`.
+
+`TV = eltype(V)` is the high-precision type (e.g. `Float64`);
+`TS = eltype(SV)` is the low-precision sketch type (e.g. `Float32`).
+Mixed-precision casts (e.g. `TV.(F.R)`) are applied only when `TV != TS`.
 """
 @views function _sketch_qr_ortho!(V::AbstractMatrix, SV::AbstractMatrix;
                                   tol::Float64=1e-10)
@@ -111,7 +115,9 @@ to `V[:,1:nact]` and `SV[:,1:nact]`.
     end
     # QR on sketch: Θ V = Q_S R, so Θ (V R^-1) = Q_S.
     # rdiv! solves V[:,1:m] = V[:,1:m] * R^-1 in-place.
-    rdiv!(V[:, 1:m], UpperTriangular(F.R))
+    TV = eltype(V)
+    Rc = TV == eltype(F.R) ? F.R : TV.(F.R)
+    rdiv!(V[:, 1:m], UpperTriangular(Rc))
     if nact < m
         V[:, 1:nact] .= V[:, good]
     end
@@ -129,14 +135,15 @@ function _sketch_project_out!(V0::AbstractMatrix, SV0::AbstractMatrix, Q, SQ, me
     method in SKETCH_ORTH_METHODS ||
         error("Unknown sketch orth_method :$method; valid: $SKETCH_ORTH_METHODS")
     isempty(Q) && return
+    TV = eltype(V0)
     H = SQ' * SV0
-    mul!(V0,  Q,  H, -1, 1)
+    mul!(V0,  Q,  TV == eltype(H) ? H : TV.(H), -1, 1)
     mul!(SV0, SQ, H, -1, 1)
     # :rcgs and :rqr both use a single projection pass before the subsequent
     # _sketch_ortho! step; only :rcgs2 repeats the projection here.
     if method == :rcgs2
         mul!(H,   SQ', SV0)
-        mul!(V0,  Q,   H, -1, 1)
+        mul!(V0,  Q,   TV == eltype(H) ? H : TV.(H), -1, 1)
         mul!(SV0, SQ,  H, -1, 1)
     end
 end
@@ -162,9 +169,10 @@ to `V[:,1:nact]` and `SV[:,1:nact]`.
         if ncols > 0
             Vc  = view(V,  :, 1:ncols)
             SVc = view(SV, :, 1:ncols)
+            TV  = eltype(v)
             for _ in 1:npass
                 h = SVc' * sv
-                mul!(v,  Vc,  h, -1, 1)
+                mul!(v,  Vc,  TV == eltype(h) ? h : TV.(h), -1, 1)
                 mul!(sv, SVc, h, -1, 1)
             end
         end
@@ -185,6 +193,10 @@ end
 
 Dispatch for all Θ-orthonormalization. `V` (n×p) and its pre-computed sketch `SV` (s×p)
 are modified in-place; `nact` accepted columns are compacted to `V[:,1:nact]` / `SV[:,1:nact]`.
+
+Throughout this file, `TV = eltype(V)` denotes the high-precision type (e.g. `Float64`)
+and `TS = eltype(SV)` the low-precision sketch type (e.g. `Float32`). Mixed-precision
+casts are applied only when `TV != TS`.
 
 Valid `method` symbols:
   `:rcgs`  — single-pass randomized CGS

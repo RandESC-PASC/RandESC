@@ -98,6 +98,10 @@ positions = [
 model = model_DFT(lattice, atoms, positions; temperature=0.01, functionals=PBE())
 basis = PlaneWaveBasis(model; Ecut=40, kgrid=[1, 1, 1], architecture=arch)
 
+kpt = basis.kpoints[1]
+println("n_planewaves: ", length(G_vectors(basis, kpt)))
+println("n_electrons: ", basis.model.n_electrons)
+
 function make_eigensolver(; use_randomization)
     function eigensolver(A, X0; prec=nothing, maxiter, tol, kwargs...)
         function precond_preparation(M, X)
@@ -114,18 +118,14 @@ function make_eigensolver(; use_randomization)
 end
 
 # Warmup run: we do not want to profile compilation time
-scfres = self_consistent_field(basis; maxiter=3, eigensolver=make_eigensolver(; use_randomization=randomize))
-scfres = self_consistent_field(basis; maxiter=3)
+self_consistent_field(basis; maxiter=3, eigensolver=make_eigensolver(; use_randomization=randomize))
+GC.gc(); CUDA.reclaim()  # free wavefunction CuArrays before profiled run
 
 maxit = 7
 
-# Actual profiling run. Keep number of iterations low to avoid gigantic data dumps
+RandESC.activate_nvtx_profiling() # add device synchronization for accurate NVTX ranges
 CUDA.@profile external=true begin
-    self_consistent_field(basis; maxiter=maxit, eigensolver=make_eigensolver(; use_randomization=randomize))
+    NVTX.@range "profile" begin
+        self_consistent_field(basis; maxiter=maxit, eigensolver=make_eigensolver(; use_randomization=randomize))
+    end
 end
-
-t1 = time()
-scfres = self_consistent_field(basis; maxiter=maxit)
-t2 = time()
-elapsed = t2 - t1
-println("Elapsed lobpcg time: $elapsed")

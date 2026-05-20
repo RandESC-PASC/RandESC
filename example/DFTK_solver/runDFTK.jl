@@ -120,6 +120,9 @@ println("\n\n" * "*"^80 * "\n\n")
 println("LOBPCG\n")
 
 basis = PlaneWaveBasis(model; Ecut=ecut, kgrid=[2, 2, 2])
+kpt = basis.kpoints[1]
+println("n_planewaves: ", length(G_vectors(basis, kpt)))
+println("n_electrons: ", basis.model.n_electrons)
 DFTK.reset_timer!(DFTK.timer)
 RandESC.reset_timer!(RandESC.timer)
 scfres = self_consistent_field(basis)#, eigensolver = my_eig_solver);

@@ -29,7 +29,7 @@ Final note: both the CUDA and NVTX packages are required for this example, but t
 included in the local project environment (too heavy). You will need to add them on your own.
 """
 
-randomize = false          # whether we profile randomized or standard JD
+randomize = false         # whether we profile randomized or standard JD
 DFTK.setup_threading()    # Sets up default DFTK thread count
 arch = DFTK.GPU(CuArray)  # Triggers DFTK to run on NVIDIA GPUs
 
@@ -103,17 +103,20 @@ function make_eigensolver(; use_randomization)
 end
 
 # Warmup run: we do not want to profile compilation time
-scfres = self_consistent_field(basis; maxiter=3, eigensolver=make_eigensolver(; use_randomization=randomize))
-scfres = self_consistent_field(basis; maxiter=3)
+self_consistent_field(basis; maxiter=3, eigensolver=make_eigensolver(; use_randomization=randomize))
+GC.gc(); CUDA.reclaim()  # free wavefunction CuArrays before profiled run
 
 maxit = 7
 
+RandESC.activate_nvtx_profiling() # add device synchronization for accurate NVTX ranges
 CUDA.@profile external=true begin
-    self_consistent_field(basis; maxiter=maxit, eigensolver=make_eigensolver(; use_randomization=randomize))
+    NVTX.@range "profile" begin
+        self_consistent_field(basis; maxiter=maxit, eigensolver=make_eigensolver(; use_randomization=randomize))
+    end
 end
 
-t1 = time()
-scfres = self_consistent_field(basis; maxiter=maxit)
-t2 = time()
-elapsed = t2 - t1
-println("Elapsed lobpcg time $elapsed")
+# t1 = time()
+# scfres = self_consistent_field(basis; maxiter=maxit)
+# t2 = time()
+# elapsed = t2 - t1
+# println("Elapsed lobpcg time $elapsed")

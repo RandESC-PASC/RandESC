@@ -32,6 +32,7 @@ to jmin=2*(k+nbuff) vectors when full, and grows up to jmax=4*(k+nbuff).
 - `sketch_type="sparsestack"`: Sketch operator type (see sketch.jl)
 - `sketch_size=-1`: Sketch dimension s (default: `max(5*jmax, 5*k)`)
 - `orth_method=:rcgs`: Θ-orthogonalization method (`:rcgs`, `:rcgs2`, `:rqr`)
+- `sketch_prec=Float32`: real floating-point type for sketch arrays (`Float32` or `Float64`); complex inputs automatically use the corresponding complex type (`ComplexF32` / `ComplexF64`)
 
 # Returns
 `(X, lambda, history)` where X is nxk, lambda is length k,
@@ -46,7 +47,8 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                           disp::Bool=false,
                           sketch_type::String="sparsestack",
                           sketch_size::Int=-1,
-                          orth_method::Symbol=:rcgs)
+                          orth_method::Symbol=:rcgs,
+                          sketch_prec::Type{<:AbstractFloat}=Float32)
 
     n = size(A, 1)
     k = min(k, n)
@@ -62,21 +64,22 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
     end
 
 
-    T = eltype(v0)
+    T  = eltype(v0)
+    TS = T <: Complex ? complex(sketch_prec) : sketch_prec
 
-    Theta = sketch(n, s, sketch_type, v0)
+    Theta = sketch(n, s, sketch_type, v0; prec=sketch_prec)
 
     # ── Workspace ─────────────────────────────────────────────────────────
     @timing "jd_sketched: allocation" begin
         # Active subspace: columns 1:j live in the the following buffers.
-        V  = similar(v0, T, n, jmax) # search space
-        W  = similar(v0, T, n, jmax) # W = A * V
-        SV = fill!(similar(v0, T, s, jmax), zero(T)) # Sketch of search space
+        V  = similar(v0, T,  n, jmax) # search space
+        W  = similar(v0, T,  n, jmax) # W = A * V
+        SV = fill!(similar(v0, TS, s, jmax), zero(TS)) # Sketch of search space (sketch_prec precision)
 
         # n_buffer/s_buffer: rotation scratch during restart (full 2*kb columns);
         # ub/rb are declared as views into these buffers at each usage site.
-        n_buffer = similar(v0, T, n, 2*kb)
-        s_buffer = similar(v0, T, s, 2*kb)
+        n_buffer = similar(v0, T,  n, 2*kb)
+        s_buffer = similar(v0, TS, s, 2*kb)
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
@@ -99,7 +102,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
             randn!(TaskLocalRNG(), V[:, nc+1:j])   # in-place, no temp allocation
         end
         # Θ-orthonormalize in-place; pre-compute sketch first.
-        mul!(SV[:, 1:j], Theta, V[:, 1:j])
+        @timing "jd_sketched: sketch" mul!(SV[:, 1:j], Theta, V[:, 1:j])
         j = _sketch_ortho!(V[:, 1:j], SV[:, 1:j], orth_method)
     end
     @timing "jd_sketched: matvec" begin
@@ -138,7 +141,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 nk    = min(jmin, j)
                 mul!(n_buffer[:, 1:nk], V[:, 1:j],  U[:, 1:nk])
                 V[:, 1:nk] .= n_buffer[:, 1:nk]
-                mul!(s_buffer[:, 1:nk], SV[:, 1:j], U[:, 1:nk])
+                mul!(s_buffer[:, 1:nk], SV[:, 1:j], T == TS ? U[:, 1:nk] : TS.(U[:, 1:nk]))
                 SV[:, 1:nk] .= s_buffer[:, 1:nk]
                 mul!(n_buffer[:, 1:nk], W[:, 1:j],  U[:, 1:nk])
                 W[:, 1:nk] .= n_buffer[:, 1:nk]
@@ -266,8 +269,8 @@ Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
 """
 @views function _jdrb_expand!(V, SV, W, Mc, Oc, rb, j, nb, jmax, A, Theta, orth_method,
                                SV_scratch)
+    @timing "jd_sketched: sketch" mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
     @timing "jd_sketched: ortho" begin
-        mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
         _sketch_project_out!(rb[:, 1:nb], SV_scratch[:, 1:nb], V[:, 1:j], SV[:, 1:j], orth_method)
         nact = _sketch_ortho!(rb[:, 1:nb], SV_scratch[:, 1:nb], orth_method)
     end
