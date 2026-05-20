@@ -1,7 +1,7 @@
 using LinearAlgebra
 # Valid orthogonalization method symbols. All dispatch functions in this file validate
 # their `method` argument against these tuples.
-const STD_ORTH_METHODS    = (:mgs, :mgs2, :qr, :cholqr2, :cholqr3)
+const STD_ORTH_METHODS    = (:mgs, :mgs2, :qr, :cholqr2, :cholqr3, :rqr_cholqr)
 const SKETCH_ORTH_METHODS = (:rcgs, :rcgs2, :rqr, :cholqr2, :cholqr3)
 
 # === Standard orthogonalization utilities ===
@@ -9,15 +9,18 @@ const SKETCH_ORTH_METHODS = (:rcgs, :rcgs2, :rqr, :cholqr2, :cholqr3)
 """
 Orthonormalize V[:,1:m] in-place using the chosen method. Linearly dependent columns
 are removed: independent columns are compacted to V[:,1:nact]. Returns nact.
-  :mgs     — single-pass modified Gram-Schmidt
-  :mgs2    — double-pass modified Gram-Schmidt (more accurate, more expensive)
-  :qr      — Householder QR (batch)
-  :cholqr2 — Cholesky QR (double pass; falls back to :qr if Cholesky fails)
-  :cholqr3 — Cholesky QR (triple pass; falls back to :qr if Cholesky fails)
+  :mgs        — single-pass modified Gram-Schmidt
+  :mgs2       — double-pass modified Gram-Schmidt (more accurate, more expensive)
+  :qr         — Householder QR (batch)
+  :cholqr2    — Cholesky QR (double pass; falls back to :qr if Cholesky fails)
+  :cholqr3    — Cholesky QR (triple pass; falls back to :qr if Cholesky fails)
+  :rqr_cholqr — sketch QR (Gaussian, internal) removes rank deficiencies, then Cholesky QR
 buf (nx≥m) is a workspace for :qr; ignored otherwise.
 """
 function _ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
-                 buf::AbstractMatrix=similar(V, size(V, 1), m))
+                 buf::AbstractMatrix=similar(V, size(V, 1), m);
+                 theta::Union{Nothing,AbstractMatrix}=nothing,
+                 sv_buf::Union{Nothing,AbstractMatrix}=nothing)
     orth_method in STD_ORTH_METHODS ||
         error("Unknown orth_method :$orth_method; valid: $STD_ORTH_METHODS")
     if orth_method == :qr
@@ -26,6 +29,8 @@ function _ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
         return _cholqr_ortho!(V, m, buf; n_pass=2)
     elseif orth_method == :cholqr3
         return _cholqr_ortho!(V, m, buf; n_pass=3)
+    elseif orth_method == :rqr_cholqr
+        return _rqr_cholqr_ortho!(V, m, theta, sv_buf)
     elseif orth_method == :mgs
         return _mgs_ortho!(V, m, false)
     else  # :mgs2
@@ -147,6 +152,32 @@ to `V[:,1:nact]` and `SV[:,1:nact]`.
     if nact < m
         V[:, 1:nact] .= V[:, good]
     end
+    return nact
+end
+
+"""
+    _rqr_cholqr_ortho!(V, m, Theta, sv_buf; tol) -> nact
+
+Orthonormalize `V[:,1:m]` in-place. `Theta` (s×n sparse sketch matrix) and `sv_buf`
+(s×p pre-allocated buffer, p≥m) are caller-owned to avoid per-call allocation.
+Sketch QR on `Theta*V[:,1:m]` pre-conditions V (applies R⁻¹) so the Gram matrix passed
+to Cholesky is well-conditioned, then Cholesky QR achieves true orthonormality.
+"""
+@views function _rqr_cholqr_ortho!(V::AbstractMatrix, m::Int,
+                                    Theta::AbstractMatrix, sv_buf::AbstractMatrix;
+                                    tol::Float64=1e-10)
+    mul!(sv_buf[:, 1:m], Theta, V[:, 1:m])
+    F    = qr(sv_buf[:, 1:m])
+    R    = UpperTriangular(F.R)
+    good = findall(abs.(F.R[diagind(F.R)]) .>= tol)
+    nact = length(good)
+    # Pre-condition V by R^{-1} so the Gram matrix is well-conditioned for Cholesky.
+    rdiv!(V[:, 1:m], R)
+    if nact < m
+        V[:, 1:nact] .= V[:, good]
+    end
+    rdiv!(V[:, 1:nact], UpperTriangular(cholesky(Hermitian(V[:, 1:nact]' * V[:, 1:nact])).U))
+
     return nact
 end
 

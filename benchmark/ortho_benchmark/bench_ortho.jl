@@ -18,7 +18,7 @@ else
     println("Running on CPU")
 end
 
-const METHODS = [:mgs, :mgs2, :qr, :cholqr, :cholqr2]
+const METHODS = [:mgs, :mgs2, :qr, :cholqr2, :cholqr3, :rqr_cholqr]
 const N_VALUES = [500, 1000, 2000, 5000, 10000, 20000, 50000]
 const N_REPS   = 5   # repetitions per (method, n); take median
 const SUFFIX   = USE_CUDA ? "_cuda" : ""
@@ -27,19 +27,24 @@ function bench_method(method::Symbol, n::Int, k::Int)
     times = Vector{Float64}(undef, N_REPS)
     orth_err = 0.0
 
+    # Pre-allocate sketch operator and buffer once; reused across reps to exclude
+    # allocation from the timed region (matches intended production usage).
+    s      = min(4 * k, n)
+    theta  = method == :rqr_cholqr ? RandESC.sparsestack(s, n, 4, to_array(zeros(1))) : nothing
+    sv_buf = method == :rqr_cholqr ? to_array(zeros(s, k)) : nothing
+
     for r in 1:N_REPS
         V   = to_array(randn(n, k))
         buf = similar(V)
         cuda_sync()
         t = @elapsed begin
-            RandESC._ortho!(V, k, method, buf)
+            RandESC._ortho!(V, k, method, buf; theta=theta, sv_buf=sv_buf)
             cuda_sync()
         end
         times[r] = t
         if r == N_REPS
-            # orthogonality error on a fresh random matrix
             V2 = to_array(randn(n, k))
-            RandESC._ortho!(V2, k, method, similar(V2))
+            RandESC._ortho!(V2, k, method, similar(V2); theta=theta, sv_buf=sv_buf)
             A = cpu_array(V2)
             orth_err = norm(A' * A - I(k))
         end
@@ -155,18 +160,25 @@ println("\nBenchmarking stability vs condition number (n=$N_COND, k=$K_COND)..."
 
 cond_results = Dict(m => Float64[] for m in METHODS)
 
-for κ in KAPPA_VALUES
-    A = rand_matrix_with_condition(N_COND, K_COND, κ)
-    for method in METHODS
-        V   = copy(A)
-        buf = similar(V)
-        RandESC._ortho!(V, K_COND, method, buf)
-        Vc = cpu_array(V)
-        err = norm(Vc' * Vc - I(K_COND))
-        push!(cond_results[method], err)
+let s_cond = min(4 * K_COND, N_COND)
+    cond_theta  = RandESC.sparsestack(s_cond, N_COND, 4, to_array(zeros(1)))
+    cond_sv_buf = to_array(zeros(s_cond, K_COND))
+
+    for κ in KAPPA_VALUES
+        A = rand_matrix_with_condition(N_COND, K_COND, κ)
+        for method in METHODS
+            V   = copy(A)
+            buf = similar(V)
+            theta  = method == :rqr_cholqr ? cond_theta  : nothing
+            sv_buf = method == :rqr_cholqr ? cond_sv_buf : nothing
+            RandESC._ortho!(V, K_COND, method, buf; theta=theta, sv_buf=sv_buf)
+            Vc = cpu_array(V)
+            err = norm(Vc' * Vc - I(K_COND))
+            push!(cond_results[method], err)
+        end
+        println("  κ=$(round(κ, sigdigits=2)): done")
     end
-    println("  κ=$(round(κ, sigdigits=2)): done")
-end
+end  # let
 
 fig_cond = Figure(size=(700, 450))
 ax_cond  = Axis(fig_cond[1, 1];
