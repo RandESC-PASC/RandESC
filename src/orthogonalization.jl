@@ -68,6 +68,12 @@ end
     return nact
 end
 
+"""
+    _cholqr_ortho!(V, m, buf; n_pass) -> nact
+
+Cholesky QR orthonormalization of `V[:,1:m]` in-place, with `n_pass` Cholesky steps.
+Reverts to `_qr_ortho!` if Cholesky fails.
+"""
 @views function _cholqr_ortho!(V::AbstractMatrix, m::Int, buf::AbstractMatrix;
                                n_pass::Int=2)
     Vm = V[:, 1:m]
@@ -156,12 +162,25 @@ Mixed-precision casts (e.g. `TV.(F.R)`) are applied only when `TV != TS`.
     return nact
 end
 
+"""
+    _sketch_cholqr_ortho!(V, SV, V_buf, S_buf; n_pass=2, tol=1e-10) -> nact
+
+Θ-orthonormalize columns of `V` (n×m) in-place via sketched Cholesky QR, with pre-computed
+sketch `SV` (s×m). Both are modified in-place; `nact` accepted columns are compacted
+to `V[:,1:nact]` and `SV[:,1:nact]`. Reverts to `_sketch_qr_ortho!` if Cholesky fails.
+
+`TV = eltype(V)` is the high-precision type (e.g. `Float64`);
+`TS = eltype(SV)` is the low-precision sketch type (e.g. `Float32`).
+Mixed-precision casts (e.g. `TV.(F.U)`) are applied only when `TV != TS`.
+"""
 @views function _sketch_cholqr_ortho!(V::AbstractMatrix, SV::AbstractMatrix,
                                       V_buf::AbstractMatrix, S_buf::AbstractMatrix;
                                       n_pass::Int=2, tol::Float64=1e-10)
     m = size(V, 2)
     V_buf[:, 1:m] .= V
     S_buf[:, 1:m] .= SV
+    TV = eltype(V)
+    TS = eltype(SV)
 
     for _ in 1:n_pass
         G = Hermitian(SV' * SV)
@@ -181,9 +200,10 @@ end
             return _sketch_qr_ortho!(V, SV; tol=tol)
         end
 
-        U = UpperTriangular(F.U)
-        rdiv!(V, U)
-        rdiv!(SV, U)
+        US = UpperTriangular(F.U)
+        UV = TV == TS ? US : UpperTriangular(TV.(F.U))
+        rdiv!(V, UV)
+        rdiv!(SV, US)
     end
 
     return m
