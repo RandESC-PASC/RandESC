@@ -18,11 +18,11 @@ function sketch_types_for(T::Type)
 end
 
 function orth_methods()
-    return [:rcgs, :rcgs2, :rqr]
+    return [:rcgs, :rcgs2, :rqr, :cholqr2, :cholqr3]
 end
 
 function jd_orth_methods()
-    return [:mgs, :mgs2, :qr]
+    return [:mgs, :mgs2, :qr, :cholqr2, :cholqr3]
 end
 
 # Check that each returned eigenpair (lambda[i], V[:,i]) satisfies the eigenvalue equation
