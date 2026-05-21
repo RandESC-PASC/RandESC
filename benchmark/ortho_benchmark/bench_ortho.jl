@@ -4,25 +4,32 @@ using Statistics
 using CairoMakie
 
 const USE_CUDA = "--cuda" in ARGS
+const USE_ROCM = "--rocm" in ARGS
 
 if USE_CUDA
     using CUDA
     to_array(x) = CuArray(x)
     cpu_array(x) = Array(x)
-    cuda_sync() = CUDA.synchronize()
+    gpu_sync() = CUDA.synchronize()
     println("Running on CUDA GPU")
+elseif USE_ROCM
+    using AMDGPU
+    to_array(x) = ROCArray(x)
+    cpu_array(x) = Array(x)
+    gpu_sync() = AMDGPU.synchronize()
+    println("Running on ROCm GPU")
 else
     to_array(x) = x
     cpu_array(x) = x
-    cuda_sync() = nothing
+    gpu_sync() = nothing
     println("Running on CPU")
 end
 
 const METHODS = RandESC.STD_ORTH_METHODS
-const N_VALUES = USE_CUDA ? [500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000] :
-                            [500, 1000, 2000, 5000, 10000, 20000, 50000]
+const GPU_N_VALUES = [500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000]
+const N_VALUES = (USE_CUDA || USE_ROCM) ? GPU_N_VALUES : [500, 1000, 2000, 5000, 10000, 20000, 50000]
 const N_REPS   = 5   # repetitions per (method, n); take median
-const SUFFIX   = USE_CUDA ? "_cuda" : ""
+const SUFFIX   = USE_CUDA ? "_cuda" : USE_ROCM ? "_rocm" : ""
 
 function bench_method(method::Symbol, n::Int, k::Int)
     times = Vector{Float64}(undef, N_REPS)
@@ -31,10 +38,10 @@ function bench_method(method::Symbol, n::Int, k::Int)
     for r in 1:N_REPS
         V   = to_array(randn(n, k))
         buf = similar(V)
-        cuda_sync()
+        gpu_sync()
         t = @elapsed begin
             RandESC._ortho!(V, k, method, buf)
-            cuda_sync()
+            gpu_sync()
         end
         times[r] = t
         if r == N_REPS
