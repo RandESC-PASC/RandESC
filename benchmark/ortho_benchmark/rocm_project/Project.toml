@@ -1,0 +1,8 @@
+[deps]
+AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+RandESC = "f5033a08-872c-425c-a91d-46d0365e7598"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+
+[sources]
+RandESC = {path = "../../.."}
