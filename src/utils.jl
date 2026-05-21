@@ -76,3 +76,9 @@ end
 function dct2(X::AbstractArray, dims)
     FFTW.dct(X, dims)
 end
+
+"""Lowers 64-bit types to 32-bit"""
+lower(::Type{Float64}) = Float32
+lower(::Type{ComplexF64}) = ComplexF32
+lower(::Type{Float32}) = Float32
+lower(::Type{ComplexF32}) = ComplexF32

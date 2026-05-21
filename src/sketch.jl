@@ -71,6 +71,7 @@ function sketch(n::Integer, s::Integer, type::AbstractString, template::Abstract
 
     CP = T <: Complex ? complex(prec) : prec  # sketch element type
     template_prec = similar(template, CP, 1)  # device proxy with sketch element type
+    #TODO: it looks like the template_prec variable is not necessary?
 
     st = lowercase(type)
     if st == "real_gaussian"

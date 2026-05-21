@@ -18,8 +18,7 @@ buf (nx≥m) is a workspace for :qr; ignored otherwise.
 """
 function _ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
                  buf::AbstractMatrix=similar(V, size(V, 1), m),
-                 s_buf=similar(V, ceil(Int, size(V, 1)/2), m),
-                 Theta=sketch(size(V, 1), size(s_buf, 1), "sparsestack", V))
+                 s_buf=nothing, Theta=nothing)
     orth_method in STD_ORTH_METHODS ||
         error("Unknown orth_method :$orth_method; valid: $STD_ORTH_METHODS")
     if orth_method == :qr
@@ -31,6 +30,10 @@ function _ortho!(V::AbstractMatrix, m::Int, orth_method::Symbol,
     elseif orth_method == :mgs
         return _mgs_ortho!(V, m, false)
     elseif orth_method == :rcholqr2
+        if isnothing(Theta) || isnothing(s_buf)
+            s_buf = similar(V, lower(eltype(V)), min(5m, size(V, 1)), m)
+            Theta = sketch(size(V, 1), size(s_buf, 1), "sparsestack", s_buf; prec=real(lower(eltype(V))))
+        end
         return _rand_cholqr2_ortho!(V, m, buf, s_buf, Theta)
     else  # :mgs2
         return _mgs_ortho!(V, m, true)
@@ -135,7 +138,7 @@ end
 @views function _rand_cholqr2_ortho!(V::AbstractMatrix, m::Int, v_buf::AbstractMatrix,
                                      s_buf::AbstractMatrix, Theta)
     mul!(s_buf[:, 1:m], Theta, V[:, 1:m])
-    nact = _sketch_qr_ortho!(V[:, 1:m], s_buf[:, 1:m]; skip_sv=true)
+    nact = _sketch_qr_ortho!(V[:, 1:m], s_buf[:, 1:m], s_buf[:, 1:m]; skip_sv=true)
     return _cholqr_ortho!(V, nact, v_buf; n_pass=1)
 end
 
@@ -150,8 +153,8 @@ to `V[:,1:nact]` and `SV[:,1:nact]`.
 `TS = eltype(SV)` is the low-precision sketch type (e.g. `Float32`).
 Mixed-precision casts (e.g. `TV.(F.R)`) are applied only when `TV != TS`.
 """
-@views function _sketch_qr_ortho!(V::AbstractMatrix, SV::AbstractMatrix;
-                                  S_buf::AbstractMatrix, tol::Float64=1e-10, skip_sv=false)
+@views function _sketch_qr_ortho!(V::AbstractMatrix, SV::AbstractMatrix,
+                                  S_buf::AbstractMatrix; tol::Float64=1e-10, skip_sv=false)
     m = size(V, 2)
     S_buf[:, 1:m] .= SV[:, 1:m]
     F = qr!(S_buf[:, 1:m])
