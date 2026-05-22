@@ -26,7 +26,7 @@ else
 end
 
 const METHODS = RandESC.STD_ORTH_METHODS
-const GPU_N_VALUES = [500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000]
+const GPU_N_VALUES = [500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 400000]
 const N_VALUES = (USE_CUDA || USE_ROCM) ? GPU_N_VALUES : [500, 1000, 2000, 5000, 10000, 20000, 50000]
 const N_REPS   = 5   # repetitions per (method, n); take median
 const SUFFIX   = USE_CUDA ? "_cuda" : USE_ROCM ? "_rocm" : ""
@@ -46,10 +46,11 @@ function bench_method(method::Symbol, n::Int, k::Int)
         times[r] = t
         if r == N_REPS
             # orthogonality error on a fresh random matrix
-            V2 = to_array(randn(n, k))
+            V2 = RandESC.random_matrix(eltype(V), n, k, V)
             RandESC._ortho!(V2, k, method, similar(V2))
-            A = cpu_array(V2)
-            orth_err = norm(A' * A - I(k))
+            diag = similar(V2, k)
+            diag .= one(eltype(V2))
+            orth_err = norm(V2' * V2 - Diagonal(diag))
         end
     end
 
