@@ -52,10 +52,11 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
     n = size(A, 1)
     k = min(k, n)
-    nbuff = 2                         # buffer of unrequested pairs added to search space
+    nbuff = 0  # buffer of unrequested pairs added to search space
+    jbuff = floor(Int, max(4, 0.2 * k))
     kb   = min(k + nbuff, n)          # block size
-    jmin = min(n, 2 * (k + nbuff))    # search space size after restart
-    jmax = min(n, 4 * kb)             # maximal search space dimension
+    jmin = (min(n, 1 * (k + nbuff))) + jbuff   # search space size after restart
+    jmax = min(n, 3 * kb) + jbuff            # maximal search space dimension
     s    = sketch_size < 0 ? max(5 * jmax, 5 * k) : sketch_size
 
     if disp
@@ -76,10 +77,9 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         W  = similar(v0, T,  n, jmax) # W = A * V
         SV = fill!(similar(v0, TS, s, jmax), zero(TS)) # Sketch of search space (sketch_prec precision)
 
-        # n_buffer/s_buffer: rotation scratch during restart (full 2*kb columns);
-        # ub/rb are declared as views into these buffers at each usage site.
-        n_buffer = similar(v0, T,  n, 2*kb)
-        s_buffer = similar(v0, TS, s, 2*kb)
+        # n_buffer/s_buffer: restart scratch (needs jmin columns) and residual scratch
+        n_buffer = similar(v0, T,  n, max(2*kb, jmin))
+        s_buffer = similar(v0, TS, s, max(2*kb, jmin))
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
