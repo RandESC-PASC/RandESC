@@ -77,10 +77,9 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         W  = similar(v0, T,  n, jmax) # W = A * V
         SV = fill!(similar(v0, TS, s, jmax), zero(TS)) # Sketch of search space (sketch_prec precision)
 
-        # n_buffer/s_buffer: rotation scratch during restart (full 2*kb columns);
-        # ub/rb are declared as views into these buffers at each usage site.
-        n_buffer = similar(v0, T,  n, 2*kb)
-        s_buffer = similar(v0, TS, s, 2*kb)
+        # n_buffer/s_buffer: restart scratch (needs jmin columns) and residual scratch
+        n_buffer = similar(v0, T,  n, max(2*kb, jmin))
+        s_buffer = similar(v0, TS, s, max(2*kb, jmin))
     end
 
     # Other arrays used in the solver, allocated on the fly (small compared to the above):
