@@ -52,10 +52,11 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
     n = size(A, 1)
     k = min(k, n)
-    nbuff = 2                         # buffer of unrequested pairs added to search space
+    nbuff = 0  # buffer of unrequested pairs added to search space
+    jbuff = floor(Int, max(4, 0.2 * k))
     kb   = min(k + nbuff, n)          # block size
-    jmin = min(n, 2 * (k + nbuff))    # search space size after restart
-    jmax = min(n, 4 * kb)             # maximal search space dimension
+    jmin = (min(n, 1 * (k + nbuff))) + jbuff   # search space size after restart
+    jmax = min(n, 3 * kb) + jbuff            # maximal search space dimension
     s    = sketch_size < 0 ? max(5 * jmax, 5 * k) : sketch_size
 
     if disp

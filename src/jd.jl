@@ -34,10 +34,11 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
 
     n = size(A, 1)
     k = min(k, n)
-    nbuff = 2 # buffer of unrequested vector that are added to search space
+    nbuff = 0 # buffer of unrequested vector that are added to search space
+    jbuff = floor(Int, max(4, 0.2 * k))
     kb = min(k + nbuff, n) # block size
-    jmin = min(n, 2 * (k + nbuff)) # search space size after restart
-    kmax = min(n, 4kb) # maximal search space dimension
+    jmin = floor(Int, min(n, 1.0 * (k + nbuff))) + jbuff# search space size after restart
+    kmax = min(n, 3kb) + jbuff # maximal search space dimension
 
     T = eltype(v0)
 
