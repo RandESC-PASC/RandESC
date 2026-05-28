@@ -1,6 +1,6 @@
 function _default_orth_method(X0, use_randomization)
     if use_randomization
-        return X0 isa AbstractGPUArray ? :cholqr2 : :rcgs
+        return X0 isa AbstractGPUArray ? :rqr : :rcgs
     else
         return X0 isa AbstractGPUArray ? :cholqr2 : :mgs
     end
