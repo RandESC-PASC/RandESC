@@ -223,20 +223,9 @@ Returns the expanded `Hexp`, `Sexp`, and the number of accepted vectors `nact`.
                       Hc::AbstractMatrix, Sc::AbstractMatrix,
                       rb::AbstractMatrix,
                       j::Int, nb::Int, kmax::Int, A)
-    # Scalar-normalize correction vectors; drop near-zero columns
-    norms = columnwise_norms(rb[:, 1:nb])
-    nact = 0
-    for i in 1:nb
-        if norms[i] > 1e-14
-            nact += 1
-            if nact != i
-                rb[:, nact] .= rb[:, i]
-            end
-            rb[:, nact] ./= norms[i]
-        end
-    end
-    nact = min(nact, kmax - j)
-    nact == 0 && return Hc, Sc, 0
+    # Scalar-normalize all correction vectors column-wise (GPU-compatible)
+    rb[:, 1:nb] ./= columnwise_norms(rb[:, 1:nb])'
+    nact = min(nb, kmax - j)
 
     V[:, j+1:j+nact] .= rb[:, 1:nact]
 
