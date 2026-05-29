@@ -21,9 +21,6 @@ function orth_methods()
     return [:rcgs, :rcgs2, :rqr, :cholqr2, :cholqr3]
 end
 
-function jd_orth_methods()
-    return [:mgs, :mgs2, :qr, :cholqr2, :cholqr3]
-end
 
 # Check that each returned eigenpair (lambda[i], V[:,i]) satisfies the eigenvalue equation
 # ‖A*v - λ*v‖ / ‖v‖ < res_tol.
@@ -104,19 +101,16 @@ function test_jd_options(A, n, k, test_name; test_tol=1e-5, iter_tol=1e-8, verbo
     expected_vec_type = eltype(A)
     expected_val_type = real(eltype(A))
 
-    for orth_method in jd_orth_methods()
-        @testset "$test_name: jd(orth_method=$orth_method)" begin
-            V, lambda, _ = jd(A, v0; k=k, tol=iter_tol, maxit=maxiter, disp=verbose,
-                              orth_method=orth_method)
-            V = RandESC.to_cpu(V)
-            lambda = RandESC.to_cpu(lambda)
-            @test eltype(V) == expected_vec_type
-            @test eltype(lambda) == expected_val_type
-            @test maximum(abs.(evals .- lambda)) < test_tol
-            gram = V' * V
-            @test maximum(abs.(gram - I)) < test_tol
-            test_residuals(A_cpu, lambda, V, iter_tol)
-        end
+    @testset "$test_name: jd" begin
+        V, lambda, _ = jd(A, v0; k=k, tol=iter_tol, maxit=maxiter, disp=verbose)
+        V = RandESC.to_cpu(V)
+        lambda = RandESC.to_cpu(lambda)
+        @test eltype(V) == expected_vec_type
+        @test eltype(lambda) == expected_val_type
+        @test maximum(abs.(evals .- lambda)) < test_tol
+        gram = V' * V
+        @test maximum(abs.(gram - I)) < test_tol
+        test_residuals(A_cpu, lambda, V, iter_tol)
     end
 end
 

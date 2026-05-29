@@ -9,6 +9,11 @@ Soft-locking: converged Ritz vectors stay in V; corrections are generated only
 for active pairs. nbuff=2 buffer pairs are kept beyond k. Search space restarts
 to jmin=2*(k+nbuff) vectors when full, and grows up to kmax=4*(k+nbuff).
 
+The search space basis is not kept orthogonal. New correction vectors are only
+scalar-normalized before being appended. The projected problem is the generalized
+Hermitian eigenproblem (V'AV) y = λ (V'V) y, solved via `eigen(Hc, Sc)`.
+The returned eigenvectors X = V*Vc[:,1:k] are orthonormal since Vc'*Sc*Vc = I.
+
 Arguments:
 - A: Hermitian matrix or operator
 - v0: initial vectors (n x m matrix)
@@ -18,7 +23,6 @@ Arguments:
 - M: preconditioner, applied as M \\ r (optional)
 - precond_preparator: callback f(M, X) to refresh preconditioner (optional)
 - disp: print iteration info
-- orth_method: orthogonalization method (:mgs, :mgs2, :qr, :cholqr2, :cholqr3) mgs better on cpu, qr on gpu
 
 Returns (X, lambda, history) where X is n x k, lambda is length k,
 and history is nit x 3 with columns [max_rnorm, iter, nmv].
@@ -29,8 +33,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                      maxit::Int=100,
                      M=nothing,
                      precond_preparator=nothing,
-                     disp::Bool=false,
-                     orth_method::Symbol=:mgs)
+                     disp::Bool=false)
 
     n = size(A, 1)
     k = min(k, n)
@@ -71,14 +74,19 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         randn!(TaskLocalRNG(), V[:, nc+1:j])
     end
 
-    @timing "jd: ortho" _ortho!(V, j, orth_method, buffer)
+    @timing "jd: ortho" _ortho!(V, j, :qr, buffer)
     @timing "jd: matvec" mul!(W[:, 1:j], A, V[:, 1:j])
     nmv += j
-    @timing "jd: overlap" Hc = Hermitian(V[:, 1:j]' * W[:, 1:j])
+    @timing "jd: overlap" begin
+        Hc = Hermitian(V[:, 1:j]' * W[:, 1:j])
+        Sc = Hermitian(V[:, 1:j]' * V[:, 1:j])  # = I after initial ortho
+    end
 
     # Initial full subspace diagonalization
     @timing "jd: diag" begin
-        ew, Vc = eigen(Hc)
+        F  = eigen(Hc, Sc)
+        ew = F.values
+        Vc = F.vectors
     end
 
     # ── Main loop ──────────────────────────────────────────────────────────
@@ -96,10 +104,14 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                 V[:, 1:jmin] .= buffer[:, 1:jmin]
                 mul!(buffer[:, 1:jmin], W[:, 1:j], Vc[:, 1:jmin])
                 W[:, 1:jmin] .= buffer[:, 1:jmin]
+                # Vc is Sc-orthonormal => V_new'V_new = Vc'*Sc*Vc = I, Hc_new = Diagonal(ew)
                 Hc = Hermitian(Diagonal(T.(ew[1:jmin])))
+                Sc_buf = similar(V, T, jmin, jmin)
+                fill!(Sc_buf, zero(T))
+                Sc_buf[diagind(Sc_buf)] .= one(T)
+                Sc = Hermitian(Sc_buf)
                 j = jmin
                 nb = max(min(k - nconv + nbuff, j - nconv), 1)
-                # Because Hc is diagonal, eigenvalues and eigenvectors are trivial
                 ew = ew[1:jmin]
                 Vc = similar(V, jmin, jmin)  # identity matrix. mul! with GPU arrays
                 fill!(Vc, zero(T))           # do not like I, so explicit matrix
@@ -167,14 +179,16 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
             end
         end
 
-        # Expand subspace, new expanded Hc comes out
-        Hc, nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, orth_method, ub)
+        # Expand subspace; new Hc and Sc come out
+        Hc, Sc, nact = _jdb_expand!(V, W, Hc, Sc, rb, j, nb, kmax, A)
         nmv += nact
         j += nact
 
-        # Diagonalize over full subspace (soft-locked pairs stay in V)
+        # Diagonalize generalized projected problem Hc y = λ Sc y
         @timing "jd: diag" begin
-            ew, Vc = eigen(Hc)
+            F  = eigen(Hc, Sc)
+            ew = F.values
+            Vc = F.vectors
         end
     end
 
@@ -199,50 +213,48 @@ end
 """
 Expand search subspace with up to `nb` correction vectors from `rb[:,1:nb]`.
 
-Phase 1 (BLAS-3): orthogonalize all nb vectors at once against V[:,1:j].
-Phase 2: orthonormalize the nb candidates among themselves via `orth_method`, accept non-degenerate columns.
-Then compute A * new columns and returns the expanded projected Hamiltonian Hexp.
+Mirrors the QE Davidson approach: no orthogonalization against the existing basis.
+Correction vectors are only scalar-normalized (Euclidean); near-zero columns are dropped.
+Both Hc = V'AV and Sc = V'V are expanded incrementally.
 
-Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vectors `nact`.
+Returns the expanded `Hexp`, `Sexp`, and the number of accepted vectors `nact`.
 """
 @views function _jdb_expand!(V::AbstractMatrix, W::AbstractMatrix,
-                      Hc::AbstractMatrix, rb::AbstractMatrix,
-                      j::Int, nb::Int, kmax::Int, A,
-                      orth_method::Symbol=:mgs,
-                      buf::AbstractMatrix=similar(V, size(V, 1), nb))
+                      Hc::AbstractMatrix, Sc::AbstractMatrix,
+                      rb::AbstractMatrix,
+                      j::Int, nb::Int, kmax::Int, A)
+    # Scalar-normalize correction vectors; drop near-zero columns
+    norms = columnwise_norms(rb[:, 1:nb])
     nact = 0
-
-    @timing "jd: ortho" begin
-        # Phase 1: orthogonalize all nb corrections against existing V[:,1:j]
-        let Vj = view(V, :, 1:j), rbv = view(rb, :, 1:nb)
-            c1v = Vj' * rbv
-            mul!(rbv, Vj, c1v, -1, 1)
-            if orth_method == :mgs2
-                mul!(c1v, Vj', rbv)
-                mul!(rbv, Vj, c1v, -1, 1)
+    for i in 1:nb
+        if norms[i] > 1e-14
+            nact += 1
+            if nact != i
+                rb[:, nact] .= rb[:, i]
             end
-        end
-
-        # Phase 2: orthonormalize nb candidates among themselves; dependent columns are dropped
-        nact_rb = _ortho!(rb, nb, orth_method, buf)
-        nact = min(nact_rb, kmax - j)
-        if nact > 0
-            V[:, j+1:j+nact] .= rb[:, 1:nact]
+            rb[:, nact] ./= norms[i]
         end
     end
+    nact = min(nact, kmax - j)
+    nact == 0 && return Hc, Sc, 0
 
-    nact == 0 && return Hc, 0
+    V[:, j+1:j+nact] .= rb[:, 1:nact]
 
     # Compute A * new basis vectors
     @timing "jd: matvec" mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
 
-    # Update projected Hamiltonian (full column block, BLAS-3)
+    # Expand Hc = V'AV and Sc = V'V (new columns only; existing block reused)
     @timing "jd: expand overlap" begin
         Hexp = similar(Hc, j+nact, j+nact)
         Hexp[1:j, 1:j] .= Hc
         mul!(Hexp[:, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])
-        Hexp = Hermitian(Hexp)  # Hermitian ==> no need for explicit symmetrization
+        Hexp = Hermitian(Hexp)
+
+        Sexp = similar(Sc, j+nact, j+nact)
+        Sexp[1:j, 1:j] .= Sc
+        mul!(Sexp[:, j+1:j+nact], V[:, 1:j+nact]', V[:, j+1:j+nact])
+        Sexp = Hermitian(Sexp)
     end
 
-    return Hexp, nact
+    return Hexp, Sexp, nact
 end
