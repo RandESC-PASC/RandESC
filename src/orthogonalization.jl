@@ -139,11 +139,12 @@ to `V[:,1:nact]` and `SV[:,1:nact]`.
 `TS = eltype(SV)` is the low-precision sketch type (e.g. `Float32`).
 Mixed-precision casts (e.g. `TV.(F.R)`) are applied only when `TV != TS`.
 """
-@views function _sketch_qr_ortho!(V::AbstractMatrix, SV::AbstractMatrix,
-                                  S_buf::AbstractMatrix; tol::Float64=1e-10)
+@views function _sketch_qr_ortho!(V::AbstractMatrix, SV::AbstractMatrix;
+                                  tol::Float64=1e-10)
     m = size(V, 2)
-    S_buf[:, 1:m] .= SV[:, 1:m]
-    F = qr!(S_buf[:, 1:m])
+    # qr (not qr!) copies SV[:, 1:m] to a fresh contiguous matrix before factorizing.
+    # On GPU this ensures CUSOLVER dispatch; qr! on a SubArray view falls back to CPU.
+    F = qr(SV[:, 1:m])
     good = findall(abs.(F.R[diagind(F.R)]) .>= tol)
     nact = length(good)
     fill!(SV[:, 1:m], zero(eltype(SV)))
@@ -191,14 +192,14 @@ Mixed-precision casts (e.g. `TV.(F.U)`) are applied only when `TV != TS`.
         catch
             V .= V_buf
             SV .= S_buf
-            return _sketch_qr_ortho!(V, SV, S_buf; tol=tol)
+            return _sketch_qr_ortho!(V, SV; tol=tol)
         end
 
         # Aggressive rank check, revert to QR if any diagonal entries are "near" zero or NaN
         if  any(isnan, F.U) || minimum(abs, diag(F.U)) <= 1e-6
             V .= V_buf
             SV .= S_buf
-            return _sketch_qr_ortho!(V, SV, S_buf; tol=tol)
+            return _sketch_qr_ortho!(V, SV; tol=tol)
         end
 
         US = UpperTriangular(F.U)
@@ -296,7 +297,7 @@ function _sketch_ortho!(V::AbstractMatrix, SV::AbstractMatrix, method::Symbol,
     method in SKETCH_ORTH_METHODS ||
         error("Unknown sketch orth_method :$method; valid: $SKETCH_ORTH_METHODS")
     if method == :rqr
-        return _sketch_qr_ortho!(V, SV, s_buf)
+        return _sketch_qr_ortho!(V, SV)
     elseif method == :cholqr2
         return _sketch_cholqr_ortho!(V, SV, v_buf, s_buf; n_pass=2)
     elseif method == :cholqr3
