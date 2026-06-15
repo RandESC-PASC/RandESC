@@ -29,3 +29,5 @@ JuliaLocalPreferences.toml
 
 # Benchmark output
 *.benchmark.pdf
+
+benchmark/DFTK/results
