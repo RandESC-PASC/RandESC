@@ -12,7 +12,7 @@ get_flag(prefix) = let m = match(Regex("^$prefix=(.+)"), something(findfirst(a -
 end
 ecut_arg  = get_flag("--ecut")
 kgrid_arg = get_flag("--kgrid")
-ecut  = ecut_arg  === nothing ? 30 : parse(Int, ecut_arg)
+ecut  = ecut_arg  === nothing ? 45 : parse(Int, ecut_arg)
 kgrid = kgrid_arg === nothing ? [2, 2, 2] : parse.(Int, split(kgrid_arg, ","))
 filename_args = filter(a -> !startswith(a, "--"), ARGS)
 filename = length(filename_args) > 0 ? filename_args[1] : "structures/si.extxyz"
