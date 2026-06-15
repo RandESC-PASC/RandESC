@@ -112,7 +112,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         end
 
         # Compute residuals for active pairs nconv+1..nconv+nb (blocked BLAS-3)
-        @timing "jd: residual" begin
+        # @timing "jd: residual" begin
             if restarted
                 # Vc is identity, can simply copy columns over
                 ub[:, 1:nb] .= V[:, nconv+1:nconv+nb]
@@ -123,7 +123,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
             end
             rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv+1:nconv+nb]'
             rnorms = columnwise_norms(rb[:, 1:nb])
-        end
+        # end
 
         # Consecutive convergence check (target pairs only, skip first iteration)
         nb_target = min(k - nconv, nb)
@@ -144,7 +144,7 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
 
         # Lock newly converged pairs (Ritz vectors stay in V via soft-locking)
         if nconv_new > 0
-            @timing "jd: lock" begin
+            # @timing "jd: lock" begin
                 nconv += nconv_new
                 nconv >= k && break
                 # Shift remaining active residuals to front
@@ -155,17 +155,17 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
                 else
                     continue
                 end
-            end
+            # end
         end
 
         # Apply preconditioner
-        @timing "jd: correction" begin
+        # @timing "jd: correction" begin
             if !isnothing(M)
                 !isnothing(precond_preparator) && precond_preparator(M, ub[:, 1:nb])
                 ldiv!(ub[:, 1:nb], M, rb[:, 1:nb])
                 rb[:, 1:nb] .= ub[:, 1:nb]
             end
-        end
+        # end
 
         # Expand subspace, new expanded Hc comes out
         Hc, nact = _jdb_expand!(V, W, Hc, rb, j, nb, kmax, A, orth_method, ub)
@@ -237,12 +237,12 @@ Returns the expanded projected Hamiltonian `Hexp` and the number of accepted vec
     @timing "jd: matvec" mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
 
     # Update projected Hamiltonian (full column block, BLAS-3)
-    @timing "jd: expand overlap" begin
+    # @timing "jd: expand overlap" begin
         Hexp = similar(Hc, j+nact, j+nact)
         Hexp[1:j, 1:j] .= Hc
         mul!(Hexp[:, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])
         Hexp = Hermitian(Hexp)  # Hermitian ==> no need for explicit symmetrization
-    end
+    # end
 
     return Hexp, nact
 end

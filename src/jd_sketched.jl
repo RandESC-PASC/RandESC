@@ -95,7 +95,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
     # ── Initialize subspace ───────────────────────────────────────────────
     j = min(kb, n)
-    @timing "jd_sketched: init" begin
+    # @timing "jd_sketched: init" begin
         nc = min(size(v0, 2), j)
         V[:, 1:nc] .= v0[:, 1:nc]
         if nc < j
@@ -104,17 +104,17 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # Θ-orthonormalize in-place; pre-compute sketch first.
         @timing "jd_sketched: sketch" mul!(SV[:, 1:j], Theta, V[:, 1:j])
         j = _sketch_ortho!(V[:, 1:j], SV[:, 1:j], orth_method, n_buffer, s_buffer)
-    end
+    # end
     @timing "jd_sketched: matvec" begin
         mul!(W[:, 1:j], A, V[:, 1:j])
         nmv += j
     end
     # Mc = V'AV, Oc = V'V — stored as plain arrays so similar(Mc,...) preserves device type;
     # Hermitian wrapper applied only at eigen call sites.
-    @timing "jd_sketched: overlap" begin
+    # @timing "jd_sketched: overlap" begin
         Mc = Hermitian(V[:, 1:j]' * W[:, 1:j])
         Oc = Hermitian(V[:, 1:j]' * V[:, 1:j])
-    end
+    # end
 
     # Generalized Hermitian eigenproblem Mc y = λ Oc y.
     # Eigenvalues are real and sorted; eigenvectors are Oc-orthonormal (U' Oc U = I).
@@ -169,7 +169,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
         # ew[nconv+1:nconv+nb] are used directly as Rayleigh quotients.
         ub    = view(n_buffer, :, 1:nb)
         rb    = view(n_buffer, :, nb+1:2*nb)
-        @timing "jd_sketched: residual" begin
+        # @timing "jd_sketched: residual" begin
             Y_nb = view(U, :, nconv+1:nconv+nb)
             if restarted
                 # U is identity, can simply copy columns
@@ -181,10 +181,10 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
             end
             rb[:, 1:nb] .-= ub[:, 1:nb] .* ew[nconv + 1:nconv + nb]'
             rnorms = columnwise_norms(rb[:, 1:nb])
-        end
+        # end
 
         # Convergence check on active target pairs (skip first iteration, like jd)
-        @timing "jd_sketched: check" begin
+        # @timing "jd_sketched: check" begin
             nb_target = min(k - nconv, nb)
 
             hist_row += 1
@@ -201,11 +201,11 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 first_notconv = findfirst(rnorms[1:nb_target] .>= tol)
                 nconv_new = isnothing(first_notconv) ? nb_target : first_notconv - 1
             end
-        end
+        # end
 
         # Lock newly converged pairs (Ritz vectors stay in V via soft-locking)
         if nconv_new > 0
-            @timing "jd_sketched: lock" begin
+            # @timing "jd_sketched: lock" begin
                 nconv += nconv_new
                 nconv >= k && break
                 nb -= nconv_new
@@ -215,17 +215,17 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
                 else
                     continue
                 end
-            end
+            # end
         end
 
         # Apply preconditioner
-        @timing "jd_sketched: correction" begin
+        # @timing "jd_sketched: correction" begin
             if !isnothing(M)
                 !isnothing(precond_preparator) && precond_preparator(M, ub[:, 1:nb])
                 ldiv!(ub[:, 1:nb], M, rb[:, 1:nb])
                 rb[:, 1:nb] .= ub[:, 1:nb]
             end
-        end
+        # end
 
         SV_scratch = view(s_buffer, :, 1:nb)
         V_scratch = view(n_buffer, :, 1:nb) # note: overwrites ub
@@ -271,7 +271,8 @@ Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
 """
 @views function _jdrb_expand!(V, SV, W, Mc, Oc, rb, j, nb, jmax, A, Theta, orth_method,
                                SV_scratch, V_scratch, S_scratch)
-    @timing "jd_sketched: sketch" mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
+    # @timing "jd_sketched: sketch" mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
+    mul!(SV_scratch[:, 1:nb], Theta, rb[:, 1:nb])
     @timing "jd_sketched: ortho" begin
         _sketch_project_out!(rb[:, 1:nb], SV_scratch[:, 1:nb], V[:, 1:j], SV[:, 1:j], orth_method)
         nact = _sketch_ortho!(rb[:, 1:nb], SV_scratch[:, 1:nb], orth_method, V_scratch, S_scratch)
@@ -289,7 +290,7 @@ Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
     @timing "jd_sketched: matvec" mul!(W[:, j+1:j+nact], A, V[:, j+1:j+nact])
 
     # Expand Mc = V'AV and Oc = V'V
-    @timing "jd_sketched: expand overlap" begin
+    # @timing "jd_sketched: expand overlap" begin
         Mexp = similar(Mc, j+nact, j+nact)
         Mexp[1:j, 1:j] .= Mc
         mul!(Mexp[:, j+1:j+nact], V[:, 1:j+nact]', W[:, j+1:j+nact])
@@ -299,7 +300,7 @@ Returns the expanded Mc, Oc, and the number of accepted vectors `nact`.
         Oexp[1:j, 1:j] .= Oc
         mul!(Oexp[:, j+1:j+nact], V[:, 1:j+nact]', V[:, j+1:j+nact])
         Oexp = Hermitian(Oexp)
-    end
+    # end
 
     return Mexp, Oexp, nact
 end
