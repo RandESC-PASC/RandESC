@@ -19,10 +19,10 @@ from ase import Atoms
 from ase.io import write
 
 BASE_URL = "https://optimade.materialscloud.org/main/mc3d-pbe-v1/v1/structures"
-OUT_DIR = "mc3d_optimade"
+OUT_DIR = "mc3d_optimade_cpu"
 N_STRUCTURES = 100
-MIN_SITES = 10
-MAX_SITES = 120
+MIN_SITES = 6
+MAX_SITES = 30
 MAG_TOL = 1e-2  # |magnetization| below this is considered non-magnetic
 PAGE_LIMIT = 100
 SEED = 1234
