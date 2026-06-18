@@ -89,6 +89,8 @@ and history is nit x 3 with columns [max_rnorm, iter, nmv].
         # Active pairs: nconv+1 .. nconv+nb  (k-nconv target + nbuff buffer)
         nb = max(min(k - nconv + nbuff, j - nconv), 1)
 
+        kmax = min(kmax, jmin + 3 * nb)
+
         # Restart: keep kb Ritz vectors (soft-locked stay in V)
         if j + nb >= kmax
             @timing "jd: restart" begin

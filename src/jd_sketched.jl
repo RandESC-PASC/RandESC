@@ -131,6 +131,7 @@ and history is nitx3 with columns [max_rnorm, iter, nmv].
 
         # Active pairs: nconv+1 .. nconv+nb  (k-nconv target + nbuff buffer)
         nb = max(min(k - nconv + nbuff, j - nconv), 1)
+        jmax = min(jmax, jmin + 3 * nb)
 
         # Restart: keep jmin Ritz vectors (soft-locked pairs stay in V).
         # U[:,1:nk] is Oc-orthonormal, so after rotation V_new = V*U[:,1:nk]:
