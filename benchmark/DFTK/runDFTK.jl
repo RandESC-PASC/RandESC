@@ -10,10 +10,12 @@ use_gpu = "--gpu" in ARGS
 get_flag(prefix) = let m = match(Regex("^$prefix=(.+)"), something(findfirst(a -> startswith(a, "$prefix="), ARGS) |> i -> i === nothing ? nothing : ARGS[i], ""))
     m === nothing ? nothing : m.captures[1]
 end
-ecut_arg  = get_flag("--ecut")
-kgrid_arg = get_flag("--kgrid")
-ecut  = ecut_arg  === nothing ? 45 : parse(Int, ecut_arg)
-kgrid = kgrid_arg === nothing ? [2, 2, 2] : parse.(Int, split(kgrid_arg, ","))
+ecut_arg       = get_flag("--ecut")
+kgrid_arg      = get_flag("--kgrid")
+results_dir_arg = get_flag("--results-dir")
+ecut        = ecut_arg  === nothing ? 45 : parse(Int, ecut_arg)
+kgrid       = kgrid_arg === nothing ? [2, 2, 2] : parse.(Int, split(kgrid_arg, ","))
+results_dir = results_dir_arg === nothing ? "results" : results_dir_arg
 filename_args = filter(a -> !startswith(a, "--"), ARGS)
 filename = length(filename_args) > 0 ? filename_args[1] : "structures/si.extxyz"
 
@@ -81,8 +83,8 @@ end
 const CSV_HEADER = "timestamp,structure,ecut,kgrid,n_planewaves,n_electrons,use_gpu,algorithm,total_scf,eigensolver_total,matvec,diag,ortho,allocation"
 
 function save_timings(algorithm, dftk_t, randesc_t)
-    mkpath("results")
-    csv_path = "results/timings.csv"
+    mkpath(results_dir)
+    csv_path = joinpath(results_dir, "timings.csv")
     if !isfile(csv_path) || readline(csv_path) != CSV_HEADER
         open(io -> println(io, CSV_HEADER), csv_path, "w")
     end
@@ -124,6 +126,7 @@ self_consistent_field(basis; maxiter=2, eigensolver=make_eigensolver(use_randomi
 self_consistent_field(basis; maxiter=2, eigensolver=make_eigensolver(use_randomization=true))
 use_gpu && (GC.gc(); CUDA.reclaim())
 use_gpu && RandESC.activate_nvtx_profiling()
+use_gpu && (DFTK.timing_sync[] = CUDA.synchronize)
 
 println("\n" * "*"^80)
 println("LOBPCG\n")
