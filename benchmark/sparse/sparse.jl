@@ -25,13 +25,13 @@ using CairoMakie
 ###   julia --project=benchmark/sparse benchmark/sparse/sparse.jl --cuda  # or --rocm
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-const K_VALUES = [100]                                  # fixed eigenpair counts
-const N_VALUES = [50, 100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000, 1_000_000]
+const K_VALUES = [500]                                  # fixed eigenpair counts
+const N_VALUES = [50, 100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000]
 const N_REPS   = 3        # repetitions per (solver, k, n); mean ± std is reported
 const TOL      = 1e-6     # residual convergence threshold
 const MAXIT    = 500      # max JD iterations
 const OP_KIND  = :logfun   # :model_hamiltonian | :logfun | :laplacian2d | :laplacian3d | :random_spd
-const N_MIN_RATIO = 6     # skip a point unless n >= N_MIN_RATIO * k (keeps sketch s < n)
+const N_MIN_RATIO = 3     # skip a point unless n >= N_MIN_RATIO * k (keeps sketch s < n)
 
 Random.seed!(1234)
 
@@ -214,6 +214,19 @@ function prepare(n_req, k, reps)
     return A, M, n, v0s
 end
 
+# Read cumulative measured time [s] of each solver sub-section from the RandESC
+# timer. Keys are the full TimerOutputs labels, e.g. "jd: ortho", "jd_sketched: diag".
+function section_times(to)
+    d = Dict{String,Float64}()
+    for solver in ("jd", "jd_sketched")
+        haskey(to.inner_timers, solver) || continue
+        for (name, inner) in to.inner_timers[solver].inner_timers
+            d[name] = RandESC.TimerOutputs.time(inner) * 1e-9   # ns -> s
+        end
+    end
+    return d
+end
+
 # Warm up both solvers so JIT compilation is excluded from the measurements.
 function warmup()
     A, M, _, v0s = prepare(400, 5, 1)
@@ -229,14 +242,19 @@ println("k_values = $K_VALUES")
 println("n_values = $N_VALUES")
 println("Warming up (compiling solvers)...")
 warmup()
+reset_timer!(timer)   # discard warmup/compilation timings; measure only the sweep
 
-# results[k] = (ns, mean_jd, std_jd, mean_sketch, std_sketch); only run n stored.
-results = Dict{Int,NTuple{5,Vector{Float64}}}()
+# results[k]   = (ns, mean_jd, std_jd, mean_sketch, std_sketch); only run n stored.
+# breakdown[k] = vector (aligned with ns) of Dict("jd: ortho"=>s, ...): per-solve
+#                average time of each timed sub-section at that point.
+results   = Dict{Int,NTuple{5,Vector{Float64}}}()
+breakdown = Dict{Int,Vector{Dict{String,Float64}}}()
 
 for k in K_VALUES
     ns       = Float64[]
     m_jd     = Float64[]; s_jd     = Float64[]
     m_sketch = Float64[]; s_sketch = Float64[]
+    bd       = Dict{String,Float64}[]
     println("\n=== k = $k ===")
     for n_req in N_VALUES
         n_req < N_MIN_RATIO * k && continue           # keep sketch dim s < n
@@ -244,15 +262,24 @@ for k in K_VALUES
         A, M, n, v0s = prepare(n_req, k, N_REPS)
         n < N_MIN_RATIO * k && continue
         @printf("  n=%-8d (requested %d) ... ", n, n_req)
+        reset_timer!(timer)                            # isolate this size's timings
         mj, sj = bench(jd, A, M, k, v0s)
         ms, ss = bench(jd_sketched, A, M, k, v0s)
+        # Per-point contribution = measured section time, averaged per solve.
+        delta = Dict(name => t / N_REPS for (name, t) in section_times(timer))
         push!(ns, n)
         push!(m_jd, mj); push!(s_jd, sj)
         push!(m_sketch, ms); push!(s_sketch, ss)
+        push!(bd, delta)
         @printf("jd=%.3f±%.3fs  jd_sketched=%.3f±%.3fs  (speedup %.2fx)\n",
                 mj, sj, ms, ss, mj / ms)
+        # Print this size's internal timer (reset at the start of the point).
+        println("  ── RandESC timer for k=$k, n=$n ──")
+        RandESC.TimerOutputs.print_timer(timer; sortby=:firstexec, allocations=true)
+        println()
     end
-    results[k] = (ns, m_jd, s_jd, m_sketch, s_sketch)
+    results[k]   = (ns, m_jd, s_jd, m_sketch, s_sketch)
+    breakdown[k] = bd
 end
 
 # ── Plot ──────────────────────────────────────────────────────────────────────
@@ -288,3 +315,49 @@ Label(fig[0, :], "jd vs jd_sketched on sparse $OP_KIND operator"; fontsize=18, f
 outfile = joinpath(@__DIR__, "sparse_timing_vs_n$(SUFFIX).benchmark.pdf")
 save(outfile, fig)
 println("\nSaved $outfile")
+
+# ── Per-sweep breakdown bar plot ────────────────────────────────────────────────
+# One panel per k. At each n: two stacked bars (jd, jd_sketched), stacked by the
+# per-solve time spent in each timed sub-section.
+const SECTION_ORDER = ["allocation", "sketch", "matvec", "overlap", "ortho", "diag", "restart"]
+sec_color = Dict(s => colors[i] for (i, s) in enumerate(SECTION_ORDER))
+
+maxpts = maximum((length(results[k][1]) for k in K_VALUES); init=1)
+fig_bar = Figure(size=(max(640, 130 * maxpts) + 160, 360 * length(K_VALUES) + 40))
+used = String[]
+
+for (row, k) in enumerate(K_VALUES)
+    ns = results[k][1]
+    bd = breakdown[k]
+    ax = Axis(fig_bar[row, 1];
+        xlabel = "n   (left bar: jd,  right bar: jd_sketched)",
+        ylabel = "Mean solve time [s]  (timed sections)",
+        title  = "k = $k",
+        xticks = (1:length(ns), string.(Int.(ns))),
+        xticklabelrotation = π / 4,
+    )
+    isempty(ns) && continue
+    xs = Int[]; hs = Float64[]; stacks = Int[]; dodges = Int[]; cols = eltype(colors)[]
+    for i in eachindex(ns)
+        for (di, solver) in enumerate(("jd", "jd_sketched"))
+            for (si, sec) in enumerate(SECTION_ORDER)
+                t = get(bd[i], "$solver: $sec", 0.0)
+                t <= 0 && continue
+                push!(xs, i); push!(hs, t); push!(stacks, si); push!(dodges, di)
+                push!(cols, sec_color[sec])
+                sec in used || push!(used, sec)
+            end
+        end
+    end
+    barplot!(ax, xs, hs; stack=stacks, dodge=dodges, color=cols)
+end
+
+legend_secs = filter(s -> s in used, SECTION_ORDER)
+elems = [PolyElement(color=sec_color[s]) for s in legend_secs]
+Legend(fig_bar[:, 2], elems, legend_secs, "Section")
+Label(fig_bar[0, :], "Solver time breakdown per sweep point — $OP_KIND";
+      fontsize=18, font=:bold)
+
+barfile = joinpath(@__DIR__, "sparse_breakdown$(SUFFIX).benchmark.pdf")
+save(barfile, fig_bar)
+println("Saved $barfile")
