@@ -1,0 +1,175 @@
+{
+  "k": 500,
+  "n_reps": 3,
+  "operator": "logfun",
+  "data": [
+    {
+      "n": 2000,
+      "jd_mean": 9.762,
+      "jd_std": 0.043,
+      "jd_sketched_mean": 15.841,
+      "jd_sketched_std": 0.098,
+      "sections": {
+        "jd: allocation": 0.0002313333333333333,
+        "jd: ortho": 2.0733333333333333,
+        "jd: matvec": 0.09733333333333333,
+        "jd: overlap": 0.0123,
+        "jd: diag": 5.366666666666667,
+        "jd: restart": 0.8633333333333333,
+        "jd_sketched: allocation": 0.002716666666666667,
+        "jd_sketched: sketch": 0.0074,
+        "jd_sketched: matvec": 0.09133333333333334,
+        "jd_sketched: diag": 5.8,
+        "jd_sketched: ortho": 5.533333333333334,
+        "jd_sketched: restart": 2.0166666666666666
+      }
+    },
+    {
+      "n": 5000,
+      "jd_mean": 21.369,
+      "jd_std": 0.068,
+      "jd_sketched_mean": 28.503,
+      "jd_sketched_std": 0.075,
+      "sections": {
+        "jd: allocation": 0.0011533333333333333,
+        "jd: ortho": 7.0,
+        "jd: matvec": 0.2856666666666667,
+        "jd: overlap": 0.0304,
+        "jd: diag": 6.433333333333334,
+        "jd: restart": 2.9466666666666668,
+        "jd_sketched: allocation": 0.003186666666666667,
+        "jd_sketched: sketch": 0.014566666666666667,
+        "jd_sketched: matvec": 0.2846666666666667,
+        "jd_sketched: diag": 6.8,
+        "jd_sketched: ortho": 9.733333333333333,
+        "jd_sketched: restart": 4.166666666666667
+      }
+    },
+    {
+      "n": 10000,
+      "jd_mean": 45.065,
+      "jd_std": 0.388,
+      "jd_sketched_mean": 49.952,
+      "jd_sketched_std": 0.197,
+      "sections": {
+        "jd: allocation": 0.0013399999999999998,
+        "jd: ortho": 20.2,
+        "jd: matvec": 0.7000000000000001,
+        "jd: overlap": 0.06066666666666667,
+        "jd: diag": 7.833333333333333,
+        "jd: restart": 6.7,
+        "jd_sketched: allocation": 0.04933333333333333,
+        "jd_sketched: sketch": 0.027433333333333334,
+        "jd_sketched: matvec": 0.6566666666666666,
+        "jd_sketched: diag": 7.466666666666666,
+        "jd_sketched: ortho": 17.900000000000002,
+        "jd_sketched: restart": 8.366666666666667
+      }
+    },
+    {
+      "n": 20000,
+      "jd_mean": 99.122,
+      "jd_std": 0.067,
+      "jd_sketched_mean": 91.882,
+      "jd_sketched_std": 0.194,
+      "sections": {
+        "jd: allocation": 0.06866666666666667,
+        "jd: ortho": 54.0,
+        "jd: matvec": 1.4366666666666665,
+        "jd: overlap": 0.12066666666666666,
+        "jd: diag": 8.566666666666666,
+        "jd: restart": 14.833333333333334,
+        "jd_sketched: allocation": 0.072,
+        "jd_sketched: sketch": 0.05466666666666667,
+        "jd_sketched: matvec": 1.4166666666666667,
+        "jd_sketched: diag": 8.566666666666666,
+        "jd_sketched: ortho": 34.333333333333336,
+        "jd_sketched: restart": 17.2
+      }
+    },
+    {
+      "n": 50000,
+      "jd_mean": 272.801,
+      "jd_std": 0.453,
+      "jd_sketched_mean": 222.988,
+      "jd_sketched_std": 0.369,
+      "sections": {
+        "jd: allocation": 0.42,
+        "jd: ortho": 164.33333333333334,
+        "jd: matvec": 2.9933333333333336,
+        "jd: overlap": 0.301,
+        "jd: diag": 8.733333333333333,
+        "jd: restart": 41.666666666666664,
+        "jd_sketched: allocation": 0.07233333333333333,
+        "jd_sketched: sketch": 0.12966666666666668,
+        "jd_sketched: matvec": 2.973333333333333,
+        "jd_sketched: diag": 9.833333333333334,
+        "jd_sketched: ortho": 86.66666666666667,
+        "jd_sketched: restart": 43.333333333333336
+      }
+    },
+    {
+      "n": 100000,
+      "jd_mean": 562.648,
+      "jd_std": 4.354,
+      "jd_sketched_mean": 446.552,
+      "jd_sketched_std": 2.204,
+      "sections": {
+        "jd: allocation": 0.6,
+        "jd: ortho": 350.3333333333333,
+        "jd: matvec": 5.5,
+        "jd: overlap": 0.6033333333333334,
+        "jd: diag": 9.0,
+        "jd: restart": 85.66666666666667,
+        "jd_sketched: allocation": 0.07233333333333333,
+        "jd_sketched: sketch": 0.256,
+        "jd_sketched: matvec": 5.466666666666666,
+        "jd_sketched: diag": 10.266666666666667,
+        "jd_sketched: ortho": 178.66666666666666,
+        "jd_sketched: restart": 87.66666666666667
+      }
+    },
+    {
+      "n": 200000,
+      "jd_mean": 1211.2,
+      "jd_std": 3.247,
+      "jd_sketched_mean": 932.057,
+      "jd_sketched_std": 2.072,
+      "sections": {
+        "jd: allocation": 0.5966666666666667,
+        "jd: ortho": 759.3333333333334,
+        "jd: matvec": 11.233333333333334,
+        "jd: overlap": 1.2066666666666668,
+        "jd: diag": 10.1,
+        "jd: restart": 189.66666666666666,
+        "jd_sketched: allocation": 0.07266666666666667,
+        "jd_sketched: sketch": 0.58,
+        "jd_sketched: matvec": 11.233333333333334,
+        "jd_sketched: diag": 10.200000000000001,
+        "jd_sketched: ortho": 365.6666666666667,
+        "jd_sketched: restart": 191.66666666666666
+      }
+    },
+    {
+      "n": 500000,
+      "jd_mean": 3365.748,
+      "jd_std": 4.71,
+      "jd_sketched_mean": 2513.002,
+      "jd_sketched_std": 2.14,
+      "sections": {
+        "jd: allocation": 0.7966666666666667,
+        "jd: ortho": 2184.0,
+        "jd: matvec": 45.333333333333336,
+        "jd: overlap": 3.0433333333333334,
+        "jd: diag": 10.4,
+        "jd: restart": 493.0,
+        "jd_sketched: allocation": 0.07266666666666667,
+        "jd_sketched: sketch": 1.8333333333333333,
+        "jd_sketched: matvec": 45.333333333333336,
+        "jd_sketched: diag": 10.366666666666667,
+        "jd_sketched: ortho": 1022.0,
+        "jd_sketched: restart": 495.0
+      }
+    }
+  ]
+}

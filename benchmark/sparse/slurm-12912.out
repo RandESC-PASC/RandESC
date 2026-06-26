@@ -1,0 +1,210 @@
+Running on CPU
+Operator: logfun
+k_values = [500]
+n_values = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000]
+Warming up (compiling solvers)...
+
+=== k = 500 ===
+  n=2000     (requested 2000) ... jd=9.762±0.043s  jd_sketched=15.841±0.098s  (speedup 0.62x)
+  ── RandESC timer for k=500, n=2000 ──
+──────────────────────────────────────────────────────────────────────────────────────
+                                             Time                    Allocations      
+                                    ───────────────────────   ────────────────────────
+         Tot / % measured:               81.0s /  94.8%           6.09GiB /  98.8%    
+
+Section                     ncalls     time    %tot     avg     alloc    %tot      avg
+──────────────────────────────────────────────────────────────────────────────────────
+jd                               3    29.3s   38.1%   9.76s   2.05GiB   34.0%   698MiB
+  jd: allocation                 3    694μs    0.0%   231μs    220MiB    3.6%  73.2MiB
+  jd: ortho                     66    6.22s    8.1%  94.2ms    122MiB    2.0%  1.85MiB
+  jd: matvec                    66    292ms    0.4%  4.43ms     0.00B    0.0%    0.00B
+  jd: overlap                    3   36.9ms    0.0%  12.3ms   5.72MiB    0.1%  1.91MiB
+  jd: diag                      66    16.1s   20.9%   244ms   0.94GiB   15.5%  14.5MiB
+  jd: restart                   38    2.59s    3.4%  68.3ms    105MiB    1.7%  2.75MiB
+jd_sketched                      3    47.5s   61.9%   15.8s   3.97GiB   66.0%  1.32GiB
+  jd_sketched: allocation        3   8.15ms    0.0%  2.72ms    430MiB    7.0%   143MiB
+  jd_sketched: sketch            3   22.2ms    0.0%  7.41ms   11.4MiB    0.2%  3.81MiB
+  jd_sketched: matvec           66    274ms    0.4%  4.15ms     0.00B    0.0%    0.00B
+  jd_sketched: diag             66    17.4s   22.7%   264ms   1.83GiB   30.5%  28.5MiB
+  jd_sketched: ortho            63    16.6s   21.6%   264ms    179MiB    2.9%  2.84MiB
+  jd_sketched: restart          38    6.05s    7.9%   159ms    404MiB    6.6%  10.6MiB
+──────────────────────────────────────────────────────────────────────────────────────
+
+  n=5000     (requested 5000) ... jd=21.369±0.068s  jd_sketched=28.503±0.075s  (speedup 0.75x)
+  ── RandESC timer for k=500, n=5000 ──
+──────────────────────────────────────────────────────────────────────────────────────
+                                             Time                    Allocations      
+                                    ───────────────────────   ────────────────────────
+         Tot / % measured:                153s /  97.6%           8.92GiB /  98.7%    
+
+Section                     ncalls     time    %tot     avg     alloc    %tot      avg
+──────────────────────────────────────────────────────────────────────────────────────
+jd                               3    64.1s   42.8%   21.4s   3.24GiB   36.7%  1.08GiB
+  jd: allocation                 3   3.46ms    0.0%  1.15ms    549MiB    6.1%   183MiB
+  jd: ortho                     81    21.0s   14.0%   259ms    155MiB    1.7%  1.91MiB
+  jd: matvec                    81    857ms    0.6%  10.6ms     0.00B    0.0%    0.00B
+  jd: overlap                    3   91.2ms    0.1%  30.4ms   5.72MiB    0.1%  1.91MiB
+  jd: diag                      81    19.3s   12.9%   239ms   1.17GiB   13.3%  14.8MiB
+  jd: restart                   48    8.84s    5.9%   184ms    132MiB    1.5%  2.75MiB
+jd_sketched                      3    85.5s   57.2%   28.5s   5.57GiB   63.3%  1.86GiB
+  jd_sketched: allocation        3   9.56ms    0.0%  3.19ms    719MiB    8.0%   240MiB
+  jd_sketched: sketch            3   43.7ms    0.0%  14.6ms   28.6MiB    0.3%  9.54MiB
+  jd_sketched: matvec           81    854ms    0.6%  10.5ms     0.00B    0.0%    0.00B
+  jd_sketched: diag             81    20.4s   13.6%   252ms   2.29GiB   26.0%  29.0MiB
+  jd_sketched: ortho            78    29.2s   19.5%   374ms    229MiB    2.5%  2.93MiB
+  jd_sketched: restart          48    12.5s    8.3%   260ms    511MiB    5.7%  10.6MiB
+──────────────────────────────────────────────────────────────────────────────────────
+
+  n=10000    (requested 10000) ... jd=45.065±0.388s  jd_sketched=49.952±0.197s  (speedup 0.90x)
+  ── RandESC timer for k=500, n=10000 ──
+──────────────────────────────────────────────────────────────────────────────────────
+                                             Time                    Allocations      
+                                    ───────────────────────   ────────────────────────
+         Tot / % measured:                289s /  98.7%           12.7GiB /  98.2%    
+
+Section                     ncalls     time    %tot     avg     alloc    %tot      avg
+──────────────────────────────────────────────────────────────────────────────────────
+jd                               3     135s   47.4%   45.1s   4.90GiB   39.3%  1.63GiB
+  jd: allocation                 3   4.02ms    0.0%  1.34ms   1.07GiB    8.6%   366MiB
+  jd: ortho                     96    60.6s   21.3%   632ms    179MiB    1.4%  1.87MiB
+  jd: matvec                    96    2.10s    0.7%  21.8ms     0.00B    0.0%    0.00B
+  jd: overlap                    3    182ms    0.1%  60.7ms   5.72MiB    0.0%  1.91MiB
+  jd: diag                      96    23.5s    8.2%   245ms   1.35GiB   10.9%  14.4MiB
+  jd: restart                   59    20.1s    7.0%   340ms    162MiB    1.3%  2.75MiB
+jd_sketched                      3     150s   52.6%   50.0s   7.56GiB   60.7%  2.52GiB
+  jd_sketched: allocation        3    148ms    0.1%  49.3ms   1.17GiB    9.4%   400MiB
+  jd_sketched: sketch            3   82.3ms    0.0%  27.4ms   57.2MiB    0.4%  19.1MiB
+  jd_sketched: matvec           96    1.97s    0.7%  20.5ms     0.00B    0.0%    0.00B
+  jd_sketched: diag             96    22.4s    7.9%   233ms   2.65GiB   21.3%  28.3MiB
+  jd_sketched: ortho            93    53.7s   18.8%   577ms    265MiB    2.1%  2.85MiB
+  jd_sketched: restart          59    25.1s    8.8%   426ms    625MiB    4.9%  10.6MiB
+──────────────────────────────────────────────────────────────────────────────────────
+
+  n=20000    (requested 20000) ... jd=99.122±0.067s  jd_sketched=91.882±0.194s  (speedup 1.08x)
+  ── RandESC timer for k=500, n=20000 ──
+──────────────────────────────────────────────────────────────────────────────────────
+                                             Time                    Allocations      
+                                    ───────────────────────   ────────────────────────
+         Tot / % measured:                577s /  99.3%           19.3GiB /  97.7%    
+
+Section                     ncalls     time    %tot     avg     alloc    %tot      avg
+──────────────────────────────────────────────────────────────────────────────────────
+jd                               3     297s   51.9%   99.1s   7.99GiB   42.4%  2.66GiB
+  jd: allocation                 3    206ms    0.0%  68.7ms   2.15GiB   11.4%   732MiB
+  jd: ortho                    108     162s   28.3%   1.50s    196MiB    1.0%  1.81MiB
+  jd: matvec                   108    4.31s    0.8%  39.9ms     0.00B    0.0%    0.00B
+  jd: overlap                    3    362ms    0.1%   121ms   5.72MiB    0.0%  1.91MiB
+  jd: diag                     108    25.7s    4.5%   238ms   1.50GiB    7.9%  14.2MiB
+  jd: restart                   66    44.5s    7.8%   674ms    182MiB    0.9%  2.75MiB
+jd_sketched                      3     276s   48.1%   91.9s   10.8GiB   57.6%  3.61GiB
+  jd_sketched: allocation        3    216ms    0.0%  72.0ms   2.11GiB   11.2%   720MiB
+  jd_sketched: sketch            3    164ms    0.0%  54.6ms    114MiB    0.6%  38.1MiB
+  jd_sketched: matvec          108    4.25s    0.7%  39.4ms     0.00B    0.0%    0.00B
+  jd_sketched: diag            108    25.7s    4.5%   238ms   2.93GiB   15.6%  27.8MiB
+  jd_sketched: ortho           105     103s   18.0%   981ms    290MiB    1.5%  2.76MiB
+  jd_sketched: restart          66    51.6s    9.0%   782ms    698MiB    3.6%  10.6MiB
+──────────────────────────────────────────────────────────────────────────────────────
+
+  n=50000    (requested 50000) ... jd=272.801±0.453s  jd_sketched=222.988±0.369s  (speedup 1.22x)
+  ── RandESC timer for k=500, n=50000 ──
+──────────────────────────────────────────────────────────────────────────────────────
+                                             Time                    Allocations      
+                                    ───────────────────────   ────────────────────────
+         Tot / % measured:               1492s /  99.7%           39.1GiB /  97.1%    
+
+Section                     ncalls     time    %tot     avg     alloc    %tot      avg
+──────────────────────────────────────────────────────────────────────────────────────
+jd                               3     818s   55.0%    273s   17.5GiB   46.1%  5.83GiB
+  jd: allocation                 3    1.26s    0.1%   421ms   5.36GiB   14.1%  1.79GiB
+  jd: ortho                    123     493s   33.1%   4.01s    215MiB    0.6%  1.75MiB
+  jd: matvec                   123    8.98s    0.6%  73.0ms     0.00B    0.0%    0.00B
+  jd: overlap                    3    903ms    0.1%   301ms   5.72MiB    0.0%  1.91MiB
+  jd: diag                     123    26.2s    1.8%   213ms   1.67GiB    4.4%  13.9MiB
+  jd: restart                   75     125s    8.4%   1.66s    206MiB    0.5%  2.75MiB
+jd_sketched                      3     669s   45.0%    223s   20.5GiB   53.9%  6.82GiB
+  jd_sketched: allocation        3    217ms    0.0%  72.2ms   4.93GiB   13.0%  1.64GiB
+  jd_sketched: sketch            3    389ms    0.0%   130ms    286MiB    0.7%  95.4MiB
+  jd_sketched: matvec          123    8.92s    0.6%  72.5ms     0.00B    0.0%    0.00B
+  jd_sketched: diag            123    29.5s    2.0%   239ms   3.28GiB    8.6%  27.3MiB
+  jd_sketched: ortho           120     260s   17.5%   2.16s    320MiB    0.8%  2.67MiB
+  jd_sketched: restart          75     130s    8.7%   1.73s    792MiB    2.0%  10.6MiB
+──────────────────────────────────────────────────────────────────────────────────────
+
+  n=100000   (requested 100000) ... jd=562.648±4.354s  jd_sketched=446.552±2.204s  (speedup 1.26x)
+  ── RandESC timer for k=500, n=100000 ──
+──────────────────────────────────────────────────────────────────────────────────────
+                                             Time                    Allocations      
+                                    ───────────────────────   ────────────────────────
+         Tot / % measured:               3034s /  99.8%           69.4GiB /  96.8%    
+
+Section                     ncalls     time    %tot     avg     alloc    %tot      avg
+──────────────────────────────────────────────────────────────────────────────────────
+jd                               3    1688s   55.8%    563s   32.3GiB   48.0%  10.8GiB
+  jd: allocation                 3    1.80s    0.1%   599ms   10.7GiB   16.0%  3.58GiB
+  jd: ortho                    121    1051s   34.7%   8.68s    226MiB    0.3%  1.87MiB
+  jd: matvec                   121    16.5s    0.5%   136ms     0.00B    0.0%    0.00B
+  jd: overlap                    3    1.81s    0.1%   603ms   5.72MiB    0.0%  1.91MiB
+  jd: diag                     121    27.0s    0.9%   223ms   1.71GiB    2.5%  14.4MiB
+  jd: restart                   76     257s    8.5%   3.38s    209MiB    0.3%  2.75MiB
+jd_sketched                      3    1340s   44.2%    447s   34.9GiB   52.0%  11.6GiB
+  jd_sketched: allocation        3    217ms    0.0%  72.3ms   9.62GiB   14.3%  3.21GiB
+  jd_sketched: sketch            3    768ms    0.0%   256ms    572MiB    0.8%   191MiB
+  jd_sketched: matvec          121    16.4s    0.5%   136ms     0.00B    0.0%    0.00B
+  jd_sketched: diag            121    30.8s    1.0%   254ms   3.34GiB    5.0%  28.3MiB
+  jd_sketched: ortho           118     536s   17.7%   4.54s    336MiB    0.5%  2.85MiB
+  jd_sketched: restart          76     263s    8.7%   3.46s    805MiB    1.2%  10.6MiB
+──────────────────────────────────────────────────────────────────────────────────────
+
+  n=200000   (requested 200000) ... jd=1211.200±3.247s  jd_sketched=932.057±2.072s  (speedup 1.30x)
+  ── RandESC timer for k=500, n=200000 ──
+──────────────────────────────────────────────────────────────────────────────────────
+                                             Time                    Allocations      
+                                    ───────────────────────   ────────────────────────
+         Tot / % measured:               1.79h /  99.9%            140GiB /  96.8%    
+
+Section                     ncalls     time    %tot     avg     alloc    %tot      avg
+──────────────────────────────────────────────────────────────────────────────────────
+jd                               3    1.01h   56.5%   1211s   66.8GiB   49.2%  22.3GiB
+  jd: allocation                 3    1.79s    0.0%   598ms   21.5GiB   15.8%  7.15GiB
+  jd: ortho                    146    2278s   35.4%   15.6s    238MiB    0.2%  1.63MiB
+  jd: matvec                   146    33.7s    0.5%   231ms     0.00B    0.0%    0.00B
+  jd: overlap                    3    3.62s    0.1%   1.21s   5.72MiB    0.0%  1.91MiB
+  jd: diag                     146    30.3s    0.5%   207ms   1.91GiB    1.4%  13.4MiB
+  jd: restart                   88     569s    8.9%   6.47s    242MiB    0.2%  2.75MiB
+jd_sketched                      3    2796s   43.5%    932s   69.1GiB   50.8%  23.0GiB
+  jd_sketched: allocation        3    218ms    0.0%  72.8ms   19.0GiB   14.0%  6.34GiB
+  jd_sketched: sketch            3    1.74s    0.0%   579ms   1.12GiB    0.8%   381MiB
+  jd_sketched: matvec          146    33.7s    0.5%   231ms     0.00B    0.0%    0.00B
+  jd_sketched: diag            146    30.6s    0.5%   210ms   3.75GiB    2.8%  26.3MiB
+  jd_sketched: ortho           143    1097s   17.1%   7.67s    354MiB    0.3%  2.48MiB
+  jd_sketched: restart          88     575s    8.9%   6.54s    925MiB    0.7%  10.5MiB
+──────────────────────────────────────────────────────────────────────────────────────
+
+  n=500000   (requested 500000) ... jd=3365.748±4.710s  jd_sketched=2513.002±2.140s  (speedup 1.34x)
+  ── RandESC timer for k=500, n=500000 ──
+──────────────────────────────────────────────────────────────────────────────────────
+                                             Time                    Allocations      
+                                    ───────────────────────   ────────────────────────
+         Tot / % measured:               4.90h /  99.9%            343GiB /  96.7%    
+
+Section                     ncalls     time    %tot     avg     alloc    %tot      avg
+──────────────────────────────────────────────────────────────────────────────────────
+jd                               3    2.80h   57.3%   3366s    166GiB   50.0%  55.2GiB
+  jd: allocation                 3    2.39s    0.0%   796ms   53.6GiB   16.2%  17.9GiB
+  jd: ortho                    147    1.82h   37.1%   44.5s    251MiB    0.1%  1.71MiB
+  jd: matvec                   147     136s    0.8%   926ms     0.00B    0.0%    0.00B
+  jd: overlap                    3    9.13s    0.1%   3.04s   5.72MiB    0.0%  1.91MiB
+  jd: diag                     147    31.2s    0.2%   212ms   1.97GiB    0.6%  13.7MiB
+  jd: restart                   90    1479s    8.4%   16.4s    248MiB    0.1%  2.75MiB
+jd_sketched                      3    2.09h   42.7%   2513s    166GiB   50.0%  55.3GiB
+  jd_sketched: allocation        3    218ms    0.0%  72.7ms   47.2GiB   14.2%  15.7GiB
+  jd_sketched: sketch            3    5.50s    0.0%   1.83s   2.79GiB    0.8%  0.93GiB
+  jd_sketched: matvec          147     136s    0.8%   925ms     0.00B    0.0%    0.00B
+  jd_sketched: diag            147    31.1s    0.2%   211ms   3.87GiB    1.2%  26.9MiB
+  jd_sketched: ortho           144    3066s   17.4%   21.3s    374MiB    0.1%  2.59MiB
+  jd_sketched: restart          90    1485s    8.4%   16.5s    948MiB    0.3%  10.5MiB
+──────────────────────────────────────────────────────────────────────────────────────
+
+
+Saved /home/gubler_m/Documents/RandESC/benchmark/sparse/sparse_timing_vs_n.benchmark.pdf
+Saved /home/gubler_m/Documents/RandESC/benchmark/sparse/sparse_breakdown.benchmark.pdf

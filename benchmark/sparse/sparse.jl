@@ -267,6 +267,9 @@ for k in K_VALUES
         ms, ss = bench(jd_sketched, A, M, k, v0s)
         # Per-point contribution = measured section time, averaged per solve.
         delta = Dict(name => t / N_REPS for (name, t) in section_times(timer))
+        # Add unaccounted time (wall clock minus sum of timed sections).
+        delta["jd: unaccounted"]          = max(0.0, mj - sum(v for (nm, v) in delta if startswith(nm, "jd:") && !startswith(nm, "jd_sketched:"); init=0.0))
+        delta["jd_sketched: unaccounted"] = max(0.0, ms - sum(v for (nm, v) in delta if startswith(nm, "jd_sketched:"); init=0.0))
         push!(ns, n)
         push!(m_jd, mj); push!(s_jd, sj)
         push!(m_sketch, ms); push!(s_sketch, ss)
@@ -319,8 +322,9 @@ println("\nSaved $outfile")
 # ── Per-sweep breakdown bar plot ────────────────────────────────────────────────
 # One panel per k. At each n: two stacked bars (jd, jd_sketched), stacked by the
 # per-solve time spent in each timed sub-section.
-const SECTION_ORDER = ["allocation", "sketch", "matvec", "overlap", "ortho", "diag", "restart"]
-sec_color = Dict(s => colors[i] for (i, s) in enumerate(SECTION_ORDER))
+const SECTION_ORDER = ["allocation", "sketch", "matvec", "overlap", "ortho", "diag", "restart", "unaccounted"]
+sec_color = Dict(s => colors[mod1(i, length(colors))] for (i, s) in enumerate(SECTION_ORDER))
+sec_color["unaccounted"] = RGBAf(0.4, 0.4, 0.4, 1.0)   # gray for untimed work
 
 maxpts = maximum((length(results[k][1]) for k in K_VALUES); init=1)
 fig_bar = Figure(size=(max(640, 130 * maxpts) + 160, 360 * length(K_VALUES) + 40))
