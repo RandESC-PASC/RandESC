@@ -179,6 +179,44 @@ function sketch_options_test(T::Type; n=200, k=5, test_tol=1e-5, iter_tol=1e-8,
     test_jd_sketched_options(A, n, k, string(T); test_tol=test_tol, iter_tol=iter_tol)
 end
 
+function sketch_types_for_standard(T::Type)
+    # jd_sketched_standard always forces complex arithmetic, so real sketch types
+    # (real_gaussian, real_srtt) are incompatible regardless of input type.
+    if T <: Real
+        return ["sparsesign", "sparsestack"]
+    else
+        return ["complex_gaussian", "complex_srtt", "sparsesign", "sparsestack"]
+    end
+end
+
+function test_jd_sketched_standard_options(A, n, k, test_name; test_tol=1e-5, iter_tol=1e-8, verbose=false, maxiter=1000)
+    A_cpu = RandESC.to_cpu(A)
+    ea = eigen(A_cpu)
+    evals = ea.values[1:k]
+    v0 = RandESC.random_matrix(eltype(A), n, k, A)
+
+    expected_vec_type = eltype(A)
+    expected_val_type = real(eltype(A))
+
+    for sketch_type in sketch_types_for_standard(eltype(A))
+        for orth_method in [:rcgs, :rcgs2, :rqr]
+            @testset "$test_name: jd_sketched_standard(sketch_type=$sketch_type, orth_method=$orth_method)" begin
+                V, lambda, _ = jd_sketched_standard(A, v0; k=k, tol=iter_tol, maxit=maxiter,
+                                                    disp=verbose, sketch_type=sketch_type,
+                                                    orth_method=orth_method)
+                V = RandESC.to_cpu(V)
+                lambda = RandESC.to_cpu(lambda)
+                @test eltype(V) == expected_vec_type
+                @test eltype(lambda) == expected_val_type
+                @test maximum(abs.(evals .- lambda)) < test_tol
+                gram = V' * V
+                @test maximum(abs.(gram - I)) < test_tol
+                test_residuals(A_cpu, lambda, V, 5 * iter_tol)
+            end
+        end
+    end
+end
+
 function test_sketch_prec_float64(T::Type; n=200, k=5, test_tol=1e-5, iter_tol=1e-8,
                                   seed=55555, template=nothing)
     Random.seed!(seed)
@@ -265,5 +303,20 @@ function run_symmetric_hermitian_random_matrix_tests(; template=nothing)
 
     @testset "RandESC jd_sketched sketch_prec=Float64 — ComplexF64" begin
         test_sketch_prec_float64(ComplexF64; k=4, template=template)
+    end
+
+    ### Test sketch_type and orth_method combinations for jd_sketched_standard.
+    @testset "RandESC jd_sketched_standard Options — Float64" begin
+        Random.seed!(11111)
+        A = RandESC.random_matrix(Float64, 200, 200, template)
+        A = A + A'
+        test_jd_sketched_standard_options(A, 200, 5, "Float64"; test_tol=1e-5, iter_tol=1e-8)
+    end
+
+    @testset "RandESC jd_sketched_standard Options — ComplexF64" begin
+        Random.seed!(22222)
+        A = RandESC.random_matrix(ComplexF64, 200, 200, template)
+        A = A + A'
+        test_jd_sketched_standard_options(A, 200, 4, "ComplexF64"; test_tol=1e-5, iter_tol=1e-8)
     end
 end
