@@ -30,7 +30,7 @@ NVTX = "1"
 Printf = "1.11.0"
 Random = "1.11.0"
 SparseArrays = "1.11.0"
-TimerOutputs = "0.5.29"
+TimerOutputs = "0.5.29, 1"
 
 [extras]
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
