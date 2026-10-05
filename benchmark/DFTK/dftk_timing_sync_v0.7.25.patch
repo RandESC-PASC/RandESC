@@ -1,0 +1,54 @@
+--- a/src/common/timer.jl
++++ b/src/common/timer.jl
+@@ -7,23 +7,45 @@
+ """TimerOutput object used to store DFTK timings."""
+ const timer = TimerOutput()
+ 
++# Hook called at the end of every `@timing` measurement. External code can set
++# this to a device-synchronization function (e.g. CUDA.synchronize) so that
++# asynchronous device work is finished before the timer records the elapsed time.
++const timing_sync = Ref{Function}(() -> nothing)
++
++is_func_def(ex) = isa(ex, Expr) && (ex.head === :function || Base.is_short_function_def(ex))
++
++function _timing_inject_sync(ex::Expr)
++    def = TimerOutputs.splitdef(ex)
++    body = def[:body]
++    def[:body] = Expr(:tryfinally, body, :(DFTK.timing_sync[]()))
++    TimerOutputs.combinedef(def)
++end
++
+ """
+ Shortened version of the `@timeit` macro from `TimerOutputs`,
+ which writes to the DFTK timer.
+ """
+ macro timing(args...)
+     @static if @load_preference("timer_enabled", "true") == "true"
+-        # Copy of https://github.com/KristofferC/TimerOutputs.jl/blob/master/src/TimerOutput.jl#L174
+-        # because macros calling macros does not work easily in Julia
+-        blocks = TimerOutputs.timer_expr(__source__, __module__, false,
+-                                         :($(DFTK.timer)), args...)
+-        if blocks isa Expr
++        ex = last(args)
++        if is_func_def(ex)
++            # Function definition: inject the synchronization hook into the body
++            # and let TimerOutputs time the whole function.
++            blocks = TimerOutputs.timer_expr(__source__, __module__, false,
++                                             :($(DFTK.timer)), args[1:end-1]...,
++                                             _timing_inject_sync(ex))
+             blocks
+         else
++            # Code block: synchronize before stopping the timer so that any
++            # asynchronous device work is captured by the measurement.
++            label = args[1]
++            synced_ex = Expr(:tryfinally, esc(ex), :(DFTK.timing_sync[]()))
++            blocks = TimerOutputs.timer_expr(__source__, __module__, false,
++                                             :($(DFTK.timer)), label, synced_ex)
+             Expr(:block,
+                 blocks[1],                  # the timing setup
+                 Expr(:tryfinally,
+-                    :($(esc(args[end]))),   # the user expr
++                    synced_ex,              # the user expr + sync
+                     :($(blocks[2]))         # the timing finally
+                 )
+             )

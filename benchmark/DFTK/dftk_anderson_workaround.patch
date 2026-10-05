@@ -1,0 +1,14 @@
+diff --git a/src/scf/anderson.jl b/src/scf/anderson.jl
+index 24da3a2b..3a36c53b 100644
+--- a/src/scf/anderson.jl
++++ b/src/scf/anderson.jl
+@@ -119,7 +119,8 @@ and returns ``xₙ₊₁``.
+     end
+ 
+     xₙ₊₁ = vec(xₙ) .+ αₙ .* vec(Pfxₙ)
+-    βs   = -(Mfac \ vec(Pfxₙ))
++    Q = convert(typeof(M), Mfac.Q)
++    βs   = -(Mfac.R \ (Q' * vec(Pfxₙ))) #-(Mfac \ vec(Pfxₙ))
+     βs = to_cpu(βs)  # GPU computation only : get βs back on the CPU so we can iterate through it
+     for (iβ, β) in enumerate(βs)
+         xₙ₊₁ .+= β .* (xs[iβ] .- vec(xₙ) .+ αₙ .* (Pfxs[iβ] .- vec(Pfxₙ)))

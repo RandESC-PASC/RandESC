@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+# Run GPU benchmark for a single structure.
+#
+# Usage:
+#   ./run_gpu.sh [options] structure.extxyz
+#
+# Options are passed through to runDFTK.jl, e.g.:
+#   --pseudo-set=mpc_azora   Use local mpc-azora UPF pseudopotentials
+#   --ecut=N                 Plane-wave cutoff (default: 30)
+#   --kgrid=N,N,N            k-point grid (default: 1,1,1)
+#   --results-dir=DIR        Output directory (default: results_gpu_large)
+
 RESULTS_DIR=results_gpu_large
 mkdir -p $RESULTS_DIR
 source ~/dftk-venv/bin/activate

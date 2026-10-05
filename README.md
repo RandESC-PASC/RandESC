@@ -40,4 +40,41 @@ julia --project=. -e 'using Pkg; Pkg.test("RandESC"; test_args=["integration"])'
 | Path | Description |
 |------|-------------|
 | `example/dense_hermitian.jl` | Basic usage: constructs a random Hermitian matrix and runs solvers |
-| `example/DFTK_solver/runDFTK.jl` | Integration with [DFTK.jl](https://dftk.org): plugs RandESC solvers into a DFT self-consistent field calculation as a custom eigensolver |
+| `benchmark/DFTK/runDFTK.jl` | Integration with [DFTK.jl](https://dftk.org): plugs RandESC solvers into a DFT self-consistent field calculation as a custom eigensolver |
+
+## DFTK benchmark setup
+
+The DFTK benchmark driver `benchmark/DFTK/runDFTK.jl` uses `DFTK.timing_sync`, a hook that is not present in stock DFTK. To run the benchmark you must apply the included patch to a DFTK v0.7.25 source tree and pin `DftFunctionals` to v0.3.2.
+
+1. Check out DFTK v0.7.25:
+
+```bash
+git clone https://github.com/JuliaMolSim/DFTK.jl.git
+cd DFTK.jl
+git checkout v0.7.25
+```
+
+2. Pin `DftFunctionals` to v0.3.2 in the benchmark environment:
+
+```julia
+using Pkg
+Pkg.pin(PackageSpec(name="DftFunctionals", version="0.3.2"))
+```
+
+3. Apply the timing-sync patch:
+
+```bash
+cd DFTK.jl
+patch -p1 < /path/to/RandESC/benchmark/DFTK/dftk_timing_sync_v0.7.25.patch
+```
+
+If line numbers differ and the patch does not apply cleanly, apply the same changes manually to `src/common/timer.jl`.
+
+4. Use the patched DFTK in your benchmark project:
+
+```julia
+using Pkg
+Pkg.develop(path="/path/to/DFTK.jl")
+```
+
+Then run `benchmark/DFTK/runDFTK.jl` as usual.

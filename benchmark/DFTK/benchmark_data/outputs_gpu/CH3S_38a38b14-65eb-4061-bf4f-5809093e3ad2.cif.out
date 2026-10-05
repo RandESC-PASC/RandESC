@@ -1,0 +1,247 @@
+Read structure with 40 atoms from ../mc3d_optimade_24_plus/CH3S_38a38b14-65eb-4061-bf4f-5809093e3ad2.cif.extxyz
+n_planewaves: 1401891
+n_electrons:  104
+ecut:         375
+kgrid:        [1, 1, 1]
+use_gpu:      true
+
+********************************************************************************
+Precompilation
+
+n     Energy            log10(ΔE)   log10(Δρ)   Diag   Δtime 
+---   ---------------   ---------   ---------   ----   ------
+  1   -141.2089862424                    0.02   31.0    12.5s
+  2   -141.4683228637       -0.59       -0.54    5.0    3.32s
+  3   -141.4909321161       -1.65       -0.81    7.0    2.03s
+n     Energy            log10(ΔE)   log10(Δρ)   Diag   Δtime 
+---   ---------------   ---------   ---------   ----   ------
+  1   -141.2107000532                    0.02   29.0    14.6s
+  2   -141.4670673491       -0.59       -0.53    9.0    1.81s
+  3   -141.4897797390       -1.64       -0.80   23.0    1.79s
+n     Energy            log10(ΔE)   log10(Δρ)   Diag   Δtime 
+---   ---------------   ---------   ---------   ----   ------
+  1   -141.2111649433                    0.02   27.0    20.1s
+  2   -141.4668690299       -0.59       -0.54   10.0    1.36s
+  3   -141.4898449748       -1.64       -0.80   17.0    1.81s
+
+********************************************************************************
+LOBPCG
+
+n     Energy            log10(ΔE)   log10(Δρ)   Diag   Δtime 
+---   ---------------   ---------   ---------   ----   ------
+  1   -141.2087163882                    0.02   26.0    6.77s
+  2   -141.4674592679       -0.59       -0.54    5.0    2.29s
+  3   -141.4902092110       -1.64       -0.80    8.0    1.99s
+  4   -141.5266436947       -1.44       -1.59    4.0    1.60s
+  5   -141.5278123018       -2.93       -2.35    2.0    1.17s
+  6   -141.5278783824       -4.18       -2.49    4.0    2.43s
+  7   -141.5278886173       -4.99       -2.84    2.0    1.20s
+  8   -141.5278926085       -5.40       -3.27    2.0    1.42s
+  9   -141.5278931104       -6.30       -3.71    3.0    1.44s
+ 10   -141.5278931804       -7.15       -4.39    3.0    1.39s
+ 11   -141.5278931813       -9.08       -4.40    5.0    1.63s
+ 12   -141.5278931841       -8.55       -4.98    3.0    1.98s
+ 13   -141.5278931844       -9.42       -5.10    4.0    1.68s
+ 14   -141.5278931845      -10.26       -5.26    2.0    1.15s
+ 15   -141.5278931846      -10.29       -5.93    2.0    1.31s
+ 16   -141.5278931846      -11.51       -6.11    4.0    2.23s
+──────────────────────────────────────────────────────────────────────────────────────────────
+                                                     Time                    Allocations      
+                                            ───────────────────────   ────────────────────────
+             Tot / % measured:                   73.4s /  43.5%           37.2GiB /   3.8%    
+
+Section                             ncalls     time    %tot     avg     alloc    %tot      avg
+──────────────────────────────────────────────────────────────────────────────────────────────
+self_consistent_field                    1    31.9s   99.7%   31.9s   1.42GiB  100.0%  1.42GiB
+  LOBPCG                                16    20.1s   63.1%   1.26s   37.5MiB    2.6%  2.34MiB
+    DftHamiltonian multiplication       95    9.37s   29.3%  98.7ms   17.4MiB    1.2%   187KiB
+      nonlocal                          95    9.19s   28.8%  96.7ms    798KiB    0.1%  8.40KiB
+      local                          4.12k    132ms    0.4%  32.1μs   11.6MiB    0.8%  2.89KiB
+    ortho! X vs Y                      142    2.91s    9.1%  20.5ms   13.4MiB    0.9%  96.5KiB
+      ortho!                           315    1.41s    4.4%  4.48ms   8.76MiB    0.6%  28.5KiB
+    Update residuals                    95    1.81s    5.7%  19.1ms    654KiB    0.0%  6.89KiB
+    preconditioning                     95    653ms    2.0%  6.88ms    803KiB    0.1%  8.46KiB
+    rayleigh_ritz                       79    556ms    1.7%  7.04ms   1.45MiB    0.1%  18.8KiB
+    ortho!                              16    151ms    0.5%  9.44ms    315KiB    0.0%  19.7KiB
+  Anderson acceleration                 15    3.82s   11.9%   254ms    426KiB    0.0%  28.4KiB
+  χ0Mixing                              16    2.05s    6.4%   128ms   10.9MiB    0.7%   696KiB
+    compute_density                     16    992ms    3.1%  62.0ms   1.78MiB    0.1%   114KiB
+      symmetrize_ρ                      16    609ms    1.9%  38.1ms    125KiB    0.0%  7.81KiB
+    apply_kernel                        55    365ms    1.1%  6.64ms    566KiB    0.0%  10.3KiB
+  energy_hamiltonian                    17    1.49s    4.7%  87.5ms   2.91MiB    0.2%   175KiB
+    ene_ops                             17    1.45s    4.5%  85.5ms   2.66MiB    0.2%   160KiB
+      ene_ops: xc                       17    1.17s    3.7%  68.6ms   1.63MiB    0.1%  98.5KiB
+      ene_ops: kinetic                  17    144ms    0.5%  8.48ms    221KiB    0.0%  13.0KiB
+      ene_ops: hartree                  17   95.4ms    0.3%  5.61ms    264KiB    0.0%  15.5KiB
+      ene_ops: local                    17   23.3ms    0.1%  1.37ms    118KiB    0.0%  6.96KiB
+      ene_ops: nonlocal                 17   22.1ms    0.1%  1.30ms    192KiB    0.0%  11.3KiB
+  compute_density                       16    1.44s    4.5%  90.2ms   2.68MiB    0.2%   172KiB
+    symmetrize_ρ                        16    863ms    2.7%  53.9ms    124KiB    0.0%  7.75KiB
+  energy                                16    858ms    2.7%  53.7ms   1.77MiB    0.1%   113KiB
+    energy: xc                          16    557ms    1.7%  34.8ms    805KiB    0.1%  50.3KiB
+    ene_ops: kinetic                    16    170ms    0.5%  10.6ms    217KiB    0.0%  13.5KiB
+    ene_ops: hartree                    16   86.3ms    0.3%  5.39ms    249KiB    0.0%  15.6KiB
+    ene_ops: nonlocal                   16   22.3ms    0.1%  1.39ms    191KiB    0.0%  12.0KiB
+    ene_ops: local                      16   22.0ms    0.1%  1.38ms    109KiB    0.0%  6.83KiB
+  ortho_qr                               1   55.2ms    0.2%  55.2ms   6.02KiB    0.0%  6.02KiB
+enforce_real!                            1   86.8ms    0.3%  86.8ms    147KiB    0.0%   147KiB
+──────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────
+                           Time                    Allocations      
+                  ───────────────────────   ────────────────────────
+Tot / % measured:      73.4s /   0.0%           37.2GiB /   0.0%    
+
+Section   ncalls     time    %tot     avg     alloc    %tot      avg
+────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────
+
+********************************************************************************
+JD
+
+n     Energy            log10(ΔE)   log10(Δρ)   Diag   Δtime 
+---   ---------------   ---------   ---------   ----   ------
+  1   -141.2104870460                    0.02   27.0    5.12s
+  2   -141.4666810494       -0.59       -0.54   12.0    1.46s
+  3   -141.4897559216       -1.64       -0.80   17.0    1.72s
+  4   -141.5267453677       -1.43       -1.61   11.0    1.46s
+  5   -141.5278655754       -2.95       -2.39    5.0    1.89s
+  6   -141.5278914944       -4.59       -2.81    9.0    1.38s
+  7   -141.5278927438       -5.90       -3.20   24.0    1.54s
+  8   -141.5278931446       -6.40       -3.84   13.0    1.42s
+  9   -141.5278931545       -8.00       -4.08   13.0    1.80s
+ 10   -141.5278931816       -7.57       -4.57    9.0    1.41s
+ 11   -141.5278931845       -8.54       -4.99    9.0    1.58s
+ 12   -141.5278931845      -10.09       -5.41    5.0    1.99s
+ 13   -141.5278931845      -10.78       -5.72   21.0    1.73s
+ 14   -141.5278931846      -11.12       -6.18    9.0    1.41s
+────────────────────────────────────────────────────────────────────────────────────────────
+                                                   Time                    Allocations      
+                                          ───────────────────────   ────────────────────────
+            Tot / % measured:                  68.2s /  38.4%           37.2GiB /   3.7%    
+
+Section                           ncalls     time    %tot     avg     alloc    %tot      avg
+────────────────────────────────────────────────────────────────────────────────────────────
+self_consistent_field                  1    26.1s   99.7%   26.1s   1.39GiB  100.0%  1.39GiB
+  DftHamiltonian multiplication      184    9.30s   35.5%  50.6ms   17.8MiB    1.3%  98.9KiB
+    nonlocal                         184    9.07s   34.6%  49.3ms   1.51MiB    0.1%  8.40KiB
+    local                          4.00k    131ms    0.5%  32.9μs   11.3MiB    0.8%  2.89KiB
+  Anderson acceleration               13    3.09s   11.8%   237ms    353KiB    0.0%  27.2KiB
+  compute_density                     14    2.79s   10.7%   199ms   2.50MiB    0.2%   183KiB
+    symmetrize_ρ                      14    868ms    3.3%  62.0ms    108KiB    0.0%  7.69KiB
+  χ0Mixing                            14    1.45s    5.5%   104ms   3.45MiB    0.2%   252KiB
+    compute_density                   14    838ms    3.2%  59.9ms   1.51MiB    0.1%   111KiB
+      symmetrize_ρ                    14    440ms    1.7%  31.4ms    110KiB    0.0%  7.88KiB
+    apply_kernel                      45    342ms    1.3%  7.61ms    463KiB    0.0%  10.3KiB
+  energy_hamiltonian                  15    1.22s    4.6%  81.0ms   2.56MiB    0.2%   175KiB
+    ene_ops                           15    1.18s    4.5%  78.9ms   2.35MiB    0.2%   160KiB
+      ene_ops: xc                     15    927ms    3.5%  61.8ms   1.44MiB    0.1%  98.5KiB
+      ene_ops: hartree                15    118ms    0.5%  7.87ms    233KiB    0.0%  15.5KiB
+      ene_ops: kinetic                15   98.4ms    0.4%  6.56ms    194KiB    0.0%  12.9KiB
+      ene_ops: local                  15   20.2ms    0.1%  1.35ms    104KiB    0.0%  6.93KiB
+      ene_ops: nonlocal               15   19.4ms    0.1%  1.29ms    167KiB    0.0%  11.2KiB
+  energy                              14    696ms    2.7%  49.7ms   1.55MiB    0.1%   113KiB
+    energy: xc                        14    463ms    1.8%  33.1ms    706KiB    0.0%  50.4KiB
+    ene_ops: kinetic                  14   99.4ms    0.4%  7.10ms    191KiB    0.0%  13.6KiB
+    ene_ops: hartree                  14   94.1ms    0.4%  6.72ms    217KiB    0.0%  15.5KiB
+    ene_ops: nonlocal                 14   19.6ms    0.1%  1.40ms    168KiB    0.0%  12.0KiB
+    ene_ops: local                    14   19.1ms    0.1%  1.36ms   96.4KiB    0.0%  6.88KiB
+  ortho_qr                             1   55.2ms    0.2%  55.2ms   6.02KiB    0.0%  6.02KiB
+enforce_real!                          1   86.7ms    0.3%  86.7ms   3.39KiB    0.0%  3.39KiB
+────────────────────────────────────────────────────────────────────────────────────────────
+─────────────────────────────────────────────────────────────────────────────
+                                    Time                    Allocations      
+                           ───────────────────────   ────────────────────────
+     Tot / % measured:          68.2s /  22.3%           37.2GiB /   0.1%    
+
+Section            ncalls     time    %tot     avg     alloc    %tot      avg
+─────────────────────────────────────────────────────────────────────────────
+jd                     14    15.2s  100.0%   1.09s   45.9MiB  100.0%  3.28MiB
+  jd: matvec          184    9.30s   61.1%  50.6ms   17.9MiB   38.9%  99.5KiB
+  jd: ortho           184    3.02s   19.8%  16.4ms   21.3MiB   46.3%   118KiB
+  jd: restart          89    835ms    5.5%  9.38ms    887KiB    1.9%  10.0KiB
+  jd: diag            184    552ms    3.6%  3.00ms    430KiB    0.9%  2.34KiB
+  jd: allocation       14    339ms    2.2%  24.2ms    297KiB    0.6%  21.2KiB
+  jd: overlap          14    121ms    0.8%  8.64ms   39.1KiB    0.1%  2.79KiB
+─────────────────────────────────────────────────────────────────────────────
+
+********************************************************************************
+rand-JD
+
+n     Energy            log10(ΔE)   log10(Δρ)   Diag   Δtime 
+---   ---------------   ---------   ---------   ----   ------
+  1   -141.2104870460                    0.02   27.0    4.35s
+  2   -141.4666810494       -0.59       -0.54   12.0    1.42s
+  3   -141.4897559216       -1.64       -0.80   17.0    1.80s
+  4   -141.5267453677       -1.43       -1.61   11.0    1.48s
+  5   -141.5278655754       -2.95       -2.39    5.0    1.14s
+  6   -141.5278914944       -4.59       -2.81    9.0    1.41s
+  7   -141.5278927438       -5.90       -3.20   24.0    2.36s
+  8   -141.5278931446       -6.40       -3.84   13.0    1.46s
+  9   -141.5278931545       -8.00       -4.08   13.0    1.44s
+ 10   -141.5278931816       -7.57       -4.57    9.0    1.35s
+ 11   -141.5278931845       -8.54       -4.99    9.0    1.41s
+ 12   -141.5278931845      -10.09       -5.41    5.0    1.31s
+ 13   -141.5278931846      -10.78       -5.72   21.0    1.59s
+ 14   -141.5278931846      -11.12       -6.18    9.0    1.35s
+┌ Info: Threading setup: 
+│   Threads.nthreads() = 1
+│   n_DFTK = 1
+│   n_fft = 1
+└   n_blas = 1
+┌ Warning: SCF not converged.
+└ @ DFTK /ritom/scratch/cscs/abussy/randesc_daint/DFTK.jl/src/scf/scf_callbacks.jl:68
+┌ Warning: SCF not converged.
+└ @ DFTK /ritom/scratch/cscs/abussy/randesc_daint/DFTK.jl/src/scf/scf_callbacks.jl:68
+┌ Warning: SCF not converged.
+└ @ DFTK /ritom/scratch/cscs/abussy/randesc_daint/DFTK.jl/src/scf/scf_callbacks.jl:68
+┌ Warning: Accurate NVTX profiling adds GPU synchronization overhead. Only use 'activate_nvtx_profiling()' if you are actively profiling.
+└ @ RandESCNVTXExt /ritom/scratch/cscs/abussy/randesc_daint/RandESC/ext/RandESCNVTXExt.jl:8
+────────────────────────────────────────────────────────────────────────────────────────────
+                                                   Time                    Allocations      
+                                          ───────────────────────   ────────────────────────
+            Tot / % measured:                  65.2s /  37.0%           38.9GiB /   8.2%    
+
+Section                           ncalls     time    %tot     avg     alloc    %tot      avg
+────────────────────────────────────────────────────────────────────────────────────────────
+self_consistent_field                  1    24.0s   99.6%   24.0s   3.19GiB  100.0%  3.19GiB
+  DftHamiltonian multiplication      184    9.24s   38.3%  50.2ms   17.8MiB    0.5%  98.9KiB
+    nonlocal                         184    9.01s   37.4%  49.0ms   1.51MiB    0.0%  8.41KiB
+    local                          4.00k    132ms    0.5%  33.1μs   11.3MiB    0.3%  2.89KiB
+  Anderson acceleration               13    3.01s   12.5%   232ms    355KiB    0.0%  27.3KiB
+  χ0Mixing                            14    2.22s    9.2%   159ms   3.52MiB    0.1%   258KiB
+    compute_density                   14    1.67s    6.9%   119ms   1.59MiB    0.0%   116KiB
+      symmetrize_ρ                    14    508ms    2.1%  36.3ms    109KiB    0.0%  7.78KiB
+    apply_kernel                      45    332ms    1.4%  7.37ms    463KiB    0.0%  10.3KiB
+  energy_hamiltonian                  15    1.44s    6.0%  96.2ms   2.56MiB    0.1%   175KiB
+    ene_ops                           15    1.41s    5.9%  94.1ms   2.34MiB    0.1%   160KiB
+      ene_ops: xc                     15    1.06s    4.4%  70.8ms   1.44MiB    0.0%  98.4KiB
+      ene_ops: hartree                15    168ms    0.7%  11.2ms    232KiB    0.0%  15.5KiB
+      ene_ops: kinetic                15    124ms    0.5%  8.26ms    193KiB    0.0%  12.9KiB
+      ene_ops: nonlocal               15   35.4ms    0.1%  2.36ms    167KiB    0.0%  11.2KiB
+      ene_ops: local                  15   20.6ms    0.1%  1.37ms    104KiB    0.0%  6.91KiB
+  compute_density                     14    1.32s    5.5%  94.3ms   2.35MiB    0.1%   172KiB
+    symmetrize_ρ                      14    820ms    3.4%  58.6ms    108KiB    0.0%  7.73KiB
+  energy                              14    748ms    3.1%  53.4ms   1.55MiB    0.0%   113KiB
+    energy: xc                        14    474ms    2.0%  33.9ms    705KiB    0.0%  50.4KiB
+    ene_ops: kinetic                  14    138ms    0.6%  9.85ms    190KiB    0.0%  13.6KiB
+    ene_ops: hartree                  14   95.4ms    0.4%  6.81ms    218KiB    0.0%  15.6KiB
+    ene_ops: local                    14   19.5ms    0.1%  1.39ms   96.3KiB    0.0%  6.88KiB
+    ene_ops: nonlocal                 14   19.3ms    0.1%  1.38ms    167KiB    0.0%  12.0KiB
+  ortho_qr                             1   55.0ms    0.2%  55.0ms   6.02KiB    0.0%  6.02KiB
+enforce_real!                          1   86.8ms    0.4%  86.8ms   3.39KiB    0.0%  3.39KiB
+────────────────────────────────────────────────────────────────────────────────────────────
+──────────────────────────────────────────────────────────────────────────────────────
+                                             Time                    Allocations      
+                                    ───────────────────────   ────────────────────────
+         Tot / % measured:               65.2s /  22.3%           38.9GiB /   4.8%    
+
+Section                     ncalls     time    %tot     avg     alloc    %tot      avg
+──────────────────────────────────────────────────────────────────────────────────────
+jd_sketched                     14    14.5s  100.0%   1.04s   1.86GiB  100.0%   136MiB
+  jd_sketched: matvec          184    9.38s   64.6%  51.0ms   17.9MiB    0.9%   100KiB
+  jd_sketched: ortho           170    867ms    6.0%  5.10ms   3.39MiB    0.2%  20.4KiB
+  jd_sketched: diag            184    840ms    5.8%  4.56ms    619KiB    0.0%  3.36KiB
+  jd_sketched: restart          89    837ms    5.8%  9.40ms   1.42MiB    0.1%  16.4KiB
+  jd_sketched: allocation       14    279ms    1.9%  19.9ms   36.3KiB    0.0%  2.59KiB
+  jd_sketched: sketch           14    229ms    1.6%  16.4ms   48.9KiB    0.0%  3.49KiB
+──────────────────────────────────────────────────────────────────────────────────────

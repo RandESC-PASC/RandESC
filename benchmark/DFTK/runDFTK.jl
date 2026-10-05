@@ -5,7 +5,7 @@ using RandESC
 using Dates
 using Printf
 
-# Parse CLI arguments: [--gpu] [--ecut=N] [--kgrid=N,N,N] [filename]
+# Parse CLI arguments: [--gpu] [--ecut=N] [--kgrid=N,N,N] [--pseudo-set=default|mpc_azora] [filename]
 use_gpu = "--gpu" in ARGS
 get_flag(prefix) = let m = match(Regex("^$prefix=(.+)"), something(findfirst(a -> startswith(a, "$prefix="), ARGS) |> i -> i === nothing ? nothing : ARGS[i], ""))
     m === nothing ? nothing : m.captures[1]
@@ -13,9 +13,12 @@ end
 ecut_arg       = get_flag("--ecut")
 kgrid_arg      = get_flag("--kgrid")
 results_dir_arg = get_flag("--results-dir")
+pseudo_set_arg = get_flag("--pseudo-set")
 ecut        = ecut_arg  === nothing ? 45 : parse(Int, ecut_arg)
 kgrid       = kgrid_arg === nothing ? [2, 2, 2] : parse.(Int, split(kgrid_arg, ","))
 results_dir = results_dir_arg === nothing ? "results" : results_dir_arg
+pseudo_set  = pseudo_set_arg === nothing ? "default" : pseudo_set_arg
+pseudo_set in ("default", "mpc_azora") || error("--pseudo-set must be 'default' or 'mpc_azora'")
 filename_args = filter(a -> !startswith(a, "--"), ARGS)
 filename = length(filename_args) > 0 ? filename_args[1] : "structures/si.extxyz"
 
@@ -29,8 +32,35 @@ nat       = structure["N_atoms"]
 species   = structure["arrays"]["species"]
 println("Read structure with $nat atoms from $filename")
 
-family    = PseudoFamily("cp2k.nc.sr.pbe.v0_1.semicore.gth")
-atom_psps = [ElementPsp(Symbol(species[i]), family) for i in 1:nat]
+function build_atom_psps(species, pseudo_set)
+    if pseudo_set == "default"
+        family = PseudoFamily("cp2k.nc.sr.pbe.v0_1.semicore.gth")
+        return [ElementPsp(Symbol(species[i]), family) for i in 1:nat]
+    end
+
+    # mpc_azora: load local UPF files
+    pseudo_dir = joinpath(@__DIR__, "..", "pseudos", "mpc_azora_upf")
+    unique_species = unique(species)
+    missing_species = String[]
+    psp_map = Dict{String, Any}()
+    for spec in unique_species
+        upf_path = joinpath(pseudo_dir, "$spec.upf")
+        if isfile(upf_path)
+            psp_map[spec] = load_psp(upf_path)
+        else
+            push!(missing_species, spec)
+        end
+    end
+    if !isempty(missing_species)
+        @warn "Skipping structure: mpc_azora pseudopotentials missing for " *
+              join(sort(missing_species), ", ")
+        return nothing
+    end
+    return [ElementPsp(Symbol(species[i]), psp_map[species[i]]) for i in 1:nat]
+end
+
+atom_psps = build_atom_psps(species, pseudo_set)
+atom_psps === nothing && exit(0)
 
 invlat       = inv(lattice)
 positionvecs = [invlat * positions[:, i] for i in 1:nat]

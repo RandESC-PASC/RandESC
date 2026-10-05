@@ -12,9 +12,10 @@
 source ~/dftk-venv/bin/activate
 
 OUTDIR=outputs_gpu_large_sys
+PSEUDO_SET=default   # or mpc_azora
 
 mkdir -p $OUTDIR
 for f in ../mc3d_optimade_gpu_large/*.extxyz; do
-    srun bash run_gpu.sh $f &> $OUTDIR/$(basename $f .extxyz).out
+    srun bash run_gpu.sh --pseudo-set="$PSEUDO_SET" $f &> $OUTDIR/$(basename $f .extxyz).out
 done
 
