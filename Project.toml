@@ -24,6 +24,7 @@ RandESCNVTXExt = ["NVTX", "CUDA"]
 
 [compat]
 AbstractFFTs = "1.5"
+CUDA = "6"
 GPUArraysCore = "0.1, 0.2"
 LinearAlgebra = "1.11.0"
 NVTX = "1"
